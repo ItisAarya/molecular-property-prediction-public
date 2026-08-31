@@ -1,103 +1,250 @@
-from rdkit import RDLogger
-RDLogger.DisableLog('rdApp.*')
+"""
+scripts/prep_moleculenet.py
 
-# scripts/prep_moleculenet.py
-import os, json, numpy as np, pandas as pd
+Downloads the MoleculeNet datasets through DeepChem, applies a scaffold split, and
+writes them to disk in a form the rest of the pipeline can consume.
+
+Outputs (one set per dataset, per split):
+    data/<ds>_<split>.csv        SMILES + labels. A missing label is an empty cell (NaN).
+    data/<ds>_<split>_ecfp.npz   X, y, y_raw, w, smiles, y_mean, y_std
+    data/dataset_meta.json       task names, split sizes, missing-label stats, y scaling
+
+
+WHY WE KEEP THE `w` MATRIX
+--------------------------
+DeepChem returns three arrays per dataset: features `X`, labels `y`, and a weight
+matrix `w`. For sparsely measured datasets, `w` carries essential information:
+
+    w[i, t] == 0   ->   molecule i was NEVER TESTED in assay t
+
+For those entries DeepChem stores a placeholder `0.0` in `y`. If `w` is discarded,
+every untested (molecule, assay) pair silently becomes a confirmed *negative*.
+
+On Tox21 that is ~15% of training labels and ~24% of validation/test labels (up to
+~39% for individual assays). Since only ~6% of Tox21 labels are positive, those
+fabricated negatives badly distort both the training signal and every reported metric.
+
+So: wherever `w == 0`, we write `y = NaN`. Downstream code masks NaN explicitly and
+therefore never trains on, or scores against, a label that does not exist.
+
+Note on the values inside `w`: DeepChem's BalancingTransformer also stores per-class
+balancing weights in `w` (Tox21 has 25 distinct values). We deliberately keep only the
+binary "is this label present?" signal, because our training code computes its own
+class weighting (`pos_weight`); carrying DeepChem's weights through as well would
+apply class balancing twice.
+
+
+WHY WE KEEP `y_raw`, `y_mean`, `y_std`
+--------------------------------------
+For the regression datasets (ESOL, Lipophilicity), DeepChem applies a
+NormalizationTransformer that z-scores the labels to mean 0 / std 1. Training on
+normalized targets is fine and usually helps optimization — but *reporting* an RMSE
+in normalized units is meaningless to a chemist and not comparable to published
+numbers. Example: an ESOL RMSE of 0.513 normalized is 0.513 x 2.067 = ~1.06 logS.
+
+We therefore store both:
+    y      - normalized (use this for training)
+    y_raw  - original chemical units, e.g. logS or logD (use this for reporting)
+plus the constants (`y_mean`, `y_std`) needed to convert between them:
+    y_raw = y * y_std + y_mean
+For classification datasets no scaling is applied, so y_raw == y, y_mean = 0, y_std = 1.
+"""
+
+from rdkit import RDLogger
+RDLogger.DisableLog("rdApp.*")
+
+import os
+import json
+
+import numpy as np
+import pandas as pd
 import deepchem as dc
-from joblib import dump
 
 DATASETS = ["tox21", "bbbp", "clintox", "esol", "lipophilicity"]
+CLASSIFICATION = {"tox21", "bbbp", "clintox"}
 OUT_DIR = "data"
+
 os.makedirs(OUT_DIR, exist_ok=True)
 
-def load_dataset(name, featurizer="ECFP", split="scaffold"):
-    if name == "tox21":
-        return dc.molnet.load_tox21(featurizer=featurizer, split=split)
-    if name == "bbbp":
-        return dc.molnet.load_bbbp(featurizer=featurizer, split=split)
-    if name == "clintox":
-        return dc.molnet.load_clintox(featurizer=featurizer, split=split)
-    if name == "esol":
-        return dc.molnet.load_delaney(featurizer=featurizer, split=split)
-    if name == "lipophilicity":
-        return dc.molnet.load_lipo(featurizer=featurizer, split=split)
-    raise ValueError(f"Unknown dataset: {name}")
 
-def save_split_csv(name, tasks, dset, split_tag):
-    # Save SMILES + labels CSV for traceability
-    smiles = np.array(dset.ids, dtype=object)
-    y = dset.y
+# --------------------------------------------------------------------------------------
+# Loading
+# --------------------------------------------------------------------------------------
+def load_dataset(name, featurizer="ECFP", splitter="scaffold"):
+    """Return (tasks, (train, valid, test), transformers) for one MoleculeNet dataset."""
+    loaders = {
+        "tox21": dc.molnet.load_tox21,
+        "bbbp": dc.molnet.load_bbbp,
+        "clintox": dc.molnet.load_clintox,
+        "esol": dc.molnet.load_delaney,
+        "lipophilicity": dc.molnet.load_lipo,
+    }
+    if name not in loaders:
+        raise ValueError(f"Unknown dataset: {name}")
+    return loaders[name](featurizer=featurizer, splitter=splitter)
+
+
+def normalization_constants(transformers, n_tasks):
+    """
+    Pull (mean, std) out of DeepChem's NormalizationTransformer, if one was applied.
+
+    Returns two arrays of shape (n_tasks,). If the labels were not normalized we
+    return mean=0 / std=1, which makes `y_raw = y * std + mean` an identity.
+    """
+    for t in transformers:
+        # NormalizationTransformer stores these only when it transforms y.
+        if hasattr(t, "y_means") and hasattr(t, "y_stds") and getattr(t, "transform_y", False):
+            mean = np.ravel(np.asarray(t.y_means, dtype=np.float64))
+            std = np.ravel(np.asarray(t.y_stds, dtype=np.float64))
+            # Broadcast a single shared constant out to every task, if needed.
+            if mean.size == 1 and n_tasks > 1:
+                mean = np.repeat(mean, n_tasks)
+                std = np.repeat(std, n_tasks)
+            return mean.astype(np.float32), std.astype(np.float32)
+
+    return np.zeros(n_tasks, dtype=np.float32), np.ones(n_tasks, dtype=np.float32)
+
+
+# --------------------------------------------------------------------------------------
+# Reshaping DeepChem's arrays
+# --------------------------------------------------------------------------------------
+def to_dense_2d(a, n_rows):
+    """Coerce X (which may be sparse, or an object array of bit vectors) to a dense 2-D float32 array."""
+    try:
+        import scipy.sparse as sp
+
+        if sp.issparse(a):
+            return a.toarray().astype(np.float32, copy=False)
+    except Exception:
+        pass
+
+    arr = np.asarray(a, dtype=object) if np.asarray(a).dtype == object else np.asarray(a)
+    if arr.dtype == object:
+        arr = np.vstack([np.asarray(row).ravel() for row in arr])
+    return arr.astype(np.float32, copy=False).reshape(n_rows, -1)
+
+
+def extract_arrays(dset, y_mean, y_std):
+    """
+    Turn one DeepChem split into the arrays we save.
+
+    Returns X, y (NaN where missing), y_raw (NaN where missing), w (binary), smiles.
+    """
+    n = len(dset)
+
+    X = to_dense_2d(dset.X, n)
+
+    y = np.asarray(dset.y, dtype=np.float32).reshape(n, -1)
+    w = np.asarray(dset.w, dtype=np.float32).reshape(n, -1)
+
+    # Binary presence mask: 1.0 = label measured, 0.0 = never measured.
+    # (Discards DeepChem's class-balancing magnitudes on purpose — see module docstring.)
+    mask = (w != 0).astype(np.float32)
+
+    # Undo the z-scoring to recover chemical units. Identity for classification.
+    y_raw = y * y_std[None, :] + y_mean[None, :]
+
+    # The core fix: a label that was never measured is NaN, not 0.
+    missing = mask == 0.0
+    y = np.where(missing, np.nan, y).astype(np.float32)
+    y_raw = np.where(missing, np.nan, y_raw).astype(np.float32)
+
+    smiles = np.asarray(dset.ids, dtype="U200")
+
+    return X, y, y_raw, mask, smiles
+
+
+# --------------------------------------------------------------------------------------
+# Saving
+# --------------------------------------------------------------------------------------
+def save_split(ds, split_tag, tasks, X, y, y_raw, w, smiles, y_mean, y_std):
+    """Write the CSV and the NPZ for one split. Returns (csv_path, npz_path)."""
+    # CSV: human-readable, for traceability. Missing labels become empty cells,
+    # which pandas reads back as NaN.
     df = pd.DataFrame({"smiles": smiles})
-    if y.ndim == 1:
-        df[name] = y
-    else:
-        for i, t in enumerate(tasks):
-            df[t] = y[:, i]
-    csv_path = os.path.join(OUT_DIR, f"{name}_{split_tag}.csv")
+    for i, task in enumerate(tasks):
+        df[task] = y[:, i]
+    csv_path = os.path.join(OUT_DIR, f"{ds}_{split_tag}.csv")
     df.to_csv(csv_path, index=False)
-    return csv_path
 
-#def save_ecfp_npz(name, dset, split_tag):
-#    # Save ECFP features for ML baselines
-#    npz_path = os.path.join(OUT_DIR, f"{name}_{split_tag}_ecfp.npz")
-#    np.savez_compressed(npz_path, X=dset.X, y=dset.y, smiles=np.array(dset.ids, dtype=object))
-#    return npz_path
-
-def save_ecfp_npz(name, dset, split_tag):
-    import numpy as np
-
-    def to_dense_numeric(X):
-        # Handle scipy sparse
-        try:
-            import scipy.sparse as sp
-            if sp.issparse(X):
-                return X.toarray().astype(np.float32, copy=False)
-        except Exception:
-            pass
-        # Handle object arrays / lists of bitvectors
-        arr = np.asarray(X, dtype=object)
-        if arr.dtype == object:
-            arr = np.vstack([np.asarray(row).ravel() for row in arr])
-        return arr.astype(np.float32, copy=False)
-
-    X = to_dense_numeric(dset.X)
-    y = np.asarray(dset.y, dtype=np.float32, order="C")
-
-    # Save SMILES as fixed-width unicode to avoid object dtype
-    smiles = np.array(dset.ids, dtype="U200")
-
-    npz_path = os.path.join(OUT_DIR, f"{name}_{split_tag}_ecfp.npz")
-    np.savez_compressed(npz_path, X=X, y=y, smiles=smiles)
-    return npz_path
+    npz_path = os.path.join(OUT_DIR, f"{ds}_{split_tag}_ecfp.npz")
+    np.savez_compressed(
+        npz_path,
+        X=X,
+        y=y,              # normalized (regression) / 0-1 (classification); NaN = missing
+        y_raw=y_raw,      # chemical units; NaN = missing
+        w=w,              # 1.0 = label present, 0.0 = missing
+        smiles=smiles,
+        y_mean=y_mean,
+        y_std=y_std,
+    )
+    return csv_path, npz_path
 
 
+# --------------------------------------------------------------------------------------
+# Main
+# --------------------------------------------------------------------------------------
 def main():
     meta = {}
+
     for ds in DATASETS:
         print(f"\n=== Processing {ds} ===")
-        tasks, (train, valid, test), transformers = load_dataset(ds, featurizer="ECFP", split="scaffold")
+        tasks, (train, valid, test), transformers = load_dataset(ds)
+        tasks = list(tasks)
+        n_tasks = len(tasks)
 
-        # Save splits to CSV (SMILES + labels)
-        tr_csv = save_split_csv(ds, tasks, train, "train")
-        va_csv = save_split_csv(ds, tasks, valid, "valid")
-        te_csv = save_split_csv(ds, tasks, test,  "test")
+        y_mean, y_std = normalization_constants(transformers, n_tasks)
+        scaled = bool(np.any(y_std != 1.0) or np.any(y_mean != 0.0))
 
-        # Save ECFP features to NPZ for ML baselines
-        tr_npz = save_ecfp_npz(ds, train, "train")
-        va_npz = save_ecfp_npz(ds, valid, "valid")
-        te_npz = save_ecfp_npz(ds, test,  "test")
+        split_info, csv_paths, npz_paths, missing_stats = {}, {}, {}, {}
+
+        for tag, dset in [("train", train), ("valid", valid), ("test", test)]:
+            X, y, y_raw, w, smiles = extract_arrays(dset, y_mean, y_std)
+            csv_path, npz_path = save_split(
+                ds, tag, tasks, X, y, y_raw, w, smiles, y_mean, y_std
+            )
+
+            split_info[tag] = int(len(dset))
+            csv_paths[tag] = csv_path
+            npz_paths[tag] = npz_path
+            missing_stats[tag] = {
+                "overall_pct": round(float((w == 0).mean() * 100), 2),
+                "per_task_pct": [round(float(v * 100), 2) for v in (w == 0).mean(axis=0)],
+            }
+
+            n_missing = int((w == 0).sum())
+            print(
+                f"  {tag:<5} n={len(dset):<5} tasks={n_tasks:<3} "
+                f"features={X.shape[1]:<5} missing labels={n_missing} "
+                f"({missing_stats[tag]['overall_pct']}%)"
+            )
 
         meta[ds] = {
             "tasks": tasks,
-            "sizes": {"train": len(train), "valid": len(valid), "test": len(test)},
-            "csv": {"train": tr_csv, "valid": va_csv, "test": te_csv},
-            "ecfp": {"train": tr_npz, "valid": va_npz, "test": te_npz},
-            "split": "scaffold"
+            "task_type": "classification" if ds in CLASSIFICATION else "regression",
+            "sizes": split_info,
+            "csv": csv_paths,
+            "ecfp": npz_paths,
+            "split": "scaffold",
+            "n_features": int(X.shape[1]),
+            "transformers": [type(t).__name__ for t in transformers],
+            "label_scaled": scaled,
+            "y_mean": [float(v) for v in y_mean],
+            "y_std": [float(v) for v in y_std],
+            "missing_labels": missing_stats,
         }
-        print(f"{ds} → train/valid/test = {len(train)}/{len(valid)}/{len(test)}")
-    with open(os.path.join(OUT_DIR, "dataset_meta.json"), "w") as f:
+
+        if scaled:
+            print(
+                f"  labels are z-scored: y_raw = y * {y_std[0]:.4f} + {y_mean[0]:.4f} "
+                f"(multiply RMSE/MAE by {y_std[0]:.4f} to report in chemical units)"
+            )
+
+    meta_path = os.path.join(OUT_DIR, "dataset_meta.json")
+    with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
-    print("\nSaved metadata → data/dataset_meta.json")
+    print(f"\nSaved metadata -> {meta_path}")
+
 
 if __name__ == "__main__":
     main()
