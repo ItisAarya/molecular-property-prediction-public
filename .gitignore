@@ -36,6 +36,11 @@ results/**/*.npy
 .env
 secrets.*
 
+# ---- Local-only notes (never publish) ----
+PROVENANCE_LOCAL.md
+CV__*.pdf
+*_LOCAL.md
+
 # ---- Misc ----
 *.log
 wandb/
