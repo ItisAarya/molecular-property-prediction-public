@@ -1,0 +1,52 @@
+{
+  "choices": [
+    {
+      "kind": "temperature",
+      "T": 0.9236708571873865
+    },
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "logistic",
+      "a": 0.6511519864919431,
+      "b": -0.38171678232588996
+    },
+    {
+      "kind": "logistic",
+      "a": 0.38153350067324016,
+      "b": -0.33454000714004073
+    },
+    {
+      "kind": "temperature",
+      "T": 0.6816365258305508
+    },
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "temperature",
+      "T": 1.5917011729771746
+    },
+    {
+      "kind": "temperature",
+      "T": 67.2749994932561
+    },
+    {
+      "kind": "temperature",
+      "T": 1.5917011729771746
+    },
+    {
+      "kind": "temperature",
+      "T": 67.2749994932561
+    },
+    {
+      "kind": "temperature",
+      "T": 5.512889788770678
+    },
+    {
+      "kind": "temperature",
+      "T": 3.7065129109221564
+    }
+  ]
+}

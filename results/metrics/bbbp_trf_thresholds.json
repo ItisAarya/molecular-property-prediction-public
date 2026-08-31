@@ -1,0 +1,6 @@
+{
+  "thresholds": [
+    0.35
+  ],
+  "metric": "bal_acc"
+}

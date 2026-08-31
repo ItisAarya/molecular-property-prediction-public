@@ -1,0 +1,12 @@
+# PyTorch CPU wheels — install BEFORE requirements.txt
+# Index: https://download.pytorch.org/whl/cpu
+--index-url https://download.pytorch.org/whl/cpu
+
+torch==2.3.1+cpu
+torchvision==0.18.1+cpu
+torchaudio==2.3.1+cpu
+
+# Pin MKL to version required by torch 2.3.1 on Windows
+mkl==2021.4.0
+intel-openmp==2021.4.0
+tbb==2021.13.1

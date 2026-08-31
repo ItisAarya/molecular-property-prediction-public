@@ -1,0 +1,6 @@
+{
+  "thresholds": [
+    0.65
+  ],
+  "metric": "f1"
+}

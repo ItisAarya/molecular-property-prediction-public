@@ -1,0 +1,136 @@
+{
+  "bbbp": {
+    "dataset": "bbbp",
+    "model": "hybrid",
+    "primary_metric": "test_auc",
+    "primary_value": 0.7546969842952114,
+    "all_metrics": {
+      "test_auc": 0.7546969842952114,
+      "test_ap": 0.7770088526448875,
+      "test_acc": 0.6568627450980392,
+      "test_bal_acc": 0.6473648713748916,
+      "test_f1": 0.72,
+      "test_rmse": NaN,
+      "test_mae": NaN,
+      "test_r2": NaN
+    },
+    "thresholds": {
+      "thresholds": [
+        0.49999999999999994
+      ],
+      "metric": "bal_acc"
+    }
+  },
+  "clintox": {
+    "dataset": "clintox",
+    "model": "ens",
+    "primary_metric": "test_auc",
+    "primary_value": 0.9968399193688526,
+    "all_metrics": {
+      "test_auc": 0.9968399193688526,
+      "test_ap": 0.9952777006932572,
+      "test_acc": 0.9864864864864864,
+      "test_bal_acc": 0.9436120668682444,
+      "test_f1": 0.9464028776978416,
+      "test_rmse": NaN,
+      "test_mae": NaN,
+      "test_r2": NaN
+    },
+    "thresholds": {
+      "thresholds": [
+        0.85,
+        0.15
+      ],
+      "metric": "f1"
+    },
+    "ensemble": {
+      "models": [
+        "trf",
+        "hybrid"
+      ],
+      "weights": [
+        0.5,
+        0.5
+      ],
+      "grid_step": 0.1,
+      "topk": 2
+    }
+  },
+  "esol": {
+    "dataset": "esol",
+    "model": "hybrid",
+    "primary_metric": "test_rmse",
+    "primary_value": 0.5133465668109368,
+    "all_metrics": {
+      "test_auc": NaN,
+      "test_ap": NaN,
+      "test_acc": NaN,
+      "test_bal_acc": NaN,
+      "test_f1": NaN,
+      "test_rmse": 0.5133465668109368,
+      "test_mae": 0.399803105688966,
+      "test_r2": 0.749467218572664
+    }
+  },
+  "lipophilicity": {
+    "dataset": "lipophilicity",
+    "model": "hybrid",
+    "primary_metric": "test_rmse",
+    "primary_value": 0.6326270932794862,
+    "all_metrics": {
+      "test_auc": NaN,
+      "test_ap": NaN,
+      "test_acc": NaN,
+      "test_bal_acc": NaN,
+      "test_f1": NaN,
+      "test_rmse": 0.6326270932794862,
+      "test_mae": 0.4931443395850415,
+      "test_r2": 0.5184123931584282
+    }
+  },
+  "tox21": {
+    "dataset": "tox21",
+    "model": "ens",
+    "primary_metric": "test_auc",
+    "primary_value": 0.7558223377853154,
+    "all_metrics": {
+      "test_auc": 0.7558223377853154,
+      "test_ap": 0.2744611964220723,
+      "test_acc": 0.8918688803746276,
+      "test_bal_acc": 0.6262595863591045,
+      "test_f1": 0.309125100841461,
+      "test_rmse": NaN,
+      "test_mae": NaN,
+      "test_r2": NaN
+    },
+    "thresholds": {
+      "thresholds": [
+        0.35,
+        0.25,
+        0.25,
+        0.25,
+        0.15,
+        0.5499999999999999,
+        0.1,
+        0.15,
+        0.15,
+        0.1,
+        0.25,
+        0.15
+      ],
+      "metric": "f1"
+    },
+    "ensemble": {
+      "models": [
+        "hybrid",
+        "rf"
+      ],
+      "weights": [
+        0.7000000000000001,
+        0.30000000000000004
+      ],
+      "grid_step": 0.1,
+      "topk": 2
+    }
+  }
+}

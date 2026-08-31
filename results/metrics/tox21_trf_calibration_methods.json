@@ -1,0 +1,49 @@
+{
+  "choices": [
+    {
+      "kind": "temperature",
+      "T": 1.0701576077190924
+    },
+    {
+      "kind": "temperature",
+      "T": 1.182805776952681
+    },
+    {
+      "kind": "temperature",
+      "T": 0.8774873143280172
+    },
+    {
+      "kind": "temperature",
+      "T": 1.0701576077190924
+    },
+    {
+      "kind": "temperature",
+      "T": 1.0701576077190924
+    },
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "temperature",
+      "T": 1.182805776952681
+    },
+    {
+      "kind": "temperature",
+      "T": 0.8774873143280172
+    },
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "temperature",
+      "T": 1.1264816923358867
+    },
+    {
+      "kind": "temperature",
+      "T": 1.373823795883263
+    }
+  ]
+}

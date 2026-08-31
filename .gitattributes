@@ -1,0 +1,11 @@
+# Normalize line endings: store everything with LF in the repo, check out
+# native on each OS. Keeps Windows (local) and Linux (Colab) consistent.
+* text=auto eol=lf
+
+# Binary files git should never touch
+*.pt   binary
+*.pkl  binary
+*.npz  binary
+*.npy  binary
+*.png  binary
+*.pdf  binary
