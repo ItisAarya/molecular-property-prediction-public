@@ -1,10 +1,12 @@
 {
   "choices": [
     {
-      "kind": "identity"
+      "kind": "temperature",
+      "T": 0.833111309348451
     },
     {
-      "kind": "identity"
+      "kind": "temperature",
+      "T": 1.0138335231022981
     }
   ]
 }

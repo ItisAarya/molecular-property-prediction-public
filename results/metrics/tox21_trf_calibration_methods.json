@@ -1,8 +1,15 @@
 {
   "choices": [
     {
-      "kind": "temperature",
-      "T": 1.0701576077190924
+      "kind": "identity"
+    },
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "logistic",
+      "a": 0.7942137020699102,
+      "b": 1.299351141925234
     },
     {
       "kind": "temperature",
@@ -10,32 +17,7 @@
     },
     {
       "kind": "temperature",
-      "T": 0.8774873143280172
-    },
-    {
-      "kind": "temperature",
-      "T": 1.0701576077190924
-    },
-    {
-      "kind": "temperature",
-      "T": 1.0701576077190924
-    },
-    {
-      "kind": "identity"
-    },
-    {
-      "kind": "temperature",
       "T": 1.182805776952681
-    },
-    {
-      "kind": "temperature",
-      "T": 0.8774873143280172
-    },
-    {
-      "kind": "identity"
-    },
-    {
-      "kind": "identity"
     },
     {
       "kind": "temperature",
@@ -43,7 +25,29 @@
     },
     {
       "kind": "temperature",
-      "T": 1.373823795883263
+      "T": 1.2364414162949369
+    },
+    {
+      "kind": "logistic",
+      "a": 1.0878233824705759,
+      "b": 1.0559809202003905
+    },
+    {
+      "kind": "temperature",
+      "T": 1.2364414162949369
+    },
+    {
+      "kind": "temperature",
+      "T": 1.2364414162949369
+    },
+    {
+      "kind": "logistic",
+      "a": 0.6684987123707141,
+      "b": 0.9770398763386962
+    },
+    {
+      "kind": "temperature",
+      "T": 1.4425149856774262
     }
   ]
 }
