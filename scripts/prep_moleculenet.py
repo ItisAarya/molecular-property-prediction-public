@@ -149,7 +149,10 @@ def extract_arrays(dset, y_mean, y_std):
     y = np.where(missing, np.nan, y).astype(np.float32)
     y_raw = np.where(missing, np.nan, y_raw).astype(np.float32)
 
-    smiles = np.asarray(dset.ids, dtype="U200")
+    # Let numpy size the string dtype to the longest SMILES present. A fixed width
+    # (e.g. "U200") silently truncates longer SMILES -- the longest here is 339 chars --
+    # and a truncated SMILES then fails to parse everywhere downstream.
+    smiles = np.array([str(s) for s in dset.ids])
 
     return X, y, y_raw, mask, smiles
 

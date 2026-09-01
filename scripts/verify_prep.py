@@ -15,6 +15,9 @@ import os
 
 import numpy as np
 import pandas as pd
+from rdkit import Chem, RDLogger
+
+RDLogger.DisableLog("rdApp.*")
 
 DATA_DIR = "data"
 SPLITS = ["train", "valid", "test"]
@@ -98,6 +101,33 @@ def main():
                 np.array_equal(df[tasks].isna().values, w == 0),
                 f"{int(df[tasks].isna().values.sum())} empty cells",
             )
+
+            # 7b. SMILES integrity. A fixed-width numpy string dtype (e.g. "U200")
+            #     silently truncates longer SMILES; the truncated string then fails to
+            #     parse and the molecule vanishes from the graph dataset further on.
+            csv_smiles = df["smiles"].astype(str).tolist()
+            npz_smiles = [str(x) for x in smiles]
+            longest = max(len(x) for x in csv_smiles)
+            check("csv smiles == npz smiles", csv_smiles == npz_smiles)
+            bad = [x for x in csv_smiles if Chem.MolFromSmiles(x) is None]
+            check(
+                "every SMILES parses with RDKit",
+                len(bad) == 0,
+                f"{len(bad)} unparseable; longest SMILES = {longest} chars",
+            )
+
+            # 7c. If graphs have already been built, every molecule must have one.
+            #     A count mismatch means molecules were silently dropped.
+            gpath = os.path.join(DATA_DIR, f"{ds}_{split}_graphs.pt")
+            if os.path.exists(gpath):
+                import torch
+
+                n_graphs = len(torch.load(gpath, weights_only=False)["graphs"])
+                check(
+                    "graph count matches molecule count",
+                    n_graphs == n,
+                    f"{n_graphs} graphs vs {n} molecules",
+                )
 
             # 8. Report the label statistics that the metrics now see.
             if is_cls:
