@@ -34,6 +34,7 @@ import torch.nn.functional as F
 from transformers import AutoModel
 
 from src.eval.metrics import is_classification, cls_metrics, reg_metrics
+from src.utils.seed import set_seed
 
 DATA_DIR = "data"
 MODELS_DIR = "models"
@@ -112,6 +113,9 @@ def batch_loader(ids, masks, ys=None, bsz=16):
 # Train / predict
 # --------------------------------------------------------------------------------------
 def run_ds(ds, epochs=5, batch_size=16, lr=1e-3, device="cpu"):
+    # Seed per dataset so a single-dataset run reproduces the all-dataset run.
+    seed = set_seed()
+
     ids_tr, att_tr, ytr, tasks = load_tok(ds, "train")
     ids_va, att_va, yva, _ = load_tok(ds, "valid")
     ids_te, att_te, yte, _ = load_tok(ds, "test")

@@ -32,6 +32,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 
 from src.eval.metrics import is_classification, cls_metrics, reg_metrics
+from src.utils.seed import get_seed
 
 DATA_DIR = "data"
 MODELS_DIR = "models"
@@ -43,7 +44,7 @@ for d in (MODELS_DIR, PRED_DIR, MET_DIR):
 
 N_TREES_CLS = 500
 N_TREES_REG = 800
-SEED = 42
+SEED = get_seed()  # override with MPP_SEED
 
 
 def load_npz(ds, split):

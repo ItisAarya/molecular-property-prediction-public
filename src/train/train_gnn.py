@@ -5,6 +5,7 @@ from torch_geometric.loader import DataLoader
 from torch_geometric.nn import GINConv, global_mean_pool, BatchNorm
 
 from src.eval.metrics import is_classification, cls_metrics, reg_metrics
+from src.utils.seed import set_seed
 
 DATA_DIR = "data"
 MODELS_DIR = "models"
@@ -83,6 +84,8 @@ def get_y_numpy(graphs):
 
 # ------------- Training loop --------------
 def run_one(ds, epochs=100, batch_size=128, lr=1e-3, weight_decay=1e-4, patience=15, device="cpu"):
+    # Seed per dataset so a single-dataset run reproduces the all-dataset run.
+    seed = set_seed()
     gtr, tasks = load_graphs(ds, "train")
     gva, _     = load_graphs(ds, "valid")
     gte, _     = load_graphs(ds, "test")
@@ -157,7 +160,7 @@ def run_one(ds, epochs=100, batch_size=128, lr=1e-3, weight_decay=1e-4, patience
 
     pd.DataFrame([m_va]).to_csv(os.path.join(MET_DIR, f"{ds}_gnn_valid.csv"), index=False)
     pd.DataFrame([m_te]).to_csv(os.path.join(MET_DIR, f"{ds}_gnn_test.csv"),  index=False)
-    print(ds, "GNN (GIN) done. Valid:", m_va, "Test:", m_te)
+    print(f"{ds} GNN (GIN) done [seed={seed}]. Valid:", m_va, "Test:", m_te)
 
 def main():
     meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
