@@ -71,8 +71,8 @@ def eval_one(ds, model):
         mt = macro_avg(test_task_metrics, KEYS)
 
     else:
-        mv = reg_metrics(yv, pv)
-        mt = reg_metrics(yt, pt)
+        mv = reg_metrics(yv, pv, ds)
+        mt = reg_metrics(yt, pt, ds)
 
     return mv, mt
 

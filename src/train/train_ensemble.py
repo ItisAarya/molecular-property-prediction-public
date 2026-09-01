@@ -128,7 +128,7 @@ def run_one(ds):
     if cls:
         mv = cls_metrics(yv, Pv); mt = cls_metrics(yt, Pt)
     else:
-        mv = reg_metrics(yv, Pv);  mt = reg_metrics(yt, Pt)
+        mv = reg_metrics(yv, Pv, ds);  mt = reg_metrics(yt, Pt, ds)
 
     wdict = dict(zip(models, [round(float(x),2) for x in best_w]))
     print(ds, "ENS using", wdict, "| VALID:", mv, "| TEST:", mt)

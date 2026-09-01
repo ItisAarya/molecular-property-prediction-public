@@ -54,8 +54,8 @@ def run_ds(ds):
         reg = Ridge(alpha=1.0).fit(Xva, yva1)
         Pva = reg.predict(Xva).reshape(-1,1)
         Pte = reg.predict(Xte).reshape(-1,1)
-        m_va = reg_metrics(yva1, Pva)
-        m_te = reg_metrics(yte1, Pte)
+        m_va = reg_metrics(yva1, Pva, ds)
+        m_te = reg_metrics(yte1, Pte, ds)
         np.save(os.path.join(PRED_DIR, f"{ds}_hybrid_valid.npy"), Pva)
         np.save(os.path.join(PRED_DIR, f"{ds}_hybrid_test.npy"), Pte)
 

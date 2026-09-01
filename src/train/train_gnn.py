@@ -124,7 +124,7 @@ def run_one(ds, epochs=100, batch_size=128, lr=1e-3, weight_decay=1e-4, patience
             m = cls_metrics(yva, Pva)        # maximize AUC
             score = m["auc"]
         else:
-            m = reg_metrics(yva, Pva)        # maximize -RMSE
+            m = reg_metrics(yva, Pva, ds)    # maximize -RMSE
             score = -m["rmse"]
 
         if score > best_score:
@@ -155,8 +155,8 @@ def run_one(ds, epochs=100, batch_size=128, lr=1e-3, weight_decay=1e-4, patience
     yva = get_y_numpy(gva)
     yte = get_y_numpy(gte)
 
-    m_va = cls_metrics(yva, Pva) if cls else reg_metrics(yva, Pva)
-    m_te = cls_metrics(yte, Pte) if cls else reg_metrics(yte, Pte)
+    m_va = cls_metrics(yva, Pva) if cls else reg_metrics(yva, Pva, ds)
+    m_te = cls_metrics(yte, Pte) if cls else reg_metrics(yte, Pte, ds)
 
     pd.DataFrame([m_va]).to_csv(os.path.join(MET_DIR, f"{ds}_gnn_valid.csv"), index=False)
     pd.DataFrame([m_te]).to_csv(os.path.join(MET_DIR, f"{ds}_gnn_test.csv"),  index=False)

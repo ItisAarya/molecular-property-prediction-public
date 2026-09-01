@@ -164,8 +164,8 @@ def train_one_dataset(ds):
         m_te = cls_metrics(yte, pred_te)
     else:
         pred_va, pred_te, infos = train_regression(ds, Xtr, ytr, Xva, Xte)
-        m_va = reg_metrics(yva, pred_va)
-        m_te = reg_metrics(yte, pred_te)
+        m_va = reg_metrics(yva, pred_va, ds)
+        m_te = reg_metrics(yte, pred_te, ds)
 
     np.save(os.path.join(PRED_DIR, f"{ds}_rf_valid.npy"), pred_va)
     np.save(os.path.join(PRED_DIR, f"{ds}_rf_test.npy"), pred_te)

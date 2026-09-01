@@ -165,8 +165,8 @@ def run_ds(ds, epochs=5, batch_size=16, lr=1e-3, device="cpu"):
     np.save(os.path.join(PRED_DIR, f"{ds}_trf_test.npy"), p_te)
 
     yva_np, yte_np = yva.numpy(), yte.numpy()
-    met_va = cls_metrics(yva_np, p_va) if cls else reg_metrics(yva_np, p_va)
-    met_te = cls_metrics(yte_np, p_te) if cls else reg_metrics(yte_np, p_te)
+    met_va = cls_metrics(yva_np, p_va) if cls else reg_metrics(yva_np, p_va, ds)
+    met_te = cls_metrics(yte_np, p_te) if cls else reg_metrics(yte_np, p_te, ds)
 
     pd.DataFrame([met_va]).to_csv(os.path.join(MET_DIR, f"{ds}_trf_valid.csv"), index=False)
     pd.DataFrame([met_te]).to_csv(os.path.join(MET_DIR, f"{ds}_trf_test.csv"), index=False)
