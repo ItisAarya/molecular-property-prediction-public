@@ -1,142 +1,157 @@
-# src/train/train_ensemble.py
-import os, json, numpy as np, pandas as pd
+"""
+src/train/train_ensemble.py
+
+Weighted blend of the strongest base models.
+
+    python -m src.train.train_ensemble
+
+Writes results/preds/<ds>_ens_{oof,valid,test}.npy and the chosen weights to
+results/metrics/<ds>_ens_weights.json.
+
+WHAT CHANGED, AND WHY
+---------------------
+The inherited version ranked the candidate models on the validation split and then
+grid-searched the blend weights on that same split -- while calibration, threshold tuning
+and final model selection were all also using it. Weights chosen by maximising a score on
+a few hundred rows, then reported on those rows, are fitted parameters masquerading as an
+evaluation.
+
+Both the ranking and the weight search now run on out-of-fold predictions over `train`
+(src/train/make_oof.py), so `valid` is untouched and available for model selection.
+
+The blend is also cross-fitted: `ens_oof.npy` holds a prediction for every training
+molecule produced by weights chosen without it, which is what calibration and thresholds
+consume. Weights are only two or three numbers, so the effect is much smaller than for the
+meta-learner -- but the whole point of this phase is that no stage is fitted and scored on
+the same rows, and a two-parameter fit is still a fit.
+"""
+
+import json
+import os
 from itertools import product
+
+import numpy as np
+
+from src.data.splits import load_smiles, load_y, scaffold_kfold_indices
 from src.eval.metrics import is_classification, cls_metrics, reg_metrics
 
-# Try modern RMSE; fall back if needed
-try:
-    from sklearn.metrics import root_mean_squared_error as sk_rmse
-    def rmse(y_true, y_pred):
-        return float(sk_rmse(y_true.reshape(-1), y_pred.reshape(-1)))
-except Exception:
-    from sklearn.metrics import mean_squared_error
-    def rmse(y_true, y_pred):
-        return float(mean_squared_error(y_true.reshape(-1), y_pred.reshape(-1), squared=False))
-
-DATA = "data"
 PRED = "results/preds"
-MET  = "results/metrics"
+MET = "results/metrics"
+DATA = "data"
+
+CANDIDATES = ["rf", "gnn", "trf", "hybrid"]
+TOPK = 2
+GRID_STEP = 0.10
+N_FOLDS = 5
+
 os.makedirs(MET, exist_ok=True)
 
-# Candidate base models to consider
-CANDS = ["rf","gnn","trf","hybrid"]
-
-TOPK = 2          # pick the top-K models on validation
-GRID_STEP = 0.10  # finer than 0.25
-
-def load_y(ds, split):
-    d = np.load(os.path.join(DATA, f"{ds}_{split}_ecfp.npz"))
-    return d["y"].astype(np.float32)
 
 def load_pred(ds, model, split):
-    cal = os.path.join(PRED, f"{ds}_{model}_{split}_cal.npy")
-    raw = os.path.join(PRED, f"{ds}_{model}_{split}.npy")
-    path = cal if os.path.exists(cal) else raw
-    return np.load(path) if os.path.exists(path) else None
+    """Prefer a calibrated file when one exists, else the raw predictions."""
+    for name in (f"{ds}_{model}_{split}_cal.npy", f"{ds}_{model}_{split}.npy"):
+        path = os.path.join(PRED, name)
+        if os.path.exists(path):
+            p = np.load(path)
+            return p.reshape(-1, 1) if p.ndim == 1 else p
+    return None
 
-def available_models(ds):
-    avail = []
-    for m in CANDS:
-        if load_pred(ds, m, "valid") is not None and load_pred(ds, m, "test") is not None:
-            avail.append(m)
-    return avail
 
-def model_score(ds, model, yv, cls):
-    pv = load_pred(ds, model, "valid")
-    if pv is None: return -np.inf
-    if pv.ndim == 1: pv = pv[:,None]
-    if cls:
-        return cls_metrics(yv, pv)["auc"]  # higher is better
-    else:
-        return -rmse(yv, pv)               # higher is better (neg RMSE)
+def available(ds):
+    return [m for m in CANDIDATES
+            if all(load_pred(ds, m, s) is not None for s in ("oof", "valid", "test"))]
 
-def normalised_weight_grid(n, step=0.10):
-    vals = np.arange(0.0, 1.0 + 1e-9, step)
+
+def score_of(y, p, ds, cls):
+    """Higher is always better, so the same comparison works for both task types."""
+    return cls_metrics(y, p)["auc"] if cls else -reg_metrics(y, p, ds)["rmse"]
+
+
+def weight_grid(n, step=GRID_STEP):
+    """All weight vectors on the simplex, at the given resolution."""
     if n == 1:
-        yield np.array([1.0], dtype=float); return
+        yield np.array([1.0])
+        return
+    vals = np.arange(0.0, 1.0 + 1e-9, step)
     for w in product(vals, repeat=n):
-        s = sum(w)
-        if s == 0: continue
-        if abs(s - 1.0) < 1e-9:
-            yield np.array(w, dtype=float)
+        if abs(sum(w) - 1.0) < 1e-9:
+            yield np.array(w)
 
-def stack_preds(w, arrs):
-    out = np.zeros_like(arrs[0], dtype=float)
-    for wi, Ai in zip(w, arrs):
-        out += wi * Ai
+
+def blend(w, arrays):
+    out = np.zeros_like(arrays[0], dtype=np.float64)
+    for wi, a in zip(w, arrays):
+        out += wi * a
     return out
 
+
+def best_weights(y, preds, ds, cls, rows=None):
+    """Grid-search the blend weights that maximise the score on `rows` (default: all)."""
+    sel = slice(None) if rows is None else rows
+    subset = [p[sel] for p in preds]
+    y_sub = y[sel]
+
+    best_w, best_s = None, -np.inf
+    for w in weight_grid(len(preds)):
+        s = score_of(y_sub, blend(w, subset), ds, cls)
+        if s > best_s:
+            best_w, best_s = w, s
+    return best_w
+
+
 def run_one(ds):
-    models_all = available_models(ds)
-    if len(models_all) == 0:
-        print(ds, "ensemble skipped (no base models)."); return
-
-    yv = load_y(ds, "valid")
-    yt = load_y(ds, "test")
     cls = is_classification(ds)
+    models = available(ds)
+    if not models:
+        print(f"{ds}: ensemble skipped (no base predictions)")
+        return
 
-    # Rank by validation performance and keep top-K
-    scores = [(m, model_score(ds, m, yv, cls)) for m in models_all]
-    scores.sort(key=lambda x: x[1], reverse=True)
-    models = [m for m,_ in scores[:max(1, min(TOPK, len(scores)))]]
+    y_tr = load_y(ds, "train")
+    y_va = load_y(ds, "valid")
+    y_te = load_y(ds, "test")
 
-    pv_list = [load_pred(ds, m, "valid") for m in models]
-    pt_list = [load_pred(ds, m, "test")  for m in models]
-    if pv_list[0].ndim == 1:
-        pv_list = [p[:,None] for p in pv_list]
-        pt_list = [p[:,None] for p in pt_list]
+    # Rank candidates on out-of-fold performance, not on validation.
+    ranked = sorted(models, key=lambda m: score_of(y_tr, load_pred(ds, m, "oof"), ds, cls),
+                    reverse=True)
+    chosen = ranked[:max(1, min(TOPK, len(ranked)))]
 
-    # Objective
-    if cls:
-        best_score = -np.inf; better = lambda a,b: a>b
-    else:
-        best_score =  np.inf; better = lambda a,b: a<b
+    oof = [load_pred(ds, m, "oof") for m in chosen]
+    va = [load_pred(ds, m, "valid") for m in chosen]
+    te = [load_pred(ds, m, "test") for m in chosen]
 
-    best_w, best_metric = None, None
-    for w in normalised_weight_grid(len(models), step=GRID_STEP):
-        Pv = stack_preds(w, pv_list)
-        if cls:
-            m = cls_metrics(yv, Pv)      # maximise AUC
-            score = -m["auc"] * -1       # explicit float
-            metric = m
-        else:
-            score = rmse(yv, Pv)         # minimise RMSE
-            metric = {"rmse": score}
-        if better(score, best_score):
-            best_score, best_w, best_metric = score, w, metric
+    # Final weights: all out-of-fold rows.
+    w = best_weights(y_tr, oof, ds, cls)
 
-    if best_w is None:
-        # Fallback to the single best model
-        best_w = np.array([1.0], dtype=float)
-        models = [scores[0][0]]
-        pv_list = [load_pred(ds, models[0], "valid")]
-        pt_list = [load_pred(ds, models[0], "test")]
-        if pv_list[0].ndim == 1:
-            pv_list = [pv_list[0][:,None]]
-            pt_list = [pt_list[0][:,None]]
+    # Cross-fitted blend over train, so calibration sees weights chosen without those rows.
+    folds = scaffold_kfold_indices(ds, load_smiles(ds, "train"), n_folds=N_FOLDS)
+    P_oof = np.zeros_like(oof[0], dtype=np.float64)
+    for hold in folds:
+        fit_idx = np.setdiff1d(np.arange(len(y_tr)), hold)
+        w_fold = best_weights(y_tr, oof, ds, cls, rows=fit_idx)
+        P_oof[hold] = blend(w_fold, [p[hold] for p in oof])
 
-    Pv = stack_preds(best_w, pv_list)
-    Pt = stack_preds(best_w, pt_list)
+    P_va, P_te = blend(w, va), blend(w, te)
 
-    # Save ensemble preds & weights
-    np.save(os.path.join(PRED, f"{ds}_ens_valid.npy"), Pv)
-    np.save(os.path.join(PRED, f"{ds}_ens_test.npy"),  Pt)
+    for tag, arr in [("oof", P_oof), ("valid", P_va), ("test", P_te)]:
+        np.save(os.path.join(PRED, f"{ds}_ens_{tag}.npy"), arr.astype(np.float32))
+
     with open(os.path.join(MET, f"{ds}_ens_weights.json"), "w") as f:
-        json.dump({"models":models, "weights":best_w.tolist(), "grid_step":GRID_STEP, "topk":TOPK}, f, indent=2)
+        json.dump({"models": chosen, "weights": [float(x) for x in w],
+                   "grid_step": GRID_STEP, "topk": TOPK,
+                   "fitted_on": "out-of-fold predictions over train"}, f, indent=2)
 
-    # Log metrics
-    if cls:
-        mv = cls_metrics(yv, Pv); mt = cls_metrics(yt, Pt)
-    else:
-        mv = reg_metrics(yv, Pv, ds);  mt = reg_metrics(yt, Pt, ds)
+    key = "auc" if cls else "rmse"
+    score = cls_metrics if cls else (lambda a, b: reg_metrics(a, b, ds))
+    m_va, m_te = score(y_va, P_va), score(y_te, P_te)
+    weights = dict(zip(chosen, [round(float(x), 2) for x in w]))
+    print(f"{ds} ENS {weights} | valid {key}={m_va[key]:.4f} | test {key}={m_te[key]:.4f}")
 
-    wdict = dict(zip(models, [round(float(x),2) for x in best_w]))
-    print(ds, "ENS using", wdict, "| VALID:", mv, "| TEST:", mt)
 
 def main():
     meta = json.load(open(os.path.join(DATA, "dataset_meta.json")))
-    for ds in meta.keys():
+    for ds in meta:
         run_one(ds)
+
 
 if __name__ == "__main__":
     main()

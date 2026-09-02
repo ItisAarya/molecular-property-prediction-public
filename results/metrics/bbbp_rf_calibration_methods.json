@@ -1,9 +1,9 @@
 {
+  "fitted_on": "out-of-fold predictions over train",
   "choices": [
     {
-      "kind": "logistic",
-      "a": 2.07833644529008,
-      "b": -2.3518903375154823
+      "kind": "temperature",
+      "T": 0.9898018778737792
     }
   ]
 }

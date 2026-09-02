@@ -1,71 +1,132 @@
-# src/eval/thresholds.py
-import os, json, numpy as np, pandas as pd
-from src.eval.metrics import is_classification, cls_metrics
+"""
+src/eval/thresholds.py
 
-DATA="data"; PRED="results/preds"; OUT="results/metrics"
+Per-task decision thresholds for the classification models.
+
+    python -m src.eval.thresholds
+
+Writes results/metrics/<ds>_<model>_thresholds.json.
+
+WHAT CHANGED, AND WHY
+---------------------
+A threshold is a fitted parameter. The inherited version searched for it on the validation
+split and then reported thresholded validation metrics from those same rows, which flatters
+the result -- with a few hundred rows and a rare positive class, the best threshold on that
+sample is partly fitted to its noise.
+
+Thresholds are now chosen on out-of-fold predictions over `train` (cross-fitted, for the
+hybrid and ensemble), so validation stays clean for model selection.
+
+The inherited version also used different objectives for different models -- balanced
+accuracy for the base learners but F1 for the ensemble. That makes the models
+non-comparable: F1 ignores true negatives while balanced accuracy weights both classes
+equally, so the two objectives pick systematically different operating points. Every model
+now uses the same objective.
+
+WHY BALANCED ACCURACY
+---------------------
+These datasets are heavily imbalanced (Tox21 is ~4% positive on some assays). Plain
+accuracy is maximised by predicting the majority class everywhere, and F1 ignores true
+negatives entirely, which for a toxicity screen is the wrong thing to ignore -- correctly
+clearing a safe compound has real value. Balanced accuracy is the mean of sensitivity and
+specificity, so both classes count regardless of how rare one is.
+
+Tasks with too few positives to fit on keep the default 0.5 and are recorded as such,
+rather than adopting a threshold tuned on a handful of molecules.
+"""
+
+import json
+import os
+
+import numpy as np
+import pandas as pd
+
+from src.data.splits import enough_positives, load_y
+from src.eval.metrics import is_classification
+
+DATA = "data"
+PRED = "results/preds"
+OUT = "results/metrics"
+
+MODELS = ["rf", "gnn", "trf", "hybrid", "ens"]
+OBJECTIVE = "bal_acc"
+GRID = np.linspace(0.05, 0.95, 37)  # 0.025 resolution
+
 os.makedirs(OUT, exist_ok=True)
 
-# Include ensemble
-MODELS = ["rf","gnn","trf","hybrid","ens"]
-
-# Metric to optimise thresholds per model
-MODEL_THRESH_METRIC = {
-    "rf": "bal_acc",
-    "gnn": "bal_acc",
-    "trf": "bal_acc",
-    "hybrid": "bal_acc",
-    "ens": "f1",   # Ensemble: push F1 for class-imbalanced sets
-}
-
-def load_y(ds, split):
-    d = np.load(os.path.join(DATA, f"{ds}_{split}_ecfp.npz"))
-    return d["y"].astype(np.float32)
 
 def load_pred(ds, model, split):
-    # Ensembles are already final; others may have *_cal.npy
-    cal = os.path.join(PRED, f"{ds}_{model}_{split}_cal.npy")
-    raw = os.path.join(PRED, f"{ds}_{model}_{split}.npy")
-    path = cal if os.path.exists(cal) else raw
-    return np.load(path) if os.path.exists(path) else None
+    """Prefer the calibrated file when present, matching what evaluation will use."""
+    for name in (f"{ds}_{model}_{split}_cal.npy", f"{ds}_{model}_{split}.npy"):
+        path = os.path.join(PRED, name)
+        if os.path.exists(path):
+            p = np.load(path)
+            return p.reshape(-1, 1) if p.ndim == 1 else p
+    return None
 
-def best_thresholds(y_val, p_val, metric="bal_acc"):
-    if p_val.ndim == 1: p_val = p_val[:,None]
-    T = p_val.shape[1]
-    thr_grid = np.linspace(0.05, 0.95, 19)
-    out = [0.5]*T
-    for t in range(T):
-        yt = y_val[:,t] if T>1 else y_val.reshape(-1)
-        m = ~np.isnan(yt)
-        if m.sum()==0 or len(np.unique(yt[m]))<2:
-            out[t] = 0.5; continue
-        best_s, best_th = -1.0, 0.5
-        for th in thr_grid:
-            res = cls_metrics(yt[m], p_val[m,t], thr=th)
-            score = res["bal_acc"] if metric=="bal_acc" else res["f1"]
-            if score > best_s:
-                best_s, best_th = score, th
-        out[t] = float(best_th)
-    return out
+
+def balanced_accuracy(y, p, thr):
+    """Mean of sensitivity and specificity at the given threshold."""
+    pred = (p >= thr).astype(int)
+    pos, neg = y == 1, y == 0
+    if pos.sum() == 0 or neg.sum() == 0:
+        return np.nan
+    sens = (pred[pos] == 1).mean()
+    spec = (pred[neg] == 0).mean()
+    return 0.5 * (sens + spec)
+
+
+def best_threshold(y_task, p_task):
+    """Scan the grid and return the threshold maximising balanced accuracy."""
+    mask = ~np.isnan(y_task)
+    y, p = y_task[mask], p_task[mask]
+    if y.size == 0 or len(np.unique(y)) < 2:
+        return 0.5
+    scores = [balanced_accuracy(y, p, t) for t in GRID]
+    return float(GRID[int(np.nanargmax(scores))])
+
 
 def main():
-    meta = json.load(open(os.path.join(DATA,"dataset_meta.json")))
-    rows=[]
-    for ds in meta.keys():
-        if not is_classification(ds): 
+    meta = json.load(open(os.path.join(DATA, "dataset_meta.json")))
+    rows = []
+
+    for ds in meta:
+        if not is_classification(ds):
             continue
+        y_tr = load_y(ds, "train")
+
         for model in MODELS:
-            yv = load_y(ds,"valid")
-            pv = load_pred(ds, model, "valid")
-            if pv is None: 
+            p_oof = load_pred(ds, model, "oof")
+            if p_oof is None:
                 continue
-            metric = MODEL_THRESH_METRIC.get(model, "bal_acc")
-            th = best_thresholds(yv, pv, metric=metric)
+
+            thresholds, defaulted = [], []
+            for t in range(p_oof.shape[1]):
+                if not enough_positives(y_tr, t):
+                    thresholds.append(0.5)
+                    defaulted.append(t)
+                else:
+                    thresholds.append(best_threshold(y_tr[:, t], p_oof[:, t]))
+
             with open(os.path.join(OUT, f"{ds}_{model}_thresholds.json"), "w") as f:
-                json.dump({"thresholds":th, "metric":metric}, f, indent=2)
-            rows.append({"dataset":ds,"model":model,"metric":metric,"thresholds":th})
-            print(f"{ds} {model} → thresholds (metric={metric}) {th}")
+                json.dump({
+                    "thresholds": thresholds,
+                    "metric": OBJECTIVE,
+                    "fitted_on": "out-of-fold predictions over train",
+                    "defaulted_tasks": defaulted,
+                }, f, indent=2)
+
+            rows.append({"dataset": ds, "model": model, "metric": OBJECTIVE,
+                         "thresholds": thresholds, "n_defaulted": len(defaulted)})
+            note = f"  ({len(defaulted)} task(s) kept 0.5)" if defaulted else ""
+            shown = ", ".join(f"{t:.2f}" for t in thresholds[:6])
+            more = " ..." if len(thresholds) > 6 else ""
+            print(f"  {ds}-{model:<7} [{shown}{more}]{note}")
+
     if rows:
-        pd.DataFrame(rows).to_csv(os.path.join(OUT,"thresholds_summary.csv"), index=False)
+        pd.DataFrame(rows).to_csv(os.path.join(OUT, "thresholds_summary.csv"), index=False)
+        print(f"\nAll models use the same objective ({OBJECTIVE}), fitted out-of-fold.")
+
 
 if __name__ == "__main__":
     main()

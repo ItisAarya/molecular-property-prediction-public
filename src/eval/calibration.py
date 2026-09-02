@@ -1,251 +1,265 @@
-# src/eval/calibration.py
-import os, json, numpy as np, pandas as pd, matplotlib.pyplot as plt
-from scipy.special import expit  # stable sigmoid
+"""
+src/eval/calibration.py
+
+Probability calibration for the classification models.
+
+    python -m src.eval.calibration
+
+For each (dataset, model, task) it picks the best of {identity, temperature scaling,
+Platt/logistic scaling} and writes calibrated predictions alongside the raw ones.
+
+WHAT CHANGED, AND WHY
+---------------------
+The inherited version fitted the calibrators on the validation split, chose between them
+by validation ECE, and then reported the improvement on that same split -- so the reported
+"ECE after calibration" was partly just the calibrator fitting the noise in those few
+hundred rows. Unsurprisingly the gains did not survive to test: BBBP went 0.079 -> 0.053
+on validation but 0.260 -> 0.202 on test.
+
+Calibrators are now fitted on **out-of-fold predictions over `train`** and evaluated on
+validation and test, which are never fitted on. For the hybrid and ensemble this means the
+cross-fitted `*_oof.npy` files, so the calibrator sees meta-learner outputs that are
+themselves out-of-sample; calibrating against in-sample meta predictions would be the same
+leak one level up.
+
+The inherited version also skipped calibrating the hybrid entirely. There is no longer a
+reason to: with out-of-fold inputs it can be calibrated like anything else.
+
+A NOTE ON WHAT CALIBRATION CANNOT FIX
+-------------------------------------
+BBBP's training split is 82% positive while its test split is 52%. A calibration map fitted
+on the training distribution cannot correct a shift in the label marginal itself, so BBBP's
+test ECE stays poor no matter how the map is fitted. That is a property of the benchmark
+split, not a defect in the calibrator, and it is the motivating case for the conformal
+prediction work planned in Phase 3.
+"""
+
+import json
+import os
+
+import matplotlib
+matplotlib.use("Agg")  # no display on a headless run
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from scipy.special import expit
 from sklearn.linear_model import LogisticRegression
+
+from src.data.splits import enough_positives, load_y
+from src.eval.metrics import is_classification
 
 DATA_DIR = "data"
 PRED_DIR = "results/preds"
-MET_DIR  = "results/metrics"
-FIG_DIR  = "results/figs"
+MET_DIR = "results/metrics"
+FIG_DIR = "results/figs"
+
+MODELS = ["rf", "gnn", "trf", "hybrid", "ens"]
+
 os.makedirs(FIG_DIR, exist_ok=True)
+os.makedirs(MET_DIR, exist_ok=True)
 
-CLASS_DS = ["tox21","bbbp","clintox"]
-MODELS   = ["rf","gnn","trf","hybrid"]
 
-# ✅ Skip calibrating the stacked Hybrid model (identity only)
-CALIBRATE_MODELS = {"rf": True, "gnn": True, "trf": True, "hybrid": False}
-
-def load_y(ds, split):
-    d = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_ecfp.npz"))
-    return d["y"].astype(np.float32)
-
-def load_pred_if_exists(ds, model, split):
+def load_pred(ds, model, split):
     path = os.path.join(PRED_DIR, f"{ds}_{model}_{split}.npy")
-    return np.load(path) if os.path.exists(path) else None
+    if not os.path.exists(path):
+        return None
+    p = np.load(path)
+    return p.reshape(-1, 1) if p.ndim == 1 else p
 
-def sigmoid(x): return expit(x)
+
 def logit(p):
-    p = np.clip(p, 1e-6, 1-1e-6)
+    p = np.clip(p, 1e-6, 1 - 1e-6)
     return np.log(p) - np.log1p(-p)
+
+
 def nll(y, p):
-    p = np.clip(p, 1e-6, 1-1e-6)
-    return -np.mean(y*np.log(p) + (1-y)*np.log1p(-p))
+    p = np.clip(p, 1e-6, 1 - 1e-6)
+    return -np.mean(y * np.log(p) + (1 - y) * np.log1p(-p))
 
-# ---------- Symmetric, adaptive-bin ECE ----------
-def ece_symmetric(y_true, p_prob, bins=15, adaptive=True):
+
+def ece(y_true, p_prob, bins=15):
+    """
+    Symmetric, adaptive-bin expected calibration error.
+
+    Symmetric: confidence is measured in the *predicted* class, so a confident negative
+    counts the same as a confident positive. Adaptive bins (equal-count quantiles rather
+    than equal-width) stop a handful of points in a sparse bin from dominating.
+    """
     mask = ~np.isnan(y_true)
-    y = y_true[mask].astype(int)
-    p = p_prob[mask]
-    if y.size == 0: return np.nan
-    yhat = (p >= 0.5).astype(int)
-    conf = np.where(yhat==1, p, 1-p)        # predicted-class confidence
-    correct = (yhat == y).astype(int)
-
-    if adaptive:
-        qs = np.linspace(0, 1, bins+1)
-        edges = np.unique(np.quantile(conf, qs))
-        if edges.size < 2:
-            return np.nan
-    else:
-        edges = np.linspace(0,1,bins+1)
-
-    ece = 0.0
-    N = conf.size
-    for i in range(len(edges)-1):
-        m = (conf >= edges[i]) & (conf < edges[i+1])
-        if m.sum()==0: continue
-        c_bar = conf[m].mean()
-        a_bar = correct[m].mean()
-        ece += (m.sum()/N) * abs(a_bar - c_bar)
-    return float(ece)
-
-def reliability_plot(ds, model, split, task_name, y_true, p_prob, suffix, bins=15):
-    mask = ~np.isnan(y_true)
-    y = y_true[mask].astype(int)
-    p = p_prob[mask]
+    y, p = y_true[mask].astype(int), p_prob[mask]
     if y.size == 0:
-        return None, np.nan
-    yhat = (p >= 0.5).astype(int)
-    conf = np.where(yhat==1, p, 1-p)
-    correct = (yhat == y).astype(int)
+        return np.nan
 
-    qs = np.linspace(0,1,bins+1)
-    edges = np.unique(np.quantile(conf, qs))
-    xs, ys = [], []
-    for i in range(len(edges)-1):
-        m = (conf >= edges[i]) & (conf < edges[i+1])
-        if m.sum()==0:
-            xs.append(np.nan); ys.append(np.nan); continue
-        xs.append(conf[m].mean()); ys.append(correct[m].mean())
+    pred = (p >= 0.5).astype(int)
+    conf = np.where(pred == 1, p, 1 - p)
+    correct = (pred == y).astype(int)
 
-    e = ece_symmetric(y, p, bins=bins, adaptive=True)
-    plt.figure(figsize=(4.0,3.2))
-    plt.plot([0,1],[0,1], linestyle="--")
-    xs2 = [v for v in xs if not np.isnan(v)]
-    ys2 = [v for i,v in enumerate(ys) if not np.isnan(xs[i])]
-    plt.scatter(xs2, ys2, s=18)
-    plt.xlabel("Confidence (predicted class)")
-    plt.ylabel("Accuracy")
-    plt.title(f"{ds}-{model}-{split} ({task_name}) ECE={e:.03f}")
-    out = os.path.join(FIG_DIR, f"{ds}_{model}_{split}_{task_name}_reliability_{suffix}.png")
-    plt.tight_layout(); plt.savefig(out, dpi=160); plt.close()
-    return out, e
+    edges = np.unique(np.quantile(conf, np.linspace(0, 1, bins + 1)))
+    if edges.size < 2:
+        return np.nan
 
-# ---------- Calibrators ----------
-def fit_temperature(p_val, y_val):
-    L = logit(p_val); best_T, best_loss = 1.0, 1e9
-    for T in np.logspace(-1.5,1.0,30):
-        loss = nll(y_val, sigmoid(L/T))
-        if loss < best_loss: best_T, best_loss = T, loss
+    total = 0.0
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (conf >= lo) & (conf < hi)
+        if m.sum() == 0:
+            continue
+        total += (m.sum() / conf.size) * abs(correct[m].mean() - conf[m].mean())
+    return float(total)
+
+
+# --------------------------------------------------------------------------------------
+# Calibration maps
+# --------------------------------------------------------------------------------------
+def fit_temperature(p, y):
+    """Single-parameter scaling of the logits. Coarse sweep, then local refinement."""
+    L = logit(p)
+    best_T, best = 1.0, np.inf
+    for T in np.logspace(-1.5, 1.0, 40):
+        loss = nll(y, expit(L / T))
+        if loss < best:
+            best_T, best = T, loss
     for _ in range(20):
-        cands = best_T * np.array([0.9,0.95,1.0,1.05,1.1])
-        vals = [nll(y_val, sigmoid(L/t)) for t in cands]
-        i = int(np.argmin(vals))
-        if cands[i] == best_T: break
-        best_T = cands[i]
-    return best_T
+        cands = best_T * np.array([0.9, 0.95, 1.0, 1.05, 1.1])
+        losses = [nll(y, expit(L / t)) for t in cands]
+        pick = cands[int(np.argmin(losses))]
+        if pick == best_T:
+            break
+        best_T = pick
+    return float(best_T)
 
-def fit_logistic(p_val, y_val):
-    L = logit(p_val).reshape(-1,1)
-    y = y_val.astype(int).reshape(-1)
+
+def fit_logistic(p, y):
+    """Platt scaling: an affine map on the logits, so it can shift as well as sharpen."""
     if len(np.unique(y)) < 2:
-        # logistic regression cannot fit single-class targets
         return None
     lr = LogisticRegression(solver="lbfgs", max_iter=1000, class_weight="balanced")
-    lr.fit(L, y)
-    a = float(lr.coef_.reshape(-1)[0]); b = float(lr.intercept_[0])
-    return a, b
+    lr.fit(logit(p).reshape(-1, 1), y.astype(int))
+    return float(lr.coef_.ravel()[0]), float(lr.intercept_[0])
 
-def apply_calibration(p, method):
-    k = method["kind"]
-    if k == "identity":   return p
-    if k == "temperature":return sigmoid(logit(p)/method["T"])
-    if k == "logistic":   return sigmoid(method["a"]*logit(p) + method["b"])
-    raise ValueError("Unknown calibration kind")
 
-def choose_by_ece(pv, yv):
-    """Pick {identity, temperature, logistic} by lowest VALID ECE (adaptive).
-       Tie-breaker: lowest VALID NLL."""
-    mask = ~np.isnan(yv)
-    pv_m = pv[mask]; yv_m = yv[mask].astype(int)
-    if pv_m.size == 0:
-        return {"kind":"identity"}, pv
+def apply_map(p, method):
+    kind = method["kind"]
+    if kind == "identity":
+        return p
+    if kind == "temperature":
+        return expit(logit(p) / method["T"])
+    if kind == "logistic":
+        return expit(method["a"] * logit(p) + method["b"])
+    raise ValueError(f"unknown calibration kind: {kind}")
 
-    # identity
-    e_id  = ece_symmetric(yv, pv, adaptive=True)
-    n_id  = nll(yv_m, pv_m)
 
-    # temperature
-    T = fit_temperature(pv_m, yv_m)
-    pv_temp = sigmoid(logit(pv)/T)
-    e_temp = ece_symmetric(yv, pv_temp, adaptive=True)
-    n_temp = nll(yv_m, sigmoid(logit(pv_m)/T))
+def choose_map(p_fit, y_fit):
+    """Pick the map with the lowest ECE on the fitting data; break ties on NLL."""
+    mask = ~np.isnan(y_fit)
+    p, y = p_fit[mask], y_fit[mask].astype(int)
+    if p.size == 0 or len(np.unique(y)) < 2:
+        return {"kind": "identity"}
 
-    # logistic (only if both classes present)
-    res_log = fit_logistic(pv_m, yv_m)
-    methods, eces, nlls = [], [], []
-    # build candidates
-    methods.append({"kind":"identity"});     eces.append(e_id);  nlls.append(n_id)
-    methods.append({"kind":"temperature","T":float(T)}); eces.append(e_temp); nlls.append(n_temp)
-    if res_log is not None:
-        a,b = res_log
-        pv_log = sigmoid(a*logit(pv) + b)
-        e_log = ece_symmetric(yv, pv_log, adaptive=True)
-        n_log = nll(yv_m, sigmoid(a*logit(pv_m) + b))
-        methods.append({"kind":"logistic","a":float(a),"b":float(b)})
-        eces.append(e_log); nlls.append(n_log)
+    candidates = [{"kind": "identity"}]
+    candidates.append({"kind": "temperature", "T": fit_temperature(p, y)})
+    platt = fit_logistic(p, y)
+    if platt is not None:
+        candidates.append({"kind": "logistic", "a": platt[0], "b": platt[1]})
 
-    eces = np.array(eces); nlls = np.array(nlls)
-    idxs = np.where(eces == np.nanmin(eces))[0]
-    i = idxs[np.argmin(nlls[idxs])] if idxs.size>1 else int(idxs[0])
-    chosen = methods[i]
-    if chosen["kind"] == "temperature": pv_cal = pv_temp
-    elif chosen["kind"] == "logistic":  pv_cal = sigmoid(chosen["a"]*logit(pv) + chosen["b"])
-    else:                               pv_cal = pv
-    return chosen, pv_cal
+    scores = [(ece(y.astype(float), apply_map(p, m)), nll(y, apply_map(p, m)), i)
+              for i, m in enumerate(candidates)]
+    scores.sort(key=lambda s: (s[0], s[1]))
+    return candidates[scores[0][2]]
 
-# ---------- Main ----------
+
+def reliability_plot(ds, model, split, y_true, p, suffix, bins=15):
+    mask = ~np.isnan(y_true)
+    y, pp = y_true[mask].astype(int), p[mask]
+    if y.size == 0:
+        return
+    pred = (pp >= 0.5).astype(int)
+    conf = np.where(pred == 1, pp, 1 - pp)
+    correct = (pred == y).astype(int)
+
+    edges = np.unique(np.quantile(conf, np.linspace(0, 1, bins + 1)))
+    xs, ys = [], []
+    for lo, hi in zip(edges[:-1], edges[1:]):
+        m = (conf >= lo) & (conf < hi)
+        if m.sum():
+            xs.append(conf[m].mean())
+            ys.append(correct[m].mean())
+
+    plt.figure(figsize=(4.0, 3.2))
+    plt.plot([0, 1], [0, 1], linestyle="--", linewidth=1)
+    plt.scatter(xs, ys, s=18)
+    plt.xlabel("Confidence (predicted class)")
+    plt.ylabel("Accuracy")
+    plt.title(f"{ds}-{model}-{split} ECE={ece(y_true, p):.3f}")
+    plt.tight_layout()
+    plt.savefig(os.path.join(FIG_DIR, f"{ds}_{model}_{split}_reliability_{suffix}.png"), dpi=160)
+    plt.close()
+
+
+# --------------------------------------------------------------------------------------
+# Driver
+# --------------------------------------------------------------------------------------
 def run():
     meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
     rows = []
-    for ds in meta.keys():
-        if ds not in CLASS_DS: continue
 
-        yv = load_y(ds, "valid")
-        yt = load_y(ds, "test")
-        Ttasks = yv.shape[1] if yv.ndim==2 else 1
+    for ds in meta:
+        if not is_classification(ds):
+            continue
 
-        for m in MODELS:
-            pv = load_pred_if_exists(ds, m, "valid")
-            pt = load_pred_if_exists(ds, m, "test")
-            if pv is None or pt is None: 
-                continue
-            if pv.ndim==1: pv = pv[:,None]
-            if pt.ndim==1: pt = pt[:,None]
+        y_tr, y_va, y_te = load_y(ds, "train"), load_y(ds, "valid"), load_y(ds, "test")
 
-            # If model is set to skip calibration, save identity and report
-            if not CALIBRATE_MODELS.get(m, True):
-                np.save(os.path.join(PRED_DIR, f"{ds}_{m}_valid_cal.npy"), pv)
-                np.save(os.path.join(PRED_DIR, f"{ds}_{m}_test_cal.npy"),  pt)
-                # summaries
-                e_val_raw = float(np.nanmean([ece_symmetric(yv[:,t] if Ttasks>1 else yv.reshape(-1), pv[:,t]) for t in range(pv.shape[1])]))
-                e_tst_raw = float(np.nanmean([ece_symmetric(yt[:,t] if Ttasks>1 else yt.reshape(-1), pt[:,t]) for t in range(pt.shape[1])]))
-                # representative plots (raw only)
-                counts = [(~np.isnan(yv[:,t] if Ttasks>1 else yv.reshape(-1))).sum() for t in range(pv.shape[1])]
-                t_plot = int(np.argmax(counts))
-                yv_tp = (yv[:,t_plot] if Ttasks>1 else yv.reshape(-1))
-                yt_tp = (yt[:,t_plot] if Ttasks>1 else yt.reshape(-1))
-                mv = ~np.isnan(yv_tp); mt = ~np.isnan(yt_tp)
-                reliability_plot(ds, m, "valid", f"t{t_plot}", yv_tp[mv].astype(int), pv[mv, t_plot], "raw")
-                reliability_plot(ds, m, "test",  f"t{t_plot}", yt_tp[mt].astype(int), pt[mt, t_plot], "raw")
-                rows.append({"dataset":ds,"model":m,"ece_val_raw":e_val_raw,"ece_val_cal":e_val_raw,
-                            "ece_test_raw":e_tst_raw,"ece_test_cal":e_tst_raw})
-                print(f"{ds}-{m}: calibration skipped (identity). ECE val {e_val_raw:.3f} | test {e_tst_raw:.3f}")
+        for model in MODELS:
+            p_oof = load_pred(ds, model, "oof")
+            p_va = load_pred(ds, model, "valid")
+            p_te = load_pred(ds, model, "test")
+            if p_oof is None or p_va is None or p_te is None:
                 continue
 
-            # per-task selection among {identity, temperature, logistic}
-            pv_cal = np.zeros_like(pv)
-            pt_cal = np.zeros_like(pt)
+            cal_va = np.empty_like(p_va)
+            cal_te = np.empty_like(p_te)
             choices = []
-            for t in range(pv.shape[1]):
-                yv_t = yv[:,t] if Ttasks>1 else yv.reshape(-1)
-                choice, pv_t_cal = choose_by_ece(pv[:,t], yv_t)
-                pv_cal[:,t] = pv_t_cal
-                pt_cal[:,t] = apply_calibration(pt[:,t], choice)
+
+            for t in range(p_oof.shape[1]):
+                # Too few positives to fit a map on: leave the probabilities alone rather
+                # than fitting a correction to noise.
+                if not enough_positives(y_tr, t):
+                    choice = {"kind": "identity", "reason": "too few positives to fit"}
+                else:
+                    choice = choose_map(p_oof[:, t], y_tr[:, t])
+                cal_va[:, t] = apply_map(p_va[:, t], choice)
+                cal_te[:, t] = apply_map(p_te[:, t], choice)
                 choices.append(choice)
 
-            # ECE summaries (symmetric, adaptive)
-            e_val_raw = float(np.nanmean([ece_symmetric(yv[:,t] if Ttasks>1 else yv.reshape(-1), pv[:,t]) for t in range(pv.shape[1])]))
-            e_val_cal = float(np.nanmean([ece_symmetric(yv[:,t] if Ttasks>1 else yv.reshape(-1), pv_cal[:,t]) for t in range(pv.shape[1])]))
-            e_tst_raw = float(np.nanmean([ece_symmetric(yt[:,t] if Ttasks>1 else yt.reshape(-1), pt[:,t]) for t in range(pt.shape[1])]))
-            e_tst_cal = float(np.nanmean([ece_symmetric(yt[:,t] if Ttasks>1 else yt.reshape(-1), pt_cal[:,t]) for t in range(pt.shape[1])]))
+            np.save(os.path.join(PRED_DIR, f"{ds}_{model}_valid_cal.npy"), cal_va)
+            np.save(os.path.join(PRED_DIR, f"{ds}_{model}_test_cal.npy"), cal_te)
+            with open(os.path.join(MET_DIR, f"{ds}_{model}_calibration_methods.json"), "w") as f:
+                json.dump({"fitted_on": "out-of-fold predictions over train",
+                           "choices": choices}, f, indent=2)
 
-            # representative plots (task with most labels)
-            counts = [(~np.isnan(yv[:,t] if Ttasks>1 else yv.reshape(-1))).sum() for t in range(pv.shape[1])]
-            t_plot = int(np.argmax(counts))
-            yv_tp = (yv[:,t_plot] if Ttasks>1 else yv.reshape(-1))
-            yt_tp = (yt[:,t_plot] if Ttasks>1 else yt.reshape(-1))
-            mv = ~np.isnan(yv_tp); mt = ~np.isnan(yt_tp)
-            reliability_plot(ds, m, "valid", f"t{t_plot}", yv_tp[mv].astype(int), pv[mv, t_plot], "raw")
-            reliability_plot(ds, m, "valid", f"t{t_plot}", yv_tp[mv].astype(int), pv_cal[mv, t_plot], "cal")
-            reliability_plot(ds, m, "test",  f"t{t_plot}", yt_tp[mt].astype(int), pt[mt, t_plot], "raw")
-            reliability_plot(ds, m, "test",  f"t{t_plot}", yt_tp[mt].astype(int), pt_cal[mt, t_plot], "cal")
+            def mean_ece(y, p):
+                return float(np.nanmean([ece(y[:, t], p[:, t]) for t in range(p.shape[1])]))
 
-            # save outputs
-            np.save(os.path.join(PRED_DIR, f"{ds}_{m}_valid_cal.npy"), pv_cal)
-            np.save(os.path.join(PRED_DIR, f"{ds}_{m}_test_cal.npy"),  pt_cal)
-            with open(os.path.join(MET_DIR, f"{ds}_{m}_calibration_methods.json"), "w") as f:
-                json.dump({"choices":choices}, f, indent=2)
+            row = {
+                "dataset": ds, "model": model,
+                "ece_valid_raw": mean_ece(y_va, p_va), "ece_valid_cal": mean_ece(y_va, cal_va),
+                "ece_test_raw": mean_ece(y_te, p_te), "ece_test_cal": mean_ece(y_te, cal_te),
+            }
+            rows.append(row)
 
-            rows.append({
-                "dataset": ds, "model": m,
-                "ece_val_raw": e_val_raw, "ece_val_cal": e_val_cal,
-                "ece_test_raw": e_tst_raw, "ece_test_cal": e_tst_cal
-            })
-            print(f"{ds}-{m}: ECE (val) {e_val_raw:.3f}->{e_val_cal:.3f} | ECE (test) {e_tst_raw:.3f}->{e_tst_cal:.3f}")
+            # Plot the task with the most labels, as a representative case.
+            t_plot = int(np.argmax([(~np.isnan(y_va[:, t])).sum() for t in range(p_va.shape[1])]))
+            reliability_plot(ds, model, "test", y_te[:, t_plot], p_te[:, t_plot], "raw")
+            reliability_plot(ds, model, "test", y_te[:, t_plot], cal_te[:, t_plot], "cal")
+
+            kinds = ", ".join(sorted({c["kind"] for c in choices}))
+            print(f"  {ds}-{model:<7} ECE valid {row['ece_valid_raw']:.3f}->{row['ece_valid_cal']:.3f}"
+                  f"  test {row['ece_test_raw']:.3f}->{row['ece_test_cal']:.3f}   [{kinds}]")
 
     if rows:
         pd.DataFrame(rows).to_csv(os.path.join(MET_DIR, "calibration_summary.csv"), index=False)
+        print("\nCalibrators fitted on out-of-fold train predictions; "
+              "valid and test were never fitted on.")
+
 
 if __name__ == "__main__":
     run()

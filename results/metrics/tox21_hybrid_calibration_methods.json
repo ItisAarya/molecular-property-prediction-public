@@ -1,49 +1,53 @@
 {
+  "fitted_on": "out-of-fold predictions over train",
   "choices": [
     {
       "kind": "temperature",
-      "T": 0.9236708571873865
+      "T": 0.4506570337745473
     },
     {
       "kind": "temperature",
-      "T": 0.9236708571873865
+      "T": 0.5484512327980183
     },
     {
-      "kind": "temperature",
-      "T": 0.9236708571873865
+      "kind": "logistic",
+      "a": 0.7964254845870863,
+      "b": -0.09983833463005451
+    },
+    {
+      "kind": "logistic",
+      "a": 0.5428513740064177,
+      "b": -0.029982751267562082
     },
     {
       "kind": "identity"
     },
     {
-      "kind": "temperature",
-      "T": 0.9698544000467558
-    },
-    {
-      "kind": "temperature",
-      "T": 0.9698544000467558
+      "kind": "identity"
     },
     {
       "kind": "identity"
     },
     {
-      "kind": "temperature",
-      "T": 0.9698544000467558
-    },
-    {
-      "kind": "temperature",
-      "T": 0.9698544000467558
-    },
-    {
-      "kind": "temperature",
-      "T": 0.9698544000467558
+      "kind": "logistic",
+      "a": 0.6475745559364569,
+      "b": -0.09359607469018918
     },
     {
       "kind": "identity"
     },
     {
-      "kind": "temperature",
-      "T": 0.9698544000467558
+      "kind": "identity"
+    },
+    {
+      "kind": "logistic",
+      "a": 0.6504247026944789,
+      "b": -0.1262195802477979
+    },
+    {
+      "kind": "logistic",
+      "a": 0.6904131182466056,
+      "b": -0.009457530820985703
     }
   ]
 }

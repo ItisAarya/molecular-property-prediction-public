@@ -1,18 +1,48 @@
-# src/eval/select_winners.py
-import os, json
+"""
+src/eval/select_winners.py
+
+Pick the best model per dataset and record everything needed to reproduce it.
+
+    python -m src.eval.select_winners
+
+Writes results/metrics/winners.json.
+
+WHAT CHANGED, AND WHY
+---------------------
+The inherited version selected on `test_auc` / `test_rmse`. That is model selection on the
+test set: with five candidates per dataset, picking the one that happens to score best on
+783 test molecules and then reporting that same score is a best-of-five maximum, not an
+estimate of generalisation. It is the single most serious methodological problem in the
+inherited pipeline, because it silently inflates every headline number.
+
+Selection now uses `val_*`. The validation split is no longer fitted on by anything -- the
+meta-learner, ensemble weights, calibrators and thresholds all moved to out-of-fold
+predictions over `train` -- so it is a clean surface for choosing between models, and the
+test score is only read after the choice is made.
+
+The recorded `selection_gap` (val minus test for the chosen model) is kept deliberately.
+It is the honest measure of how much optimism remains, and it separates the two causes we
+can now distinguish: a leak, which this phase removed, and genuine distribution shift,
+which it cannot.
+"""
+
+import json
+import os
+
 import numpy as np
 import pandas as pd
+
 from src.eval.metrics import is_classification
 
 MET = "results/metrics"
 DATA = "data"
-
-PRIMARY = {
-    "classification": ("test_auc", "max"),   # maximise AUC
-    "regression": ("test_rmse", "min"),      # minimise RMSE
-}
-
 MODELS = ["rf", "gnn", "trf", "hybrid", "ens"]
+
+# Selection metric and direction, per task type. Deliberately a *validation* column.
+PRIMARY = {
+    "classification": ("val_auc", "max"),
+    "regression": ("val_rmse", "min"),
+}
 
 
 def load_report():
@@ -22,37 +52,8 @@ def load_report():
     return pd.read_csv(path)
 
 
-def load_thresholds(dataset: str, model: str):
-    path = os.path.join(MET, f"{dataset}_{model}_thresholds.json")
+def load_json(path):
     return json.load(open(path)) if os.path.exists(path) else None
-
-
-def load_ens_weights(dataset: str):
-    path = os.path.join(MET, f"{dataset}_ens_weights.json")
-    return json.load(open(path)) if os.path.exists(path) else None
-
-
-def task_count(dataset: str) -> int:
-    yv_path = os.path.join(DATA, f"{dataset}_valid_ecfp.npz")
-    arr = np.load(yv_path)["y"]
-    return arr.shape[1] if arr.ndim == 2 else 1
-
-
-def fallback_thresholds(dataset: str):
-    """If no thresholds file exists, fall back to 0.5 per task."""
-    T = task_count(dataset)
-    return {"metric": "fallback_0.5", "thresholds": [0.5] * T}
-
-
-def best_row_by(df_ds: pd.DataFrame, metric: str, mode: str) -> pd.Series:
-    # ensure numeric and drop NaNs
-    df_ds = df_ds.copy()
-    df_ds[metric] = pd.to_numeric(df_ds[metric], errors="coerce")
-    df_ds = df_ds.dropna(subset=[metric])
-    if df_ds.empty:
-        raise ValueError(f"No rows with numeric metric '{metric}' to choose from.")
-    idx = df_ds[metric].idxmax() if mode == "max" else df_ds[metric].idxmin()
-    return df_ds.loc[idx]
 
 
 def main():
@@ -63,53 +64,55 @@ def main():
         task_type = "classification" if is_classification(ds) else "regression"
         metric, mode = PRIMARY[task_type]
 
-        df_ds = df[(df["dataset"] == ds) & (df["model"].isin(MODELS))]
-        if df_ds.empty:
-            continue
-        # some models may lack the chosen metric
-        df_ds = df_ds[~df_ds[metric].isna()]
-        if df_ds.empty:
+        sub = df[(df["dataset"] == ds) & (df["model"].isin(MODELS))].copy()
+        sub[metric] = pd.to_numeric(sub[metric], errors="coerce")
+        sub = sub.dropna(subset=[metric])
+        if sub.empty:
+            print(f"  {ds}: no candidate with a usable {metric}")
             continue
 
-        row = best_row_by(df_ds, metric, mode)
-        best_model = str(row["model"])
+        idx = sub[metric].idxmax() if mode == "max" else sub[metric].idxmin()
+        row = sub.loc[idx]
+        model = str(row["model"])
 
-        # collect test_* metrics into a dict
-        all_metrics = {}
-        for c in row.index:
-            if c.startswith("test_"):
-                try:
-                    all_metrics[c] = float(row[c])
-                except Exception:
-                    # keep as raw if not numeric
-                    all_metrics[c] = row[c]
+        test_metric = metric.replace("val_", "test_")
+        val_v, test_v = float(row[metric]), float(row.get(test_metric, np.nan))
 
         entry = {
             "dataset": ds,
-            "model": best_model,
-            "primary_metric": metric,
-            "primary_value": float(row[metric]),
-            "all_metrics": all_metrics,
+            "model": model,
+            "selected_on": metric,
+            "selection_value": val_v,
+            "test_value": test_v,
+            "selection_gap": val_v - test_v,
+            "test_metrics": {c: float(row[c]) for c in row.index
+                             if c.startswith("test_") and pd.notna(row[c])},
         }
 
-        # thresholds for classification models
         if task_type == "classification":
-            th = load_thresholds(ds, best_model)
-            entry["thresholds"] = th if th is not None else fallback_thresholds(ds)
-
-        # ensemble weights if applicable
-        if best_model == "ens":
-            w = load_ens_weights(ds)
-            if w is not None:
-                entry["ensemble"] = w
+            thr = load_json(os.path.join(MET, f"{ds}_{model}_thresholds.json"))
+            entry["thresholds"] = thr
+            entry["calibration"] = load_json(
+                os.path.join(MET, f"{ds}_{model}_calibration_methods.json")
+            )
+        if model == "ens":
+            entry["ensemble"] = load_json(os.path.join(MET, f"{ds}_ens_weights.json"))
 
         winners[ds] = entry
 
-    out_path = os.path.join(MET, "winners.json")
-    with open(out_path, "w") as f:
+        # Show the runner-up: if it is within noise of the winner, the choice is arbitrary
+        # and the paper should say so rather than implying a clear victory.
+        ordered = sub.sort_values(metric, ascending=(mode == "min"))
+        runner = ordered.iloc[1] if len(ordered) > 1 else None
+        margin = f", next best {runner['model']} at {runner[metric]:.4f}" if runner is not None else ""
+        print(f"  {ds:<15} -> {model:<7} {metric}={val_v:.4f}  "
+              f"{test_metric}={test_v:.4f}  gap={val_v - test_v:+.4f}{margin}")
+
+    out = os.path.join(MET, "winners.json")
+    with open(out, "w") as f:
         json.dump(winners, f, indent=2)
-    print("Saved winners →", out_path)
-    print(json.dumps(winners, indent=2))
+    print(f"\nWrote {out}")
+    print("Selected on validation; the test column was read only after the choice was made.")
 
 
 if __name__ == "__main__":

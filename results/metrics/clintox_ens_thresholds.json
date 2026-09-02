@@ -1,7 +1,9 @@
 {
   "thresholds": [
-    0.85,
-    0.15
+    0.95,
+    0.05
   ],
-  "metric": "f1"
+  "metric": "bal_acc",
+  "fitted_on": "out-of-fold predictions over train",
+  "defaulted_tasks": []
 }

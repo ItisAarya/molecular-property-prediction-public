@@ -1,51 +1,106 @@
 {
   "bbbp": {
     "dataset": "bbbp",
-    "model": "hybrid",
-    "primary_metric": "test_auc",
-    "primary_value": 0.7546969842952114,
-    "all_metrics": {
-      "test_auc": 0.7546969842952114,
-      "test_ap": 0.7770088526448875,
-      "test_acc": 0.6568627450980392,
-      "test_bal_acc": 0.6473648713748916,
-      "test_f1": 0.72,
-      "test_rmse": NaN,
-      "test_mae": NaN,
-      "test_r2": NaN
+    "model": "ens",
+    "selected_on": "val_auc",
+    "selection_value": 0.9924301242236024,
+    "test_value": 0.756334907023798,
+    "selection_gap": 0.23609521719980442,
+    "test_metrics": {
+      "test_auc": 0.756334907023798,
+      "test_ap": 0.7807946332073191,
+      "test_acc": 0.7058823529411765,
+      "test_bal_acc": 0.7061373928124097,
+      "test_f1": 0.7142857142857143,
+      "test_n_tasks_scored": 1.0
     },
     "thresholds": {
       "thresholds": [
-        0.49999999999999994
+        0.7
       ],
-      "metric": "bal_acc"
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.772645030315358
+        }
+      ]
+    },
+    "ensemble": {
+      "models": [
+        "hybrid",
+        "trf"
+      ],
+      "weights": [
+        0.5,
+        0.5
+      ],
+      "grid_step": 0.1,
+      "topk": 2,
+      "fitted_on": "out-of-fold predictions over train"
     }
   },
   "clintox": {
     "dataset": "clintox",
-    "model": "ens",
-    "primary_metric": "test_auc",
-    "primary_value": 0.9968399193688526,
-    "all_metrics": {
-      "test_auc": 0.9968399193688526,
-      "test_ap": 0.9952777006932572,
-      "test_acc": 0.9864864864864864,
-      "test_bal_acc": 0.9436120668682444,
-      "test_f1": 0.9464028776978416,
-      "test_rmse": NaN,
-      "test_mae": NaN,
-      "test_r2": NaN
+    "model": "hybrid",
+    "selected_on": "val_auc",
+    "selection_value": 0.9841602808339398,
+    "test_value": 0.9953159211761028,
+    "selection_gap": -0.011155640342162987,
+    "test_metrics": {
+      "test_auc": 0.9953159211761028,
+      "test_ap": 0.9882319879043888,
+      "test_acc": 0.9391891891891893,
+      "test_bal_acc": 0.967482535710562,
+      "test_f1": 0.8096655160099988,
+      "test_n_tasks_scored": 2.0
     },
     "thresholds": {
       "thresholds": [
-        0.85,
-        0.15
+        0.525,
+        0.39999999999999997
       ],
-      "metric": "f1"
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.5223345074266841
+        },
+        {
+          "kind": "temperature",
+          "T": 0.5751417404835405
+        }
+      ]
+    }
+  },
+  "esol": {
+    "dataset": "esol",
+    "model": "ens",
+    "selected_on": "val_rmse",
+    "selection_value": 1.138050946825924,
+    "test_value": 1.123841911605563,
+    "selection_gap": 0.014209035220360988,
+    "test_metrics": {
+      "test_rmse": 1.123841911605563,
+      "test_mae": 0.8937555693880382,
+      "test_r2": 0.7188819828393878,
+      "test_rmse_norm": 0.5437793715608671,
+      "test_mae_norm": 0.4324503623080992,
+      "test_n_scored": 113.0
     },
     "ensemble": {
       "models": [
-        "trf",
+        "gnn",
         "hybrid"
       ],
       "weights": [
@@ -53,84 +108,136 @@
         0.5
       ],
       "grid_step": 0.1,
-      "topk": 2
-    }
-  },
-  "esol": {
-    "dataset": "esol",
-    "model": "hybrid",
-    "primary_metric": "test_rmse",
-    "primary_value": 0.5133465668109368,
-    "all_metrics": {
-      "test_auc": NaN,
-      "test_ap": NaN,
-      "test_acc": NaN,
-      "test_bal_acc": NaN,
-      "test_f1": NaN,
-      "test_rmse": 0.5133465668109368,
-      "test_mae": 0.399803105688966,
-      "test_r2": 0.749467218572664
+      "topk": 2,
+      "fitted_on": "out-of-fold predictions over train"
     }
   },
   "lipophilicity": {
     "dataset": "lipophilicity",
-    "model": "hybrid",
-    "primary_metric": "test_rmse",
-    "primary_value": 0.6326270932794862,
-    "all_metrics": {
-      "test_auc": NaN,
-      "test_ap": NaN,
-      "test_acc": NaN,
-      "test_bal_acc": NaN,
-      "test_f1": NaN,
-      "test_rmse": 0.6326270932794862,
-      "test_mae": 0.4931443395850415,
-      "test_r2": 0.5184123931584282
+    "model": "ens",
+    "selected_on": "val_rmse",
+    "selection_value": 0.7450919890948203,
+    "test_value": 0.7499978415246835,
+    "selection_gap": -0.004905852429863189,
+    "test_metrics": {
+      "test_rmse": 0.7499978415246835,
+      "test_mae": 0.5676259774228481,
+      "test_r2": 0.5384522767491091,
+      "test_rmse_norm": 0.6193247667575876,
+      "test_mae_norm": 0.4687277837470728,
+      "test_n_scored": 420.0
+    },
+    "ensemble": {
+      "models": [
+        "hybrid",
+        "gnn"
+      ],
+      "weights": [
+        0.9,
+        0.1
+      ],
+      "grid_step": 0.1,
+      "topk": 2,
+      "fitted_on": "out-of-fold predictions over train"
     }
   },
   "tox21": {
     "dataset": "tox21",
     "model": "ens",
-    "primary_metric": "test_auc",
-    "primary_value": 0.7558223377853154,
-    "all_metrics": {
-      "test_auc": 0.7558223377853154,
-      "test_ap": 0.2744611964220723,
-      "test_acc": 0.8918688803746276,
-      "test_bal_acc": 0.6262595863591045,
-      "test_f1": 0.309125100841461,
-      "test_rmse": NaN,
-      "test_mae": NaN,
-      "test_r2": NaN
+    "selected_on": "val_auc",
+    "selection_value": 0.7715935410804479,
+    "test_value": 0.747541654778796,
+    "selection_gap": 0.024051886301651892,
+    "test_metrics": {
+      "test_auc": 0.747541654778796,
+      "test_ap": 0.3796485707043913,
+      "test_acc": 0.6223559090949161,
+      "test_bal_acc": 0.660447883405426,
+      "test_f1": 0.2629061638390518,
+      "test_n_tasks_scored": 12.0
     },
     "thresholds": {
       "thresholds": [
-        0.35,
-        0.25,
-        0.25,
-        0.25,
-        0.15,
+        0.75,
         0.5499999999999999,
-        0.1,
-        0.15,
-        0.15,
-        0.1,
-        0.25,
-        0.15
+        0.39999999999999997,
+        0.35,
+        0.525,
+        0.5499999999999999,
+        0.5499999999999999,
+        0.475,
+        0.39999999999999997,
+        0.42499999999999993,
+        0.525,
+        0.44999999999999996
       ],
-      "metric": "f1"
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.4506570337745473
+        },
+        {
+          "kind": "temperature",
+          "T": 0.6054123584037269
+        },
+        {
+          "kind": "temperature",
+          "T": 1.2030611647940326
+        },
+        {
+          "kind": "temperature",
+          "T": 1.7012542798525883
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "logistic",
+          "a": 0.7121790459399848,
+          "b": -0.08271299808361086
+        },
+        {
+          "kind": "logistic",
+          "a": 0.8054812504550942,
+          "b": 0.20163168710530915
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "temperature",
+          "T": 1.5411892310031725
+        },
+        {
+          "kind": "temperature",
+          "T": 1.5411892310031725
+        }
+      ]
     },
     "ensemble": {
       "models": [
         "hybrid",
-        "rf"
+        "gnn"
       ],
       "weights": [
-        0.7000000000000001,
-        0.30000000000000004
+        0.5,
+        0.5
       ],
       "grid_step": 0.1,
-      "topk": 2
+      "topk": 2,
+      "fitted_on": "out-of-fold predictions over train"
     }
   }
 }

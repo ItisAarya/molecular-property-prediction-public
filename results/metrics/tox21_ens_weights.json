@@ -1,12 +1,13 @@
 {
   "models": [
     "hybrid",
-    "rf"
+    "gnn"
   ],
   "weights": [
-    0.8,
-    0.2
+    0.5,
+    0.5
   ],
   "grid_step": 0.1,
-  "topk": 2
+  "topk": 2,
+  "fitted_on": "out-of-fold predictions over train"
 }
