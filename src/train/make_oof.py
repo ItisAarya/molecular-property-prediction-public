@@ -53,7 +53,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from torch_geometric.loader import DataLoader
 
-from src.data.splits import kfold_indices, load_y
+from src.data.splits import load_smiles, load_y, scaffold_kfold_indices
 from src.eval.metrics import is_classification
 from src.train.train_gnn import (
     GINNet,
@@ -251,7 +251,10 @@ def oof_gnn(ds, graphs, y, folds, cls, epochs=100, patience=15, bsz=128, lr=1e-3
 def run_dataset(ds, models):
     y = load_y(ds, "train")
     cls = is_classification(ds)
-    folds = kfold_indices(ds, y, n_folds=N_FOLDS)
+    # Scaffold-disjoint folds, not random ones: these are scaffold-split benchmarks, so
+    # random folds would make out-of-fold predictions easier than test predictions and
+    # the meta-learner would be fitted on an optimistic distribution.
+    folds = scaffold_kfold_indices(ds, load_smiles(ds, "train"), n_folds=N_FOLDS)
 
     print(f"\n=== {ds} ({'classification' if cls else 'regression'}, "
           f"{y.shape[0]} train molecules, {y.shape[1]} task(s), {N_FOLDS} folds) ===")

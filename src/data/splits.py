@@ -211,6 +211,82 @@ def load_y(dataset, split):
     return y.reshape(-1, 1) if y.ndim == 1 else y
 
 
+def load_smiles(dataset, split):
+    """Load the SMILES strings for a split."""
+    d = np.load(os.path.join(DATA_DIR, f"{dataset}_{split}_ecfp.npz"))
+    return [str(x) for x in d["smiles"]]
+
+
+def _murcko_scaffold(smiles):
+    """Bemis-Murcko scaffold as a canonical SMILES string; empty for unparseable input."""
+    from rdkit import Chem, RDLogger
+    from rdkit.Chem.Scaffolds import MurckoScaffold
+
+    RDLogger.DisableLog("rdApp.*")
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return ""
+    try:
+        return MurckoScaffold.MurckoScaffoldSmiles(mol=mol, includeChirality=False)
+    except Exception:
+        return ""
+
+
+def scaffold_kfold_indices(dataset, smiles, n_folds=5):
+    """
+    Scaffold-disjoint K-fold: molecules sharing a Bemis-Murcko scaffold always land in the
+    same fold. Returns a list of index arrays covering every row exactly once.
+
+    WHY THIS RATHER THAN RANDOM FOLDS
+    ---------------------------------
+    These benchmarks use a scaffold split, so `test` contains structurally different
+    molecules from `train` on purpose -- that is the point of the benchmark. With random
+    K-fold, a held-out molecule usually has close relatives in the folds the model trained
+    on, so out-of-fold predictions come out easier than test predictions.
+
+    Measured on ESOL: random-fold OOF RMSE was 1.15 logS against a test RMSE of 1.69 -- the
+    meta-learner would have been fitted on predictions that were far better than the ones
+    it meets at test time, and would trust them too much.
+
+    Keeping whole scaffold groups inside a fold reproduces the train/test relationship
+    inside the training set, so the meta level is fitted under the distribution shift it
+    actually faces.
+
+    Groups are assigned largest-first to whichever fold is currently smallest, which is the
+    standard greedy balance. Assignment is deterministic: no RNG, and ties are broken by
+    the lowest row index.
+    """
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    singletons = []
+    for i, smi in enumerate(smiles):
+        scaf = _murcko_scaffold(smi)
+        if scaf == "":
+            # An acyclic molecule has no ring system, so Murcko returns an empty string.
+            # Grouping all of those together would be wrong twice over: they share no
+            # scaffold, so there is nothing to leak, and on a dataset like ESOL they are
+            # numerous enough to swamp one fold (measured: 317 vs 110 rows). Treat each as
+            # its own group so they spread evenly.
+            singletons.append([i])
+        else:
+            groups[scaf].append(i)
+
+    # Largest groups first, so the big scaffolds are placed while folds are still empty
+    # enough to balance around them; singletons last, as filler that evens the sizes out.
+    ordered = sorted(groups.values(), key=lambda g: (-len(g), g[0])) + singletons
+
+    folds = [[] for _ in range(n_folds)]
+    for g in ordered:
+        smallest = min(range(n_folds), key=lambda k: (len(folds[k]), k))
+        folds[smallest].extend(g)
+
+    out = [np.sort(np.array(f, dtype=int)) for f in folds]
+    covered = np.sort(np.concatenate(out))
+    assert np.array_equal(covered, np.arange(len(smiles))), "folds must cover every row once"
+    return out
+
+
 def describe(dataset, fractions=DEFAULT_FRACTIONS, base_seed=0):
     """Human-readable summary, for logging and for the verification script."""
     y = load_valid_y(dataset)
