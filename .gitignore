@@ -44,3 +44,7 @@ CV__*.pdf
 # ---- Misc ----
 *.log
 wandb/
+
+# Pooled features + generated split indices (rebuilt by scripts/build_pool.py + make_splits.py)
+data/pool/
+data/splits/

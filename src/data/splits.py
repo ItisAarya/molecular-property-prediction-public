@@ -256,25 +256,7 @@ def scaffold_kfold_indices(dataset, smiles, n_folds=5):
     standard greedy balance. Assignment is deterministic: no RNG, and ties are broken by
     the lowest row index.
     """
-    from collections import defaultdict
-
-    groups = defaultdict(list)
-    singletons = []
-    for i, smi in enumerate(smiles):
-        scaf = _murcko_scaffold(smi)
-        if scaf == "":
-            # An acyclic molecule has no ring system, so Murcko returns an empty string.
-            # Grouping all of those together would be wrong twice over: they share no
-            # scaffold, so there is nothing to leak, and on a dataset like ESOL they are
-            # numerous enough to swamp one fold (measured: 317 vs 110 rows). Treat each as
-            # its own group so they spread evenly.
-            singletons.append([i])
-        else:
-            groups[scaf].append(i)
-
-    # Largest groups first, so the big scaffolds are placed while folds are still empty
-    # enough to balance around them; singletons last, as filler that evens the sizes out.
-    ordered = sorted(groups.values(), key=lambda g: (-len(g), g[0])) + singletons
+    ordered = scaffold_groups(smiles)
 
     folds = [[] for _ in range(n_folds)]
     for g in ordered:
@@ -284,6 +266,90 @@ def scaffold_kfold_indices(dataset, smiles, n_folds=5):
     out = [np.sort(np.array(f, dtype=int)) for f in folds]
     covered = np.sort(np.concatenate(out))
     assert np.array_equal(covered, np.arange(len(smiles))), "folds must cover every row once"
+    return out
+
+
+def scaffold_groups(smiles):
+    """
+    Group row indices by Bemis-Murcko scaffold, largest group first.
+
+    Molecules with no ring system return an empty Murcko scaffold. Grouping those together
+    would be wrong twice over: they share no scaffold, so there is nothing to leak between
+    them, and on a dataset like ESOL they are numerous enough to swamp a single fold
+    (measured: 317 rows against 110). Each is therefore its own group, and they sort last
+    so they act as filler that evens out the group sizes.
+    """
+    from collections import defaultdict
+
+    groups = defaultdict(list)
+    singletons = []
+    for i, smi in enumerate(smiles):
+        scaf = _murcko_scaffold(smi)
+        if scaf == "":
+            singletons.append([i])
+        else:
+            groups[scaf].append(i)
+
+    return sorted(groups.values(), key=lambda g: (-len(g), g[0])) + singletons
+
+
+def random_scaffold_split(dataset, smiles, seed, fracs=(0.8, 0.1, 0.1)):
+    """
+    A seeded scaffold split: molecules sharing a scaffold stay together, but which
+    scaffolds land in train / valid / test varies with `seed`.
+
+    Returns (train_idx, valid_idx, test_idx) as sorted arrays covering every row once.
+
+    WHY A SEEDED SPLIT AT ALL
+    -------------------------
+    DeepChem's ScaffoldSplitter is deterministic -- it sorts scaffold groups by size and
+    fills train from the largest -- so calling it repeatedly gives one split and one number
+    per model. There is then no way to tell a real improvement from the luck of a single
+    partition, which is exactly what the paper has to establish.
+
+    Reporting mean +/- CI over several seeded scaffold splits is the standard remedy, and
+    is what Chemprop and most MoleculeNet papers do.
+
+    THE BALANCING RULE
+    ------------------
+    Scaffold groups vary enormously in size: on Tox21 a single group holds more than a
+    fifth of the data. Assigning groups purely at random would sometimes drop such a group
+    into a 10% test split and make it almost entirely one scaffold. So any group larger
+    than half the validation or test quota is placed in train first, and only the remaining
+    smaller groups are shuffled and dealt out. This keeps the small splits chemically
+    diverse while leaving the assignment genuinely random.
+    """
+    if not np.isclose(sum(fracs), 1.0):
+        raise ValueError(f"fracs must sum to 1, got {fracs}")
+
+    n = len(smiles)
+    n_train, n_valid = int(fracs[0] * n), int(fracs[1] * n)
+    n_test = n - n_train - n_valid
+
+    rng = np.random.default_rng(_dataset_seed(dataset, seed))
+    groups = scaffold_groups(smiles)
+
+    big_cut = max(n_valid, n_test) / 2
+    big = [g for g in groups if len(g) > big_cut]
+    small = [g for g in groups if len(g) <= big_cut]
+    rng.shuffle(small)
+
+    buckets = {"train": [], "valid": [], "test": []}
+    quota = {"train": n_train, "valid": n_valid, "test": n_test}
+
+    for g in big:  # oversized groups always go to train
+        buckets["train"].extend(g)
+    for g in small:
+        # Fill train first, then valid, then test -- a group only moves on once the
+        # current bucket has reached its quota.
+        for name in ("train", "valid", "test"):
+            if len(buckets[name]) + len(g) <= quota[name] or name == "test":
+                buckets[name].extend(g)
+                break
+
+    out = tuple(np.sort(np.array(buckets[k], dtype=int)) for k in ("train", "valid", "test"))
+    covered = np.sort(np.concatenate(out))
+    assert np.array_equal(covered, np.arange(n)), "split must cover every row exactly once"
     return out
 
 
