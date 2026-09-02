@@ -1,37 +1,52 @@
 """
 src/train/train_transformer.py
 
-ChemBERTa baseline: a frozen pretrained SMILES language model with a small trainable
-MLP head on the CLS token.
+ChemBERTa baseline: a frozen pretrained SMILES encoder with a small trainable MLP head.
+
+    python -m src.train.train_transformer
 
 MISSING LABELS
 --------------
 Tox21 stores NaN for (molecule, assay) pairs that were never measured. Feeding NaN into
 `nn.BCEWithLogitsLoss` produces a NaN loss, and a single NaN gradient step turns every
-weight in the head into NaN -- the model is destroyed silently and simply predicts NaN
-from then on.
+weight in the head into NaN -- the model is destroyed silently and predicts NaN from then
+on. The loss is therefore computed per element, multiplied by a mask of "this label
+exists", and averaged over the measured entries only, mirroring train_gnn.py.
 
-So the loss is computed per element, multiplied by a mask of "this label exists", and
-averaged over the measured entries only. This mirrors what train_gnn.py already does.
+WHY THE ENCODER RUNS IN EVAL MODE
+---------------------------------
+The encoder is frozen, but `model.train()` sets the whole module tree to training mode --
+including the encoder's dropout. So the "frozen" encoder was emitting a *different* vector
+for the same molecule on every epoch. That is not a deliberate augmentation, it is an
+accident of how PyTorch propagates train mode, and it makes a frozen feature extractor
+non-deterministic for no benefit.
+
+The encoder is now pinned to eval mode. Two consequences:
+
+  * A molecule has one fixed embedding, so the embeddings cached by
+    scripts/cache_embeddings.py are exactly what a live forward pass would produce.
+  * Training reduces to fitting a two-layer MLP on precomputed vectors, which takes
+    seconds instead of the ~75 minutes a full re-encode costs. That is what makes
+    five-seed evaluation affordable at all: the naive version would be six hours of
+    recomputing identical vectors.
+
+Dropout in the *head* is unaffected and still active during training.
 
 NOTE ON BASELINE FIDELITY
 -------------------------
-This file is deliberately a *minimal* correction of the original baseline: the encoder
-stays frozen, batches are not shuffled, there is no early stopping and no class weighting.
-Those are real weaknesses, but fixing them is a modelling change, not a bug fix, and it
-belongs in Phase 1 -- keeping them here is what makes the "before vs after" comparison
-honest.
+Otherwise this stays a minimal correction of the inherited baseline: no shuffling, no
+early stopping, no class weighting, 5 epochs. Those are modelling changes and belong to
+Phase 1, and leaving them alone is what keeps the before/after comparison honest.
 """
 
-import os
 import json
+import os
 
 import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from transformers import AutoModel
 
 from src.eval.metrics import is_classification, cls_metrics, reg_metrics
 from src.utils.seed import set_seed
@@ -45,102 +60,102 @@ for d in (MODELS_DIR, PRED_DIR, MET_DIR):
     os.makedirs(d, exist_ok=True)
 
 MODEL_NAME = "seyonec/ChemBERTa-zinc-base-v1"
+POOLING = "cls"  # matches the inherited baseline; "mean" is available in the cache
 
 
-def load_tok(ds, split):
+# --------------------------------------------------------------------------------------
+# Features
+# --------------------------------------------------------------------------------------
+def load_labels(ds, split):
     obj = torch.load(os.path.join(DATA_DIR, f"{ds}_{split}_tok.pt"), weights_only=False)
     y = obj["y"].float()
-    if y.ndim == 1:
-        y = y.unsqueeze(1)
-    return obj["input_ids"], obj["attention_mask"], y, obj["tasks"]
+    return y.unsqueeze(1) if y.ndim == 1 else y
+
+
+def load_embeddings(ds, split, pooling=POOLING):
+    """
+    Frozen-encoder embeddings, from cache when available.
+
+    The cache is not an approximation: with the encoder pinned to eval mode the cached
+    vector is bit-for-bit what a live forward pass returns. If it is missing we encode on
+    the spot rather than failing, so the script still works standalone.
+    """
+    path = os.path.join(DATA_DIR, f"{ds}_{split}_chemberta.npz")
+    if os.path.exists(path):
+        return torch.from_numpy(np.load(path)[pooling].astype(np.float32))
+
+    print(f"  [cache miss] encoding {ds}/{split} live -- run scripts.cache_embeddings to avoid this")
+    from transformers import AutoModel
+
+    obj = torch.load(os.path.join(DATA_DIR, f"{ds}_{split}_tok.pt"), weights_only=False)
+    base = AutoModel.from_pretrained(MODEL_NAME).eval()
+    outs = []
+    with torch.no_grad():
+        for i in range(0, obj["input_ids"].size(0), 64):
+            h = base(input_ids=obj["input_ids"][i:i + 64],
+                     attention_mask=obj["attention_mask"][i:i + 64]).last_hidden_state
+            outs.append(h[:, 0, :] if pooling == "cls" else h.mean(dim=1))
+    return torch.cat(outs)
 
 
 # --------------------------------------------------------------------------------------
 # Masked losses
 # --------------------------------------------------------------------------------------
 def masked_bce_with_logits(logits, y):
-    """Binary cross-entropy that ignores entries where the label is NaN (never measured)."""
+    """Binary cross-entropy ignoring entries whose label is NaN (never measured)."""
     mask = ~torch.isnan(y)
-    # Replace NaN with a dummy value so the elementwise op is well defined; the mask
-    # removes its contribution immediately afterwards.
-    y_filled = torch.nan_to_num(y, nan=0.0)
-    loss = F.binary_cross_entropy_with_logits(logits, y_filled, reduction="none")
-    loss = loss * mask
-    return loss.sum() / mask.sum().clamp(min=1)
+    loss = F.binary_cross_entropy_with_logits(
+        logits, torch.nan_to_num(y, nan=0.0), reduction="none"
+    )
+    return (loss * mask).sum() / mask.sum().clamp(min=1)
 
 
 def masked_mse(preds, y):
-    """Mean squared error that ignores entries where the target is NaN."""
+    """Mean squared error ignoring entries whose target is NaN."""
     mask = ~torch.isnan(y)
-    y_filled = torch.nan_to_num(y, nan=0.0)
-    loss = F.mse_loss(preds, y_filled, reduction="none")
-    loss = loss * mask
-    return loss.sum() / mask.sum().clamp(min=1)
+    loss = F.mse_loss(preds, torch.nan_to_num(y, nan=0.0), reduction="none")
+    return (loss * mask).sum() / mask.sum().clamp(min=1)
 
 
 # --------------------------------------------------------------------------------------
-# Model
+# Head
 # --------------------------------------------------------------------------------------
 class TrfHead(nn.Module):
-    def __init__(self, base, out_dim):
+    """Same architecture as the inherited head, fed embeddings rather than token ids."""
+
+    def __init__(self, d_in, d_out):
         super().__init__()
-        self.base = base
-        for p in self.base.parameters():
-            p.requires_grad = False  # frozen encoder (Phase 1 will add LoRA fine-tuning)
-        hid = base.config.hidden_size
         self.head = nn.Sequential(
-            nn.Linear(hid, hid), nn.ReLU(), nn.Dropout(0.1),
-            nn.Linear(hid, out_dim),
+            nn.Linear(d_in, d_in), nn.ReLU(), nn.Dropout(0.1),
+            nn.Linear(d_in, d_out),
         )
 
-    def forward(self, input_ids, attention_mask):
-        out = self.base(input_ids=input_ids, attention_mask=attention_mask).last_hidden_state
-        pooled = out[:, 0, :]  # CLS token
-        return self.head(pooled)
+    def forward(self, x):
+        return self.head(x)
 
 
-def batch_loader(ids, masks, ys=None, bsz=16):
-    """Yield (ids, masks, ys) for training, or (ids, masks) for inference."""
-    n = ids.size(0)
-    for i in range(0, n, bsz):
-        if ys is None:
-            yield ids[i:i + bsz], masks[i:i + bsz]
-        else:
-            yield ids[i:i + bsz], masks[i:i + bsz], ys[i:i + bsz]
-
-
-# --------------------------------------------------------------------------------------
-# Train / predict
-# --------------------------------------------------------------------------------------
-def run_ds(ds, epochs=5, batch_size=16, lr=1e-3, device="cpu"):
-    # Seed per dataset so a single-dataset run reproduces the all-dataset run.
+def run_ds(ds, epochs=5, batch_size=16, lr=1e-3):
     seed = set_seed()
-
-    ids_tr, att_tr, ytr, tasks = load_tok(ds, "train")
-    ids_va, att_va, yva, _ = load_tok(ds, "valid")
-    ids_te, att_te, yte, _ = load_tok(ds, "test")
-
-    n_tasks = ytr.shape[1]
     cls = is_classification(ds)
 
-    n_missing = int(torch.isnan(ytr).sum())
-    print(f"\n=== {ds} (TRF) ===")
-    print(
-        f"  {len(ids_tr)} molecules, {n_tasks} task(s), "
-        f"{n_missing} unmeasured labels excluded from the loss"
-    )
+    X = {s: load_embeddings(ds, s) for s in ("train", "valid", "test")}
+    Y = {s: load_labels(ds, s) for s in ("train", "valid", "test")}
+    n_tasks = Y["train"].shape[1]
 
-    base = AutoModel.from_pretrained(MODEL_NAME)
-    model = TrfHead(base, out_dim=n_tasks).to(device)
+    print(f"\n=== {ds} (TRF) [seed={seed}] ===")
+    print(f"  {len(X['train'])} molecules, {n_tasks} task(s), "
+          f"{int(torch.isnan(Y['train']).sum())} unmeasured labels excluded from the loss")
+
+    model = TrfHead(X["train"].shape[1], n_tasks)
     opt = torch.optim.AdamW(model.parameters(), lr=lr)
 
     for ep in range(1, epochs + 1):
         model.train()
         total = 0.0
-        for ids_b, att_b, y_b in batch_loader(ids_tr, att_tr, ytr, batch_size):
-            ids_b, att_b, y_b = ids_b.to(device), att_b.to(device), y_b.to(device)
-            logits = model(ids_b, att_b)
-            loss = masked_bce_with_logits(logits, y_b) if cls else masked_mse(logits, y_b)
+        for i in range(0, len(X["train"]), batch_size):
+            logits = model(X["train"][i:i + batch_size])
+            target = Y["train"][i:i + batch_size]
+            loss = masked_bce_with_logits(logits, target) if cls else masked_mse(logits, target)
             opt.zero_grad()
             loss.backward()
             opt.step()
@@ -150,34 +165,25 @@ def run_ds(ds, epochs=5, batch_size=16, lr=1e-3, device="cpu"):
     torch.save(model.state_dict(), os.path.join(MODELS_DIR, f"{ds}_trf.pt"))
 
     @torch.no_grad()
-    def predict(ids, att):
+    def predict(split):
         model.eval()
-        outs = []
-        for x, m in batch_loader(ids, att, None, batch_size):
-            outs.append(model(x.to(device), m.to(device)).cpu().numpy())
-        out = np.vstack(outs)
+        out = model(X[split]).numpy()
         return 1.0 / (1.0 + np.exp(-out)) if cls else out
 
-    p_va = predict(ids_va, att_va)
-    p_te = predict(ids_te, att_te)
+    preds = {s: predict(s) for s in ("valid", "test")}
+    for s, p in preds.items():
+        np.save(os.path.join(PRED_DIR, f"{ds}_trf_{s}.npy"), p)
 
-    np.save(os.path.join(PRED_DIR, f"{ds}_trf_valid.npy"), p_va)
-    np.save(os.path.join(PRED_DIR, f"{ds}_trf_test.npy"), p_te)
-
-    yva_np, yte_np = yva.numpy(), yte.numpy()
-    met_va = cls_metrics(yva_np, p_va) if cls else reg_metrics(yva_np, p_va, ds)
-    met_te = cls_metrics(yte_np, p_te) if cls else reg_metrics(yte_np, p_te, ds)
-
-    pd.DataFrame([met_va]).to_csv(os.path.join(MET_DIR, f"{ds}_trf_valid.csv"), index=False)
-    pd.DataFrame([met_te]).to_csv(os.path.join(MET_DIR, f"{ds}_trf_test.csv"), index=False)
-
-    print(f"  VALID: {met_va}")
-    print(f"  TEST:  {met_te}")
+    score = cls_metrics if cls else (lambda a, b: reg_metrics(a, b, ds))
+    for s in ("valid", "test"):
+        m = score(Y[s].numpy(), preds[s])
+        pd.DataFrame([m]).to_csv(os.path.join(MET_DIR, f"{ds}_trf_{s}.csv"), index=False)
+        print(f"  {s.upper():<6}: {m}")
 
 
 def main():
     meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
-    for ds in meta.keys():
+    for ds in meta:
         run_ds(ds)
 
 
