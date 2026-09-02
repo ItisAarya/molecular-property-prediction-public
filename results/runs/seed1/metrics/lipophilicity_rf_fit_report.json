@@ -1,0 +1,10 @@
+{
+  "dataset": "lipophilicity",
+  "tasks": [
+    {
+      "task": 0,
+      "fitted": true,
+      "n_labelled": 3360
+    }
+  ]
+}

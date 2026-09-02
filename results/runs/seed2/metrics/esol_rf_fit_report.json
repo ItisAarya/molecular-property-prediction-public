@@ -1,0 +1,10 @@
+{
+  "dataset": "esol",
+  "tasks": [
+    {
+      "task": 0,
+      "fitted": true,
+      "n_labelled": 902
+    }
+  ]
+}

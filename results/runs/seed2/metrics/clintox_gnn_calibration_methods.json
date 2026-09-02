@@ -1,0 +1,13 @@
+{
+  "fitted_on": "out-of-fold predictions over train",
+  "choices": [
+    {
+      "kind": "temperature",
+      "T": 0.4082562939323492
+    },
+    {
+      "kind": "temperature",
+      "T": 0.6666186372368634
+    }
+  ]
+}

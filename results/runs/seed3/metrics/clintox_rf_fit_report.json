@@ -1,0 +1,19 @@
+{
+  "dataset": "clintox",
+  "tasks": [
+    {
+      "task": 0,
+      "fitted": true,
+      "n_labelled": 1184,
+      "n_positive": 1117,
+      "n_dropped_unmeasured": 0
+    },
+    {
+      "task": 1,
+      "fitted": true,
+      "n_labelled": 1184,
+      "n_positive": 83,
+      "n_dropped_unmeasured": 0
+    }
+  ]
+}

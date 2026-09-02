@@ -1,0 +1,188 @@
+{
+  "bbbp": {
+    "dataset": "bbbp",
+    "model": "rf",
+    "selected_on": "val_auc",
+    "selection_value": 0.892413487133984,
+    "test_value": 0.8687619047619047,
+    "selection_gap": 0.023651582372079316,
+    "test_metrics": {
+      "test_auc": 0.8687619047619047,
+      "test_ap": 0.9510896001386848,
+      "test_acc": 0.926829268292683,
+      "test_bal_acc": 0.8052380952380952,
+      "test_f1": 0.957983193277311,
+      "test_n_tasks_scored": 1.0
+    },
+    "thresholds": {
+      "thresholds": [
+        0.725
+      ],
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.8539760861380274
+        }
+      ]
+    }
+  },
+  "clintox": {
+    "dataset": "clintox",
+    "model": "hybrid",
+    "selected_on": "val_auc",
+    "selection_value": 0.9585557839168648,
+    "test_value": 0.9807971014492752,
+    "selection_gap": -0.022241317532410432,
+    "test_metrics": {
+      "test_auc": 0.9807971014492752,
+      "test_ap": 0.9627661922415688,
+      "test_acc": 0.847972972972973,
+      "test_bal_acc": 0.8721014492753624,
+      "test_f1": 0.6765434451219512,
+      "test_n_tasks_scored": 2.0
+    },
+    "thresholds": {
+      "thresholds": [
+        0.7,
+        0.35
+      ],
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.6054123584037269
+        },
+        {
+          "kind": "temperature",
+          "T": 0.6054123584037269
+        }
+      ]
+    }
+  },
+  "esol": {
+    "dataset": "esol",
+    "model": "gnn",
+    "selected_on": "val_rmse",
+    "selection_value": 1.5834829430962307,
+    "test_value": 1.1047677274462144,
+    "selection_gap": 0.4787152156500163,
+    "test_metrics": {
+      "test_rmse": 1.1047677274462144,
+      "test_mae": 0.8220786503932339,
+      "test_r2": 0.7574795805652206,
+      "test_rmse_norm": 0.5345501839250468,
+      "test_mae_norm": 0.3977689453188264,
+      "test_n_scored": 114.0
+    }
+  },
+  "lipophilicity": {
+    "dataset": "lipophilicity",
+    "model": "hybrid",
+    "selected_on": "val_rmse",
+    "selection_value": 0.6839461821162781,
+    "test_value": 0.694265609682075,
+    "selection_gap": -0.010319427565796846,
+    "test_metrics": {
+      "test_rmse": 0.694265609682075,
+      "test_mae": 0.5197664808028274,
+      "test_r2": 0.7004076762681632,
+      "test_rmse_norm": 0.5733028323255707,
+      "test_mae_norm": 0.4292069078988528,
+      "test_n_scored": 420.0
+    }
+  },
+  "tox21": {
+    "dataset": "tox21",
+    "model": "hybrid",
+    "selected_on": "val_auc",
+    "selection_value": 0.7920395123101213,
+    "test_value": 0.8224596959696888,
+    "selection_gap": -0.030420183659567557,
+    "test_metrics": {
+      "test_auc": 0.8224596959696888,
+      "test_ap": 0.3846255763990143,
+      "test_acc": 0.8458173937260375,
+      "test_bal_acc": 0.7288851474924377,
+      "test_f1": 0.3237982019481887,
+      "test_n_tasks_scored": 12.0
+    },
+    "thresholds": {
+      "thresholds": [
+        0.7999999999999999,
+        0.575,
+        0.42499999999999993,
+        0.44999999999999996,
+        0.5499999999999999,
+        0.575,
+        0.575,
+        0.525,
+        0.39999999999999997,
+        0.49999999999999994,
+        0.525,
+        0.42499999999999993
+      ],
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.5223345074266841
+        },
+        {
+          "kind": "temperature",
+          "T": 0.5751417404835405
+        },
+        {
+          "kind": "temperature",
+          "T": 1.0926008611173779
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "temperature",
+          "T": 0.9426684551178849
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "temperature",
+          "T": 1.0379708180615088
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "logistic",
+          "a": 0.7969244046706061,
+          "b": -0.17200178902997085
+        },
+        {
+          "kind": "identity"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "dataset": "tox21",
+  "tasks": [
+    {
+      "task": 0,
+      "fitted": true,
+      "n_labelled": 5820,
+      "n_positive": 250,
+      "n_dropped_unmeasured": 438
+    },
+    {
+      "task": 1,
+      "fitted": true,
+      "n_labelled": 5500,
+      "n_positive": 193,
+      "n_dropped_unmeasured": 758
+    },
+    {
+      "task": 2,
+      "fitted": true,
+      "n_labelled": 5294,
+      "n_positive": 589,
+      "n_dropped_unmeasured": 964
+    },
+    {
+      "task": 3,
+      "fitted": true,
+      "n_labelled": 4783,
+      "n_positive": 208,
+      "n_dropped_unmeasured": 1475
+    },
+    {
+      "task": 4,
+      "fitted": true,
+      "n_labelled": 5078,
+      "n_positive": 646,
+      "n_dropped_unmeasured": 1180
+    },
+    {
+      "task": 5,
+      "fitted": true,
+      "n_labelled": 5631,
+      "n_positive": 299,
+      "n_dropped_unmeasured": 627
+    },
+    {
+      "task": 6,
+      "fitted": true,
+      "n_labelled": 5292,
+      "n_positive": 132,
+      "n_dropped_unmeasured": 966
+    },
+    {
+      "task": 7,
+      "fitted": true,
+      "n_labelled": 4871,
+      "n_positive": 718,
+      "n_dropped_unmeasured": 1387
+    },
+    {
+      "task": 8,
+      "fitted": true,
+      "n_labelled": 5729,
+      "n_positive": 196,
+      "n_dropped_unmeasured": 529
+    },
+    {
+      "task": 9,
+      "fitted": true,
+      "n_labelled": 5314,
+      "n_positive": 281,
+      "n_dropped_unmeasured": 944
+    },
+    {
+      "task": 10,
+      "fitted": true,
+      "n_labelled": 4776,
+      "n_positive": 711,
+      "n_dropped_unmeasured": 1482
+    },
+    {
+      "task": 11,
+      "fitted": true,
+      "n_labelled": 5489,
+      "n_positive": 276,
+      "n_dropped_unmeasured": 769
+    }
+  ]
+}

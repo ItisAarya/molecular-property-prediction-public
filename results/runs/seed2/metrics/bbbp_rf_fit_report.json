@@ -1,0 +1,12 @@
+{
+  "dataset": "bbbp",
+  "tasks": [
+    {
+      "task": 0,
+      "fitted": true,
+      "n_labelled": 1631,
+      "n_positive": 1241,
+      "n_dropped_unmeasured": 0
+    }
+  ]
+}

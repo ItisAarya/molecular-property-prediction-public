@@ -1,0 +1,217 @@
+{
+  "bbbp": {
+    "dataset": "bbbp",
+    "model": "hybrid",
+    "selected_on": "val_auc",
+    "selection_value": 0.924406604747162,
+    "test_value": 0.9375984872360542,
+    "selection_gap": -0.013191882488892248,
+    "test_metrics": {
+      "test_auc": 0.9375984872360542,
+      "test_ap": 0.9841790226467938,
+      "test_acc": 0.824390243902439,
+      "test_bal_acc": 0.8413961550583045,
+      "test_f1": 0.8831168831168831,
+      "test_n_tasks_scored": 1.0
+    },
+    "thresholds": {
+      "thresholds": [
+        0.6
+      ],
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.8955350323619906
+        }
+      ]
+    }
+  },
+  "clintox": {
+    "dataset": "clintox",
+    "model": "trf",
+    "selected_on": "val_auc",
+    "selection_value": 0.9481652269116604,
+    "test_value": 1.0,
+    "selection_gap": -0.051834773088339614,
+    "test_metrics": {
+      "test_auc": 1.0,
+      "test_ap": 1.0,
+      "test_acc": 0.9695945945945944,
+      "test_bal_acc": 0.984375,
+      "test_f1": 0.7804511278195488,
+      "test_n_tasks_scored": 2.0
+    },
+    "thresholds": {
+      "thresholds": [
+        0.95,
+        0.05
+      ],
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 1.8732485286870098
+        },
+        {
+          "kind": "temperature",
+          "T": 1.971840556512642
+        }
+      ]
+    }
+  },
+  "esol": {
+    "dataset": "esol",
+    "model": "hybrid",
+    "selected_on": "val_rmse",
+    "selection_value": 1.003952922113989,
+    "test_value": 0.873757545241863,
+    "selection_gap": 0.1301953768721259,
+    "test_metrics": {
+      "test_rmse": 0.873757545241863,
+      "test_mae": 0.6485164082679559,
+      "test_r2": 0.8575828840671464,
+      "test_rmse_norm": 0.4227741677380546,
+      "test_mae_norm": 0.3137895475272416,
+      "test_n_scored": 114.0
+    }
+  },
+  "lipophilicity": {
+    "dataset": "lipophilicity",
+    "model": "ens",
+    "selected_on": "val_rmse",
+    "selection_value": 0.8141633578870775,
+    "test_value": 0.9175396655994876,
+    "selection_gap": -0.10337630771241013,
+    "test_metrics": {
+      "test_rmse": 0.9175396655994876,
+      "test_mae": 0.7021739308400824,
+      "test_r2": 0.5515568821010859,
+      "test_rmse_norm": 0.7576755664163277,
+      "test_mae_norm": 0.579833276662144,
+      "test_n_scored": 420.0
+    },
+    "ensemble": {
+      "models": [
+        "hybrid",
+        "gnn"
+      ],
+      "weights": [
+        0.9,
+        0.1
+      ],
+      "grid_step": 0.1,
+      "topk": 2,
+      "fitted_on": "out-of-fold predictions over train"
+    }
+  },
+  "tox21": {
+    "dataset": "tox21",
+    "model": "ens",
+    "selected_on": "val_auc",
+    "selection_value": 0.8314247228921717,
+    "test_value": 0.7998580851584016,
+    "selection_gap": 0.03156663773377011,
+    "test_metrics": {
+      "test_auc": 0.7998580851584016,
+      "test_ap": 0.3435838912686657,
+      "test_acc": 0.7863317923333767,
+      "test_bal_acc": 0.7256233421638146,
+      "test_f1": 0.3117817364719071,
+      "test_n_tasks_scored": 12.0
+    },
+    "thresholds": {
+      "thresholds": [
+        0.725,
+        0.525,
+        0.49999999999999994,
+        0.42499999999999993,
+        0.5499999999999999,
+        0.49999999999999994,
+        0.525,
+        0.49999999999999994,
+        0.39999999999999997,
+        0.475,
+        0.575,
+        0.49999999999999994
+      ],
+      "metric": "bal_acc",
+      "fitted_on": "out-of-fold predictions over train",
+      "defaulted_tasks": []
+    },
+    "calibration": {
+      "fitted_on": "out-of-fold predictions over train",
+      "choices": [
+        {
+          "kind": "temperature",
+          "T": 0.4506570337745473
+        },
+        {
+          "kind": "temperature",
+          "T": 0.6054123584037269
+        },
+        {
+          "kind": "temperature",
+          "T": 1.2030611647940326
+        },
+        {
+          "kind": "temperature",
+          "T": 1.7012542798525883
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "logistic",
+          "a": 0.7121790459399848,
+          "b": -0.08271299808361086
+        },
+        {
+          "kind": "logistic",
+          "a": 0.8054812504550942,
+          "b": 0.20163168710530915
+        },
+        {
+          "kind": "identity"
+        },
+        {
+          "kind": "temperature",
+          "T": 1.5411892310031725
+        },
+        {
+          "kind": "temperature",
+          "T": 1.5411892310031725
+        }
+      ]
+    },
+    "ensemble": {
+      "models": [
+        "gnn",
+        "hybrid"
+      ],
+      "weights": [
+        0.5,
+        0.5
+      ],
+      "grid_step": 0.1,
+      "topk": 2,
+      "fitted_on": "out-of-fold predictions over train"
+    }
+  }
+}

@@ -1,0 +1,53 @@
+{
+  "fitted_on": "out-of-fold predictions over train",
+  "choices": [
+    {
+      "kind": "identity"
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9898018778737792
+    },
+    {
+      "kind": "temperature",
+      "T": 0.8133105582266927
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9426684551178849
+    },
+    {
+      "kind": "logistic",
+      "a": 0.42551365714238193,
+      "b": 0.7427063859787536
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9898018778737792
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9426684551178849
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9426684551178849
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9426684551178849
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9426684551178849
+    },
+    {
+      "kind": "temperature",
+      "T": 0.9898018778737792
+    },
+    {
+      "kind": "temperature",
+      "T": 0.8955350323619906
+    }
+  ]
+}

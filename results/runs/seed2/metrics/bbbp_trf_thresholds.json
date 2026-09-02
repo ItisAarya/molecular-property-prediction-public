@@ -1,0 +1,8 @@
+{
+  "thresholds": [
+    0.7
+  ],
+  "metric": "bal_acc",
+  "fitted_on": "out-of-fold predictions over train",
+  "defaulted_tasks": []
+}
