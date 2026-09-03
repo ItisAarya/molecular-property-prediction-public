@@ -38,13 +38,16 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader as TensorLoader, Dataset as TorchDataset, TensorDataset
-from torch_geometric.loader import DataLoader as GraphLoader
 
 from src.data.bucketing import LengthBucketSampler, make_token_collate
 from src.eval.metrics import cls_metrics, is_classification, reg_metrics
 from src.models.encoders.descriptor import DescriptorEncoder
-from src.models.encoders.graph import build_graph_encoder
 from src.models.encoders.sequence import SequenceEncoder
+
+# torch_geometric is imported inside the graph branch of `build_view`, not here. It is a
+# heavy dependency that only the graph views need, and requiring it at import time would
+# stop the sequence and descriptor views running anywhere it is not installed -- which is
+# exactly the case on a stock Colab runtime.
 from src.models.heads import (
     SingleViewModel, masked_bce, masked_mse, pos_weight_from_labels,
 )
@@ -155,6 +158,25 @@ def split_batch(batch):
     return tuple(inputs), y, idx
 
 
+def checkpoint_state(model):
+    """
+    The part of the model worth writing to disk: what training changed, plus fitted
+    buffers (BatchNorm statistics, the descriptor scaler's constants).
+
+    A LoRA run carries 44M frozen pretrained parameters that are byte-identical in every
+    checkpoint. Saving the full state dict costs ~180 MB per fit and there are 96 fits in
+    the full protocol -- roughly 17 GB of writes to store the same pretrained encoder
+    ninety-six times. The encoder is reproducible from its name, so only the adapter, the
+    head and the buffers need keeping.
+
+    For the graph and descriptor views every parameter is trainable, so this saves exactly
+    what it saved before.
+    """
+    keep = {n for n, p in model.named_parameters() if p.requires_grad}
+    keep |= {n for n, _ in model.named_buffers()}
+    return {k: v for k, v in model.state_dict().items() if k in keep}
+
+
 def _drop_last(n, batch_size):
     """
     Whether the training loader should discard a trailing batch of one.
@@ -175,6 +197,10 @@ def build_view(encoder_name, ds, batch_size, enc_kwargs, seed=0):
     the property that makes the single-view baselines comparable to each other.
     """
     if encoder_name in GRAPH_ENCODERS:
+        from torch_geometric.loader import DataLoader as GraphLoader
+
+        from src.models.encoders.graph import build_graph_encoder
+
         graphs = {s: load_graphs(ds, s) for s in SPLITS}
         y = {s: labels_of(graphs[s]) for s in SPLITS}
         loaders = {
@@ -328,7 +354,7 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
 
     if best_state is not None:
         model.load_state_dict(best_state)
-    torch.save(model.state_dict(), os.path.join(MODELS_DIR, f"{ds}_{tag}.pt"))
+    torch.save(checkpoint_state(model), os.path.join(MODELS_DIR, f"{ds}_{tag}.pt"))
 
     results = {}
     for split in ("valid", "test"):

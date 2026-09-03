@@ -78,10 +78,20 @@ def run_tag(tag, log, extra_args=()):
          "--encoder", ENCODER_OF[tag], "--tag", tag, *extra_args],
         capture_output=True, text=True, errors="replace",
     )
-    for line in (proc.stdout + proc.stderr).splitlines():
+    output = proc.stdout + proc.stderr
+    for line in output.splitlines():
         if line.strip() and not any(n in line for n in NOISE):
-            log.write(line + "\n")
+            log.write(line + chr(10))
     log.flush()
+
+    if proc.returncode != 0:
+        # A failure used to go only to the log file, so the console showed "FAILED" with
+        # no reason -- and on a remote runtime the log is the awkward thing to reach.
+        # Print the tail of what actually happened.
+        print(f"    --- {tag} failed, last 20 lines ---")
+        for line in output.strip().splitlines()[-20:]:
+            print(f"    | {line}")
+        print("    --- end ---")
     return proc.returncode == 0
 
 
@@ -116,6 +126,9 @@ def main():
                          "changes the protocol, so keep it equal across compared tags.")
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=None)
+    ap.add_argument("--datasets", nargs="+", default=None,
+                    help="restrict to these datasets (default: all). Mainly for smoke "
+                         "testing a new encoder before committing to the full run.")
     ap.add_argument("--artifacts", nargs="+", default=None,
                     help="which views to materialise (default: all). A sequence-only run "
                          "needs just `tok ecfp`, which is what a Colab bundle carries.")
@@ -129,14 +142,19 @@ def main():
             raise SystemExit(f"unknown tag {t}; known: {list(ENCODER_OF)}")
 
     log_dir = os.path.join(RESULTS, "logs")
-    os.makedirs(log_dir, exist_ok=True)
+    # The trainer creates these when it runs, but archive() reads results/metrics even if
+    # every tag failed before getting that far -- which turned one failure into two.
+    for d in (log_dir, MET_DIR, RUNS_DIR):
+        os.makedirs(d, exist_ok=True)
     started = time.time()
     failed = []
-    all_datasets = datasets_on_disk()
+    all_datasets = args.datasets or datasets_on_disk()
 
     # Options handed straight to the trainer. Held identical across tags so the
     # comparison isolates the encoder rather than the training budget.
     passthrough = ["--device", args.device]
+    if args.datasets:
+        passthrough += ["--datasets", *args.datasets]
     for flag, value in (("--epochs", args.epochs), ("--patience", args.patience),
                         ("--batch-size", args.batch_size)):
         if value is not None:
