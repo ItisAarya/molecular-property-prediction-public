@@ -37,10 +37,15 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sps
 
+from src.eval.metrics import is_classification
+
 RESULTS = "results"
 RUNS_DIR = os.path.join(RESULTS, "runs")
-CLASSIFICATION = {"tox21", "bbbp", "clintox"}
 T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447, 8: 2.365}
+
+
+def _is_cls(ds):
+    return is_classification(ds)
 
 
 def seeded_variants():
@@ -55,7 +60,7 @@ def load_tag(variant, ds, tag):
     if not os.path.exists(path):
         return None
     row = pd.read_csv(path).iloc[0]
-    key = "auc" if ds in CLASSIFICATION else "rmse"
+    key = "auc" if _is_cls(ds) else "rmse"
     return float(row[key])
 
 
@@ -87,7 +92,7 @@ def main():
 
     rows = []
     for ds in args.datasets:
-        cls = ds in CLASSIFICATION
+        cls = _is_cls(ds)
         key, higher = ("AUC", True) if cls else ("RMSE", False)
 
         pairs = [(load_tag(v, ds, args.a), load_tag(v, ds, args.b)) for v in variants]

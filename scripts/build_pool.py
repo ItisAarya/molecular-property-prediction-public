@@ -44,6 +44,9 @@ import os
 import numpy as np
 import pandas as pd
 import torch
+import argparse
+
+from scripts.dataset_select import add_datasets_arg, resolve
 
 DATA_DIR = "data"
 POOL_DIR = os.path.join(DATA_DIR, "pool")
@@ -115,11 +118,24 @@ def build_tokens(ds, tokenizer, smiles, y):
 def main():
     from transformers import AutoTokenizer
 
-    meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    index = {}
+    ap = argparse.ArgumentParser(
+        description="Concatenate the per-split artifacts into one pool per dataset."
+    )
+    add_datasets_arg(ap)
+    args = ap.parse_args()
 
-    for ds in meta:
+    meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
+    selected = resolve(args.datasets, meta)
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+    # Pooling a subset must keep the entries for the datasets we are not rebuilding:
+    # their pool files are still on disk and every existing split indexes into them.
+    index_path = os.path.join(POOL_DIR, "pool_index.json")
+    index = {}
+    if len(selected) < len(meta) and os.path.exists(index_path):
+        index = json.load(open(index_path))
+
+    for ds in selected:
         smiles, x_shape = build_ecfp(ds)
         pool = np.load(pool_path(ds, "ecfp.npz"))
 
@@ -149,8 +165,9 @@ def main():
         }
         print(f"  {ds:<15} n={n:<6} X={x_shape}  emb={emb_shape}  tokens={tok_shape}")
 
-    with open(os.path.join(POOL_DIR, "pool_index.json"), "w") as f:
+    with open(index_path, "w") as f:
         json.dump(index, f, indent=2)
+    print(f"pool_index.json now covers {len(index)} dataset(s): {', '.join(index)}")
     print(f"\nWrote {os.path.join(POOL_DIR, 'pool_index.json')}")
     print("A split is now just index arrays into these pools; features are never rebuilt.")
 

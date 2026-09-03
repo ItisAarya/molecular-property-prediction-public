@@ -55,13 +55,17 @@ RDLogger.DisableLog("rdApp.*")
 
 import os
 import json
+import argparse
 
 import numpy as np
 import pandas as pd
 import deepchem as dc
 
-DATASETS = ["tox21", "bbbp", "clintox", "esol", "lipophilicity"]
-CLASSIFICATION = {"tox21", "bbbp", "clintox"}
+DATASETS = [
+    "tox21", "bbbp", "clintox", "esol", "lipophilicity",   # original five
+    "bace", "sider", "freesolv",                            # added for statistical power
+]
+CLASSIFICATION = {"tox21", "bbbp", "clintox", "bace", "sider"}
 OUT_DIR = "data"
 
 os.makedirs(OUT_DIR, exist_ok=True)
@@ -78,6 +82,17 @@ def load_dataset(name, featurizer="ECFP", splitter="scaffold"):
         "clintox": dc.molnet.load_clintox,
         "esol": dc.molnet.load_delaney,
         "lipophilicity": dc.molnet.load_lipo,
+        "bace": dc.molnet.load_bace_classification,
+        "sider": dc.molnet.load_sider,
+        # FreeSolv via load_sampl, NOT load_freesolv. `load_freesolv` serves a file
+        # whose target is already z-scored (task literally named "y", mean 0 / std 1,
+        # no transformer applied), so its labels carry no physical unit and our own
+        # normalisation would z-score an already-z-scored target. `load_sampl` is the
+        # standard MoleculeNet FreeSolv: task "expt", hydration free energy in kcal/mol
+        # (-25.47 to 3.43). Reporting RMSE against the former would be meaningless and
+        # not comparable to published numbers -- the same class of error as the
+        # normalised-units bug fixed in Phase 0.
+        "freesolv": dc.molnet.load_sampl,
     }
     if name not in loaders:
         raise ValueError(f"Unknown dataset: {name}")
@@ -188,9 +203,29 @@ def save_split(ds, split_tag, tasks, X, y, y_raw, w, smiles, y_mean, y_std):
 # Main
 # --------------------------------------------------------------------------------------
 def main():
-    meta = {}
+    ap = argparse.ArgumentParser(
+        description="Download MoleculeNet datasets and write CSV + NPZ per split."
+    )
+    ap.add_argument(
+        "--datasets", nargs="+", default=DATASETS, choices=DATASETS,
+        help="Which datasets to prepare. Default: all. Naming a subset leaves the "
+             "other datasets' files untouched and merges into the existing metadata.",
+    )
+    args = ap.parse_args()
+    selected = list(args.datasets)
 
-    for ds in DATASETS:
+    # Preparing a subset must not delete the metadata of the datasets we are not
+    # touching: the whole point of a subset run is that the files already on disk --
+    # and the results computed from them -- stay exactly as they were.
+    meta_path = os.path.join(OUT_DIR, "dataset_meta.json")
+    meta = {}
+    if len(selected) < len(DATASETS) and os.path.exists(meta_path):
+        with open(meta_path) as f:
+            meta = json.load(f)
+        kept = [d for d in meta if d not in selected]
+        print(f"Merging into existing metadata; leaving untouched: {', '.join(kept) or 'none'}")
+
+    for ds in selected:
         print(f"\n=== Processing {ds} ===")
         tasks, (train, valid, test), transformers = load_dataset(ds)
         tasks = list(tasks)
@@ -243,7 +278,6 @@ def main():
                 f"(multiply RMSE/MAE by {y_std[0]:.4f} to report in chemical units)"
             )
 
-    meta_path = os.path.join(OUT_DIR, "dataset_meta.json")
     with open(meta_path, "w") as f:
         json.dump(meta, f, indent=2)
     print(f"\nSaved metadata -> {meta_path}")

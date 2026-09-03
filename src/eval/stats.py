@@ -52,6 +52,8 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sps
 
+from src.eval.metrics import is_classification
+
 warnings.filterwarnings("ignore")
 
 RESULTS = "results"
@@ -60,7 +62,6 @@ MET_DIR = os.path.join(RESULTS, "metrics")
 
 # Which metric decides each task type, and whether larger is better.
 PRIMARY = {"classification": ("test_auc", True), "regression": ("test_rmse", False)}
-CLASSIFICATION = {"tox21", "bbbp", "clintox"}
 MODELS = ["rf", "gnn", "trf", "hybrid", "ens"]
 
 T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447,
@@ -68,7 +69,7 @@ T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447,
 
 
 def is_cls(ds):
-    return ds in CLASSIFICATION
+    return is_classification(ds)
 
 
 def seeded_variants():

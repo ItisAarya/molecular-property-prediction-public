@@ -51,13 +51,23 @@ except ImportError:
 
 
 DATA_DIR = "data"
-CLASSIFICATION_DATASETS = {"tox21", "bbbp", "clintox"}
+# Fallback only. `dataset_meta.json` records each dataset's task_type and is the
+# authority; this literal set covers callers that run before prep has written it.
+CLASSIFICATION_DATASETS = {"tox21", "bbbp", "clintox", "bace", "sider"}
 
 _META_CACHE = None
 
 
 def is_classification(dsname):
-    return dsname.lower() in CLASSIFICATION_DATASETS
+    """True if `dsname` is a classification dataset, per the prepared metadata."""
+    ds = dsname.lower()
+    try:
+        info = _meta().get(ds)
+    except (OSError, ValueError):
+        info = None
+    if info and "task_type" in info:
+        return info["task_type"] == "classification"
+    return ds in CLASSIFICATION_DATASETS
 
 
 def _meta():

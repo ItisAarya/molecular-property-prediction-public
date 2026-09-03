@@ -48,6 +48,9 @@ import time
 import numpy as np
 import torch
 from transformers import AutoModel
+import argparse
+
+from scripts.dataset_select import add_datasets_arg, resolve
 
 DATA_DIR = "data"
 MODEL_NAME = "seyonec/ChemBERTa-zinc-base-v1"
@@ -89,7 +92,14 @@ def encode_split(model, ds, split, device="cpu"):
 
 
 def main():
+    ap = argparse.ArgumentParser(
+        description="Cache frozen ChemBERTa embeddings (CLS and masked mean) per split."
+    )
+    add_datasets_arg(ap)
+    args = ap.parse_args()
+
     meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
+    selected = resolve(args.datasets, meta)
 
     print(f"Loading frozen encoder: {MODEL_NAME}")
     model = AutoModel.from_pretrained(MODEL_NAME)
@@ -101,7 +111,7 @@ def main():
     total_start = time.time()
     total_rows = 0
 
-    for ds in meta:
+    for ds in selected:
         for split in SPLITS:
             start = time.time()
             cls, mean = encode_split(model, ds, split)
