@@ -1,3 +1,0 @@
-dataset,tag,valid_auc,test_auc,params,best_epoch,valid_rmse,test_rmse
-clintox,gine,0.9636257259871284,0.88699648976471,1334534,24,,
-esol,gine,,,1334021,20,1.1503771881056537,1.2077553782442747
