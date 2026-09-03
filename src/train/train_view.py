@@ -5,6 +5,7 @@ Train a single-view encoder standalone and write predictions in the pipeline's f
 
     python -m src.train.train_view --encoder gine
     python -m src.train.train_view --encoder gin --tag gin_ref   # the inherited reference
+    python -m src.train.train_view --encoder desc --tag desc     # ECFP + 2-D descriptors
 
 Writes results/preds/<ds>_<tag>_{valid,test}.npy and results/metrics/<ds>_<tag>_*.csv, so a
 new view drops straight into the existing stacking, calibration and reporting stages
@@ -34,9 +35,11 @@ import time
 import numpy as np
 import pandas as pd
 import torch
-from torch_geometric.loader import DataLoader
+from torch.utils.data import DataLoader as TensorLoader, TensorDataset
+from torch_geometric.loader import DataLoader as GraphLoader
 
 from src.eval.metrics import cls_metrics, is_classification, reg_metrics
+from src.models.encoders.descriptor import DescriptorEncoder
 from src.models.encoders.graph import build_graph_encoder
 from src.models.heads import (
     SingleViewModel, masked_bce, masked_mse, pos_weight_from_labels,
@@ -47,6 +50,12 @@ DATA_DIR = "data"
 PRED_DIR = "results/preds"
 MET_DIR = "results/metrics"
 MODELS_DIR = "models"
+SPLITS = ("train", "valid", "test")
+
+# Which representation each encoder reads. Adding a view means adding it here and a
+# branch in `build_view`; the training loop below never changes.
+GRAPH_ENCODERS = ("gine", "gin")
+DESCRIPTOR_ENCODERS = ("desc",)
 
 for d in (PRED_DIR, MET_DIR, MODELS_DIR):
     os.makedirs(d, exist_ok=True)
@@ -61,10 +70,90 @@ def labels_of(graphs):
     return torch.stack([g.y for g in graphs])
 
 
+def load_descriptors(ds, split):
+    """ECFP fingerprint, raw 2-D descriptors and labels for one split."""
+    ecfp = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_ecfp.npz"), allow_pickle=True)
+    desc_path = os.path.join(DATA_DIR, f"{ds}_{split}_desc.npz")
+    if not os.path.exists(desc_path):
+        raise FileNotFoundError(
+            f"{desc_path} not found -- run `python -m scripts.make_descriptors`, then "
+            "re-materialise the active split so the per-split copy exists."
+        )
+    desc = np.load(desc_path, allow_pickle=True)
+    return (
+        torch.tensor(ecfp["X"], dtype=torch.float32),
+        torch.tensor(desc["X"], dtype=torch.float32),
+        torch.tensor(ecfp["y"], dtype=torch.float32),
+    )
+
+
+def split_batch(batch):
+    """
+    Return (encoder input, labels) for a batch of either representation.
+
+    A PyG batch of graphs carries its labels inside the graph objects; a plain tensor
+    batch yields them as its last element. The training loop should not have to know
+    which representation it is looking at, so the difference is confined to here.
+    """
+    if hasattr(batch, "to_data_list"):
+        return batch, torch.stack([g.y for g in batch.to_data_list()])
+    *inputs, y = batch
+    return tuple(inputs), y
+
+
+def _drop_last(n, batch_size):
+    """
+    Whether the training loader should discard a trailing batch of one.
+
+    Both encoders use BatchNorm, which cannot compute a batch variance from a single
+    sample and raises at training time. This only ever drops one molecule, and only when
+    the split size happens to leave a remainder of exactly one.
+    """
+    return n % batch_size == 1
+
+
+def build_view(encoder_name, ds, batch_size, enc_kwargs):
+    """
+    Load one representation and build the encoder that reads it.
+
+    Returns (loaders, labels per split, encoder). Keeping this separate from the training
+    loop is what allows a new view to be added without touching the objective -- which is
+    the property that makes the single-view baselines comparable to each other.
+    """
+    if encoder_name in GRAPH_ENCODERS:
+        graphs = {s: load_graphs(ds, s) for s in SPLITS}
+        y = {s: labels_of(graphs[s]) for s in SPLITS}
+        loaders = {
+            s: GraphLoader(graphs[s], batch_size=batch_size, shuffle=(s == "train"),
+                           drop_last=(s == "train" and _drop_last(len(graphs[s]), batch_size)))
+            for s in SPLITS
+        }
+        encoder = build_graph_encoder(
+            encoder_name, in_dim=graphs["train"][0].x.size(1), **enc_kwargs
+        )
+        return loaders, y, encoder
+
+    if encoder_name in DESCRIPTOR_ENCODERS:
+        parts = {s: load_descriptors(ds, s) for s in SPLITS}
+        y = {s: parts[s][2] for s in SPLITS}
+        loaders = {
+            s: TensorLoader(TensorDataset(*parts[s]), batch_size=batch_size,
+                            shuffle=(s == "train"),
+                            drop_last=(s == "train" and _drop_last(len(parts[s][2]), batch_size)))
+            for s in SPLITS
+        }
+        # Fitted on the training rows only. See the encoder's module docstring for why
+        # fitting it over the whole pool would be a distributional leak.
+        encoder = DescriptorEncoder.fit(parts["train"][0], parts["train"][1], **enc_kwargs)
+        return loaders, y, encoder
+
+    raise ValueError(f"Unknown encoder: {encoder_name}")
+
+
 @torch.no_grad()
 def predict(model, loader, cls):
     model.eval()
-    out = torch.cat([model(b) for b in loader]).numpy()
+    out = torch.cat([model(split_batch(b)[0]) for b in loader]).numpy()
     return 1.0 / (1.0 + np.exp(-out)) if cls else out
 
 
@@ -72,25 +161,17 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
     seed = set_seed()
     cls = is_classification(ds)
 
-    graphs = {s: load_graphs(ds, s) for s in ("train", "valid", "test")}
-    y = {s: labels_of(graphs[s]) for s in graphs}
+    loaders, y, encoder = build_view(encoder_name, ds, batch_size, enc_kwargs)
     n_tasks = y["train"].shape[1]
-    in_dim = graphs["train"][0].x.size(1)
+    n_train = int(y["train"].shape[0])
 
-    loaders = {
-        "train": DataLoader(graphs["train"], batch_size=batch_size, shuffle=True),
-        "valid": DataLoader(graphs["valid"], batch_size=batch_size, shuffle=False),
-        "test": DataLoader(graphs["test"], batch_size=batch_size, shuffle=False),
-    }
-
-    encoder = build_graph_encoder(encoder_name, in_dim=in_dim, **enc_kwargs)
     model = SingleViewModel(encoder, n_tasks=n_tasks)
     opt = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
     pos_w = pos_weight_from_labels(y["train"]) if cls else None
 
     n_par = sum(p.numel() for p in model.parameters())
     print(f"\n=== {ds} ({tag}) [seed={seed}] ===")
-    print(f"  {len(graphs['train'])} train molecules, {n_tasks} task(s), "
+    print(f"  {n_train} train molecules, {n_tasks} task(s), "
           f"{n_par:,} params, embedding dim {encoder.out_dim}")
 
     best_score, best_state, bad, best_ep = float("-inf"), None, 0, 0
@@ -100,8 +181,8 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
         model.train()
         total = 0.0
         for batch in loaders["train"]:
-            logits = model(batch)
-            yb = torch.stack([g.y for g in batch.to_data_list()])
+            inputs, yb = split_batch(batch)
+            logits = model(inputs)
             loss = masked_bce(logits, yb, pos_w) if cls else masked_mse(logits, yb)
             opt.zero_grad()
             loss.backward()
@@ -149,7 +230,7 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--encoder", default="gine", choices=["gine", "gin"])
+    ap.add_argument("--encoder", default="gine", choices=["gine", "gin", "desc"])
     ap.add_argument("--tag", default=None, help="output name; defaults to --encoder")
     ap.add_argument("--datasets", nargs="+", default=None)
     ap.add_argument("--epochs", type=int, default=100)
@@ -162,6 +243,13 @@ def main():
     ap.add_argument("--no-residual", action="store_true")
     ap.add_argument("--jk", action="store_true")
     ap.add_argument("--readout", default="mean+sum", choices=["mean", "sum", "mean+sum"])
+    ap.add_argument("--dropout", type=float, default=0.3)
+    # Ablations for the descriptor view: which half of the input is doing the work.
+    ap.add_argument("--no-ecfp", action="store_true",
+                    help="desc only: drop the fingerprint, keep the 2-D descriptors")
+    ap.add_argument("--no-descriptors", action="store_true",
+                    help="desc only: drop the 2-D descriptors, keep the fingerprint "
+                         "(this is the inherited ECFP input, under the shared trainer)")
     args = ap.parse_args()
 
     tag = args.tag or args.encoder
@@ -169,6 +257,9 @@ def main():
     if args.encoder == "gine":
         enc_kwargs.update(n_layers=args.layers, residual=not args.no_residual,
                           jk=args.jk, readout=args.readout)
+    elif args.encoder == "desc":
+        enc_kwargs.update(dropout=args.dropout, use_ecfp=not args.no_ecfp,
+                          use_desc=not args.no_descriptors)
 
     meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
     datasets = args.datasets or list(meta.keys())

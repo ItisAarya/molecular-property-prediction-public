@@ -69,6 +69,9 @@ def materialize_dataset(ds, variant, tasks):
 
     pool = np.load(os.path.join(POOL_DIR, f"{ds}_ecfp.npz"))
     emb = np.load(os.path.join(POOL_DIR, f"{ds}_chemberta.npz"))
+    # Optional: only present once scripts.make_descriptors has been run.
+    desc_path = os.path.join(POOL_DIR, f"{ds}_desc.npz")
+    desc = np.load(desc_path, allow_pickle=True) if os.path.exists(desc_path) else None
     graphs = torch.load(os.path.join(POOL_DIR, f"{ds}_graphs.pt"), weights_only=False)["graphs"]
     tok = torch.load(os.path.join(POOL_DIR, f"{ds}_tok.pt"), weights_only=False)
 
@@ -86,6 +89,13 @@ def materialize_dataset(ds, variant, tasks):
             os.path.join(DATA_DIR, f"{ds}_{sp}_chemberta.npz"),
             cls=emb["cls"][i], mean=emb["mean"][i], model=emb["model"],
         )
+        if desc is not None:
+            # Raw values, as stored in the pool. The scaler is fitted on the training
+            # rows at training time -- see src/models/encoders/descriptor.py.
+            np.savez_compressed(
+                os.path.join(DATA_DIR, f"{ds}_{sp}_desc.npz"),
+                X=desc["X"][i], names=desc["names"], smiles=desc["smiles"][i],
+            )
         torch.save(
             {"graphs": [graphs[j] for j in i], "tasks": tasks, "split": sp, "dataset": ds},
             os.path.join(DATA_DIR, f"{ds}_{sp}_graphs.pt"),
