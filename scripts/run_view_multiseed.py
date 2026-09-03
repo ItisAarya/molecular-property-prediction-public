@@ -26,6 +26,7 @@ loss, class weighting and early stopping, so the comparison isolates the represe
 """
 
 import argparse
+import json
 import os
 import shutil
 import subprocess
@@ -38,17 +39,43 @@ RESULTS = "results"
 RUNS_DIR = os.path.join(RESULTS, "runs")
 MET_DIR = os.path.join(RESULTS, "metrics")
 
-ENCODER_OF = {"gin_ref": "gin", "gine": "gine"}
+ENCODER_OF = {
+    "gin_ref": "gin",        # the inherited 2-layer GIN, as an ablation reference
+    "gine": "gine",          # edge-aware graph encoder (Phase 1a)
+    "desc": "desc",          # ECFP + RDKit 2-D descriptors (Phase 1b)
+    "lora": "lora",          # ChemBERTa + LoRA (Phase 1c)
+    "seq_frozen": "seq_frozen",   # frozen ChemBERTa, the matched control for lora
+}
 
 NOISE = ("DEPRECATION", "Skipped loading", "No normalization", "WARNING",
          "Some weights", "You should probably", "not removing")
 
 
-def run_tag(tag, log):
+def datasets_on_disk():
+    with open(os.path.join("data", "dataset_meta.json")) as f:
+        return list(json.load(f).keys())
+
+
+def already_done(variant, tag, datasets):
+    """
+    True if this (variant, tag) has a complete set of archived metrics.
+
+    Free-tier Colab sessions get interrupted, so a run has to be resumable. The archived
+    per-variant metrics under results/runs/ are the authoritative record, so their
+    presence -- for every dataset, not just some -- is what "done" means.
+    """
+    dest = os.path.join(RUNS_DIR, variant, "metrics")
+    return all(
+        os.path.exists(os.path.join(dest, f"{ds}_{tag}_{sp}.csv"))
+        for ds in datasets for sp in ("valid", "test")
+    )
+
+
+def run_tag(tag, log, extra_args=()):
     """Train one encoder across all datasets for the currently materialised split."""
     proc = subprocess.run(
         [sys.executable, "-u", "-m", "src.train.train_view",
-         "--encoder", ENCODER_OF[tag], "--tag", tag],
+         "--encoder", ENCODER_OF[tag], "--tag", tag, *extra_args],
         capture_output=True, text=True, errors="replace",
     )
     for line in (proc.stdout + proc.stderr).splitlines():
@@ -83,6 +110,18 @@ def main():
     ap.add_argument("--variants", nargs="+",
                     default=["seed0", "seed1", "seed2", "seed3", "seed4"])
     ap.add_argument("--restore", default="deepchem")
+    ap.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+    ap.add_argument("--epochs", type=int, default=None,
+                    help="cap training length (default: the trainer's own). Changing this "
+                         "changes the protocol, so keep it equal across compared tags.")
+    ap.add_argument("--patience", type=int, default=None)
+    ap.add_argument("--batch-size", type=int, default=None)
+    ap.add_argument("--artifacts", nargs="+", default=None,
+                    help="which views to materialise (default: all). A sequence-only run "
+                         "needs just `tok ecfp`, which is what a Colab bundle carries.")
+    ap.add_argument("--resume", action="store_true",
+                    help="skip any (variant, tag) whose archived metrics are already "
+                         "complete -- for restarting after a Colab disconnect")
     args = ap.parse_args()
 
     for t in args.tags:
@@ -93,16 +132,35 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     started = time.time()
     failed = []
+    all_datasets = datasets_on_disk()
+
+    # Options handed straight to the trainer. Held identical across tags so the
+    # comparison isolates the encoder rather than the training budget.
+    passthrough = ["--device", args.device]
+    for flag, value in (("--epochs", args.epochs), ("--patience", args.patience),
+                        ("--batch-size", args.batch_size)):
+        if value is not None:
+            passthrough += [flag, str(value)]
 
     for variant in args.variants:
         print(f"\n{'=' * 70}\n{variant}\n{'=' * 70}")
-        materialize(variant, verbose=False)
+        todo = args.tags
+        if args.resume:
+            done = [t for t in args.tags if already_done(variant, t, all_datasets)]
+            todo = [t for t in args.tags if t not in done]
+            for t in done:
+                print(f"    {t:<10} already complete, skipping")
+            if not todo:
+                continue
+
+        materialize(variant, verbose=False, artifacts=args.artifacts)
         assert active_variant() == variant
 
-        with open(os.path.join(log_dir, f"views_{variant}.log"), "w", encoding="utf-8") as log:
-            for tag in args.tags:
+        mode = "a" if args.resume else "w"
+        with open(os.path.join(log_dir, f"views_{variant}.log"), mode, encoding="utf-8") as log:
+            for tag in todo:
                 t0 = time.time()
-                ok = run_tag(tag, log)
+                ok = run_tag(tag, log, passthrough)
                 print(f"    {tag:<10} {'ok' if ok else 'FAILED':<7} {(time.time() - t0) / 60:5.1f} min")
                 if not ok:
                     failed.append(f"{variant}/{tag}")
@@ -111,7 +169,7 @@ def main():
         print(f"  archived {n} metric files -> {dest}")
 
     if args.restore != "none":
-        materialize(args.restore, verbose=False)
+        materialize(args.restore, verbose=False, artifacts=args.artifacts)
         # The loop leaves the LAST variant's metrics sitting in results/metrics/ while
         # data/ now holds the restored variant -- two different splits, no marker saying
         # so. That already caused one wrong comparison. The archived per-variant copies

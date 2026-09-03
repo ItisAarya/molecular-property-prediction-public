@@ -27,6 +27,10 @@ safetensors==0.6.2
 tokenizers==0.19.1
 huggingface-hub==0.34.4
 
+# --- Parameter-efficient fine-tuning (Phase 1c: LoRA sequence encoder) ---
+peft==0.12.0
+accelerate==0.33.0
+
 # --- Training / tuning extras (pulled in by deepchem) ---
 lightning==2.5.3
 pytorch-lightning==2.5.3

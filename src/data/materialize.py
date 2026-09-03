@@ -47,6 +47,11 @@ SPLIT_DIR = os.path.join(DATA_DIR, "splits")
 ACTIVE_FILE = os.path.join(DATA_DIR, "ACTIVE_SPLIT.json")
 SPLITS = ["train", "valid", "test"]
 
+# Everything a variant can write. A run that only trains the sequence view needs `tok`
+# for the inputs and `ecfp` for the labels and scaling constants, and nothing else --
+# which is what makes a Colab bundle 48 MB instead of several hundred.
+ALL_ARTIFACTS = ("ecfp", "chemberta", "graphs", "tok", "desc", "csv")
+
 
 def active_variant():
     """Which split variant currently sits in data/, or None if never materialised."""
@@ -63,32 +68,45 @@ def load_split(ds, variant):
     return {s: np.asarray(d[s], dtype=int) for s in SPLITS}
 
 
-def materialize_dataset(ds, variant, tasks):
-    """Slice every pooled artifact by this variant's indices and write the split files."""
+def materialize_dataset(ds, variant, tasks, artifacts=None):
+    """
+    Slice the pooled artifacts by this variant's indices and write the split files.
+
+    `artifacts` selects which views to write (default: all of them). Restricting it lets
+    an environment that only holds some of the pools -- a Colab bundle carrying just the
+    tokens and fingerprints, say -- materialise a split without the missing ones.
+    """
+    want = set(ALL_ARTIFACTS if artifacts is None else artifacts)
     idx = load_split(ds, variant)
 
+    # `ecfp` is always read: it carries the labels and the y scaling constants that the
+    # CSV and every metric depend on, whichever view is being trained.
     pool = np.load(os.path.join(POOL_DIR, f"{ds}_ecfp.npz"))
-    emb = np.load(os.path.join(POOL_DIR, f"{ds}_chemberta.npz"))
-    # Optional: only present once scripts.make_descriptors has been run.
+    emb = np.load(os.path.join(POOL_DIR, f"{ds}_chemberta.npz")) if "chemberta" in want else None
     desc_path = os.path.join(POOL_DIR, f"{ds}_desc.npz")
-    desc = np.load(desc_path, allow_pickle=True) if os.path.exists(desc_path) else None
-    graphs = torch.load(os.path.join(POOL_DIR, f"{ds}_graphs.pt"), weights_only=False)["graphs"]
-    tok = torch.load(os.path.join(POOL_DIR, f"{ds}_tok.pt"), weights_only=False)
+    desc = (np.load(desc_path, allow_pickle=True)
+            if "desc" in want and os.path.exists(desc_path) else None)
+    graphs = (torch.load(os.path.join(POOL_DIR, f"{ds}_graphs.pt"),
+                         weights_only=False)["graphs"] if "graphs" in want else None)
+    tok = (torch.load(os.path.join(POOL_DIR, f"{ds}_tok.pt"), weights_only=False)
+           if "tok" in want else None)
 
     sizes = {}
     for sp in SPLITS:
         i = idx[sp]
         sizes[sp] = int(len(i))
 
-        np.savez_compressed(
-            os.path.join(DATA_DIR, f"{ds}_{sp}_ecfp.npz"),
-            X=pool["X"][i], y=pool["y"][i], y_raw=pool["y_raw"][i], w=pool["w"][i],
-            smiles=pool["smiles"][i], y_mean=pool["y_mean"], y_std=pool["y_std"],
-        )
-        np.savez_compressed(
-            os.path.join(DATA_DIR, f"{ds}_{sp}_chemberta.npz"),
-            cls=emb["cls"][i], mean=emb["mean"][i], model=emb["model"],
-        )
+        if "ecfp" in want:
+            np.savez_compressed(
+                os.path.join(DATA_DIR, f"{ds}_{sp}_ecfp.npz"),
+                X=pool["X"][i], y=pool["y"][i], y_raw=pool["y_raw"][i], w=pool["w"][i],
+                smiles=pool["smiles"][i], y_mean=pool["y_mean"], y_std=pool["y_std"],
+            )
+        if emb is not None:
+            np.savez_compressed(
+                os.path.join(DATA_DIR, f"{ds}_{sp}_chemberta.npz"),
+                cls=emb["cls"][i], mean=emb["mean"][i], model=emb["model"],
+            )
         if desc is not None:
             # Raw values, as stored in the pool. The scaler is fitted on the training
             # rows at training time -- see src/models/encoders/descriptor.py.
@@ -96,25 +114,28 @@ def materialize_dataset(ds, variant, tasks):
                 os.path.join(DATA_DIR, f"{ds}_{sp}_desc.npz"),
                 X=desc["X"][i], names=desc["names"], smiles=desc["smiles"][i],
             )
-        torch.save(
-            {"graphs": [graphs[j] for j in i], "tasks": tasks, "split": sp, "dataset": ds},
-            os.path.join(DATA_DIR, f"{ds}_{sp}_graphs.pt"),
-        )
-        torch.save(
-            {"input_ids": tok["input_ids"][i], "attention_mask": tok["attention_mask"][i],
-             "y": tok["y"][i], "smiles": [tok["smiles"][j] for j in i], "tasks": tasks},
-            os.path.join(DATA_DIR, f"{ds}_{sp}_tok.pt"),
-        )
+        if graphs is not None:
+            torch.save(
+                {"graphs": [graphs[j] for j in i], "tasks": tasks, "split": sp, "dataset": ds},
+                os.path.join(DATA_DIR, f"{ds}_{sp}_graphs.pt"),
+            )
+        if tok is not None:
+            torch.save(
+                {"input_ids": tok["input_ids"][i], "attention_mask": tok["attention_mask"][i],
+                 "y": tok["y"][i], "smiles": [tok["smiles"][j] for j in i], "tasks": tasks},
+                os.path.join(DATA_DIR, f"{ds}_{sp}_tok.pt"),
+            )
 
-        df = pd.DataFrame({"smiles": pool["smiles"][i]})
-        for c, task in enumerate(tasks):
-            df[task] = pool["y"][i][:, c]
-        df.to_csv(os.path.join(DATA_DIR, f"{ds}_{sp}.csv"), index=False)
+        if "csv" in want:
+            df = pd.DataFrame({"smiles": pool["smiles"][i]})
+            for c, task in enumerate(tasks):
+                df[task] = pool["y"][i][:, c]
+            df.to_csv(os.path.join(DATA_DIR, f"{ds}_{sp}.csv"), index=False)
 
     return sizes
 
 
-def materialize(variant, verbose=True):
+def materialize(variant, verbose=True, artifacts=None):
     """Materialise every dataset for one variant and update dataset_meta.json."""
     pool_index = json.load(open(os.path.join(POOL_DIR, "pool_index.json")))
     meta_path = os.path.join(DATA_DIR, "dataset_meta.json")
@@ -122,7 +143,7 @@ def materialize(variant, verbose=True):
 
     for ds in pool_index:
         tasks = pool_index[ds]["tasks"]
-        sizes = materialize_dataset(ds, variant, tasks)
+        sizes = materialize_dataset(ds, variant, tasks, artifacts)
         # Downstream code reads sizes from the metadata, so it has to track the swap.
         meta[ds]["sizes"] = sizes
         meta[ds]["split"] = variant
@@ -140,9 +161,11 @@ def materialize(variant, verbose=True):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", required=True, help="e.g. deepchem, seed0, seed1")
+    ap.add_argument("--artifacts", nargs="+", default=None, choices=list(ALL_ARTIFACTS),
+                    help="which views to write (default: all)")
     args = ap.parse_args()
     print(f"Materialising split variant '{args.variant}' into {DATA_DIR}/")
-    materialize(args.variant)
+    materialize(args.variant, artifacts=args.artifacts)
     print(f"\nActive split is now: {active_variant()}")
 
 

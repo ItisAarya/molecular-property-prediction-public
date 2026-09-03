@@ -48,3 +48,6 @@ wandb/
 # Pooled features + generated split indices (rebuilt by scripts/build_pool.py + make_splits.py)
 data/pool/
 data/splits/
+
+# Colab bundle (regenerate with scripts/make_colab_bundle.py)
+mpp_colab_bundle.zip
