@@ -92,7 +92,22 @@ class SequenceEncoder(nn.Module):
                 bias="none",
                 task_type=TaskType.FEATURE_EXTRACTION,
             )
-            self.encoder = get_peft_model(base, cfg)
+            try:
+                self.encoder = get_peft_model(base, cfg)
+            except ImportError as e:
+                # peft probes every optional backend while placing adapters, and some of
+                # those probes raise instead of returning False when a package is present
+                # but too old. Nothing here uses quantised LoRA, so the offending package
+                # is not needed at all -- removing it is safer than upgrading it, which
+                # can drag a different torch build along with it.
+                if "torchao" in str(e):
+                    raise ImportError(
+                        f"peft could not place LoRA adapters: {e}" + 2 * chr(10)
+                        + "This is an optional backend that this project does not "
+                        + "use. Uninstall it and re-run:" + chr(10)
+                        + "    pip uninstall -y torchao"
+                    ) from e
+                raise
 
         self.out_dim = hidden * (2 if pooling == "cls+mean" else 1)
 

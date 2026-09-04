@@ -126,6 +126,11 @@ def main():
                          "changes the protocol, so keep it equal across compared tags.")
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=None)
+    ap.add_argument("--keep-going", action="store_true",
+                    help="carry on trying a tag that has already failed once. By default "
+                         "a tag that fails is dropped from the remaining splits, because "
+                         "the usual cause is an environment problem that will not fix "
+                         "itself and repeating it just burns the session.")
     ap.add_argument("--datasets", nargs="+", default=None,
                     help="restrict to these datasets (default: all). Mainly for smoke "
                          "testing a new encoder before committing to the full run.")
@@ -149,6 +154,7 @@ def main():
     started = time.time()
     failed = []
     all_datasets = args.datasets or datasets_on_disk()
+    broken = set()
 
     # Options handed straight to the trainer. Held identical across tags so the
     # comparison isolates the encoder rather than the training budget.
@@ -171,6 +177,15 @@ def main():
             if not todo:
                 continue
 
+        if not args.keep_going:
+            for t in list(todo):
+                if t in broken:
+                    print(f"    {t:<10} skipped: it failed on an earlier split "
+                          f"(use --keep-going to retry anyway)")
+            todo = [t for t in todo if t not in broken]
+            if not todo:
+                continue
+
         materialize(variant, verbose=False, artifacts=args.artifacts)
         assert active_variant() == variant
 
@@ -182,6 +197,7 @@ def main():
                 print(f"    {tag:<10} {'ok' if ok else 'FAILED':<7} {(time.time() - t0) / 60:5.1f} min")
                 if not ok:
                     failed.append(f"{variant}/{tag}")
+                    broken.add(tag)
 
         dest, n = archive(variant, args.tags)
         print(f"  archived {n} metric files -> {dest}")
@@ -203,6 +219,10 @@ def main():
     print(f"\n{'=' * 70}")
     if failed:
         print(f"FAILED: {failed}")
+        if broken and not args.keep_going:
+            print(f"dropped after first failure: {sorted(broken)}")
+        print("Fix the cause, then re-run the same command: --resume keeps everything "
+              "that already succeeded.")
     print(f"active split in data/: {active_variant()}")
     print(f"total: {(time.time() - started) / 60:.1f} min")
 
