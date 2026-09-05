@@ -23,6 +23,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+# The common embedding width every view is projected to. Fixed across views so that a
+# comparison between them is a comparison of representations and not of head sizes.
+EMBED_DIM = 256
+
 
 class MLPHead(nn.Module):
     """
@@ -90,14 +94,31 @@ class SingleViewModel(nn.Module):
     comparison.
     """
 
-    def __init__(self, encoder, n_tasks, head_hidden=None, dropout=0.2):
+    def __init__(self, encoder, n_tasks, embed_dim=EMBED_DIM, head_hidden=EMBED_DIM,
+                 dropout=0.2):
         super().__init__()
         self.encoder = encoder
-        self.head = MLPHead(encoder.out_dim, n_tasks, hidden=head_hidden, dropout=dropout)
+
+        # Every view is projected to one common width before the head.
+        #
+        # Without this the head is sized from whatever the encoder happens to emit -- 256
+        # for GIN, 512 for GINE with mean+sum readout, 1536 for the sequence views with
+        # CLS+mean pooling. The single-view baselines then differed in *head capacity* as
+        # well as in representation, so the comparison measured both at once. On the
+        # sequence view the head was 2.36M parameters against a 147k LoRA adapter: most of
+        # what was being trained was the head, not the view.
+        #
+        # It is also a hard requirement for Phase 2. Cross-attention over views, and the
+        # low-rank bilinear term between pairs of them, both need every view to arrive at
+        # the same width.
+        self.project = (nn.Identity() if encoder.out_dim == embed_dim
+                        else nn.Linear(encoder.out_dim, embed_dim))
+        self.out_dim = embed_dim
+        self.head = MLPHead(embed_dim, n_tasks, hidden=head_hidden, dropout=dropout)
 
     def forward(self, batch):
-        return self.head(self.encoder(batch))
+        return self.head(self.encode(batch))
 
     def encode(self, batch):
-        """The molecule embedding, for the fusion module to consume in Phase 2."""
-        return self.encoder(batch)
+        """The molecule embedding at the common width, for the fusion module to consume."""
+        return self.project(self.encoder(batch))

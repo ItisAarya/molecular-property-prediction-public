@@ -49,7 +49,7 @@ from src.models.encoders.sequence import SequenceEncoder
 # stop the sequence and descriptor views running anywhere it is not installed -- which is
 # exactly the case on a stock Colab runtime.
 from src.models.heads import (
-    SingleViewModel, masked_bce, masked_mse, pos_weight_from_labels,
+    EMBED_DIM, SingleViewModel, masked_bce, masked_mse, pos_weight_from_labels,
 )
 from src.utils.seed import set_seed
 
@@ -288,7 +288,7 @@ def predict(model, loader, cls, device, n_rows):
 
 
 def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay,
-           enc_kwargs, device=None):
+           enc_kwargs, device=None, embed_dim=EMBED_DIM, head_hidden=EMBED_DIM):
     seed = set_seed()
     cls = is_classification(ds)
     device = device or pick_device("cpu")
@@ -299,7 +299,8 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
     n_tasks = y["train"].shape[1]
     n_train = int(y["train"].shape[0])
 
-    model = SingleViewModel(encoder, n_tasks=n_tasks).to(device)
+    model = SingleViewModel(encoder, n_tasks=n_tasks, embed_dim=embed_dim,
+                            head_hidden=head_hidden).to(device)
     # Optimise only what is actually trainable. With LoRA the pretrained encoder is
     # frozen, and handing frozen tensors to Adam would allocate optimiser state for 44M
     # parameters that never move.
@@ -399,6 +400,11 @@ def main():
     ap.add_argument("--lora-alpha", type=int, default=16)
     ap.add_argument("--lora-dropout", type=float, default=0.1)
     ap.add_argument("--pooling", default="cls+mean", choices=["cls", "mean", "cls+mean"])
+    # Held identical across views on purpose: see SingleViewModel. Changing either makes
+    # the single-view rows non-comparable with each other and with the fusion model.
+    ap.add_argument("--embed-dim", type=int, default=EMBED_DIM,
+                    help="common width every view is projected to before the head")
+    ap.add_argument("--head-hidden", type=int, default=EMBED_DIM)
     ap.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     args = ap.parse_args()
 
@@ -422,7 +428,8 @@ def main():
 
     device = pick_device(args.device)
     rows = [run_ds(ds, args.encoder, tag, args.epochs, args.patience, args.batch_size,
-                   args.lr, args.weight_decay, enc_kwargs, device) for ds in datasets]
+                   args.lr, args.weight_decay, enc_kwargs, device,
+                   args.embed_dim, args.head_hidden) for ds in datasets]
     pd.DataFrame(rows).to_csv(os.path.join(MET_DIR, f"{tag}_summary.csv"), index=False)
     print(f"\nWrote results/metrics/{tag}_summary.csv")
 
