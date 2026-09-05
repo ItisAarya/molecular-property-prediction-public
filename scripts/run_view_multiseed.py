@@ -137,6 +137,13 @@ def main():
     ap.add_argument("--artifacts", nargs="+", default=None,
                     help="which views to materialise (default: all). A sequence-only run "
                          "needs just `tok ecfp`, which is what a Colab bundle carries.")
+    ap.add_argument("--redo", nargs="+", default=None, metavar="TAG",
+                    help="discard archived results for these tags before running. "
+                         "Needed when a tag's ARCHITECTURE changed: --resume only checks "
+                         "that files exist, not which code wrote them, so it would "
+                         "otherwise skip a tag that needs recomputing. Combining --redo "
+                         "with --resume clears the stale tags once and still protects "
+                         "everything else against a disconnect.")
     ap.add_argument("--resume", action="store_true",
                     help="skip any (variant, tag) whose archived metrics are already "
                          "complete -- for restarting after a Colab disconnect")
@@ -155,6 +162,22 @@ def main():
     failed = []
     all_datasets = args.datasets or datasets_on_disk()
     broken = set()
+
+    # Clear stale archives first, so the resume check below sees these tags as unfinished.
+    if args.redo:
+        unknown = [t for t in args.redo if t not in ENCODER_OF]
+        if unknown:
+            raise SystemExit(f"--redo names unknown tag(s): {unknown}")
+        removed = 0
+        for variant in args.variants:
+            dest = os.path.join(RUNS_DIR, variant, "metrics")
+            if not os.path.isdir(dest):
+                continue
+            for f in os.listdir(dest):
+                if any(f"_{t}_" in f for t in args.redo):
+                    os.remove(os.path.join(dest, f))
+                    removed += 1
+        print(f"--redo {' '.join(args.redo)}: discarded {removed} archived metric file(s)")
 
     # Options handed straight to the trainer. Held identical across tags so the
     # comparison isolates the encoder rather than the training budget.
