@@ -113,23 +113,46 @@ def main():
         sd = diff.std(ddof=1)
         dz = float(diff.mean() / sd) if sd > 0 else np.nan
 
-        # The decision that matters: is the improvement bigger than the reference model's
-        # own split-to-split spread? If not, it is not distinguishable from split luck.
-        decisive = abs(diff.mean()) > hb
-        verdict = ("improves" if diff.mean() > 0 else "degrades") if decisive else "inside noise"
+        # Is the *paired difference* distinguishable from zero?
+        #
+        # This used to compare the mean difference against `hb`, the reference model's own
+        # across-split spread. That is the wrong yardstick. Pairing is the entire point of
+        # running both encoders on the same five splits: the split-to-split variation is
+        # shared, so it cancels in the difference, and the difference has a far smaller
+        # standard error than either model's scores do. Testing against `hb` made the
+        # verdict depend on how noisy the *reference* happened to be on that dataset --
+        # seq_frozen lost tox21 0-5 with a paired p of 0.018 and was called "inside noise",
+        # while a weaker sider result (p=0.027) was called "degrades", purely because
+        # gin_ref was more stable on sider.
+        #
+        # The correct comparison is the mean difference against its own 95% interval,
+        # which is equivalent to the paired t-test at the same alpha.
+        md, sd_diff, hd = ci95(diff)
+        decisive = abs(md) > hd
+        verdict = ("improves" if md > 0 else "degrades") if decisive else "inside noise"
+
+        # Statistical significance is not the same as mattering. Phase 0 measured the
+        # baseline's own across-seed intervals at roughly +/-0.02 AUC and +/-0.10 RMSE, so
+        # an effect below that is real but small relative to how much the benchmark moves
+        # between splits. Flagged rather than folded into the verdict: where to draw that
+        # line is a reporting decision, not a statistical one.
+        mde = 0.02 if cls else 0.10
+        below_mde = decisive and abs(md) < mde
 
         print(f"  {ds}  ({key})")
         print(f"      {args.a:<10}{ma:.4f}  +/- {ha:.4f}")
         print(f"      {args.b:<10}{mb:.4f}  +/- {hb:.4f}")
-        print(f"      mean diff {diff.mean():+.4f}   wins {wins}-{len(pairs) - wins}   "
+        print(f"      mean diff {md:+.4f} +/- {hd:.4f}   wins {wins}-{len(pairs) - wins}   "
               f"p(wilcox)={p_w:.4f}  p(t)={p_t:.4f}  dz={dz:+.2f}")
-        print(f"      -> {verdict}\n")
+        note = f"  (below the +/-{mde} practical threshold)" if below_mde else ""
+        print(f"      -> {verdict}{note}\n")
 
         rows.append({
             "dataset": ds, "metric": key.lower(), "a": args.a, "b": args.b,
             "n_splits": len(pairs), "mean_a": ma, "ci_a": ha, "mean_b": mb, "ci_b": hb,
-            "mean_diff": diff.mean(), "a_wins": wins, "p_wilcoxon": p_w, "p_ttest": p_t,
-            "cohens_dz": dz, "verdict": verdict,
+            "mean_diff": md, "ci_diff": hd, "a_wins": wins,
+            "p_wilcoxon": p_w, "p_ttest": p_t, "cohens_dz": dz,
+            "verdict": verdict, "below_mde": below_mde,
         })
 
     if rows:
@@ -143,7 +166,12 @@ def main():
         print(f"{'=' * 84}")
         print(f"  {args.a} improves on {n_better}/{len(df)} datasets, "
               f"degrades on {n_worse}, indistinguishable on {n_noise}.")
+        n_small = int(df.below_mde.sum())
         print(f"  With n={len(variants)} the Wilcoxon floor is p=0.0625; a 5-0 sweep is not p<0.05.")
+        print("  Verdicts come from the paired difference's own 95% interval (= paired t).")
+        if n_small:
+            print(f"  {n_small} of those are statistically clear but below the practical "
+                  f"threshold (+/-0.02 AUC, +/-0.10 RMSE).")
         print(f"\nWrote {out}")
 
 
