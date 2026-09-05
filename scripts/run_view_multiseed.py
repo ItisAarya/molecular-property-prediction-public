@@ -99,16 +99,20 @@ def archive(variant, tags):
     """
     Copy this variant's single-view metrics into its existing run directory.
 
-    Files are named `<dataset>_<tag>_<split>.csv`, so matching on `_<tag>_` picks up
-    exactly this run's outputs and leaves the pipeline's own metrics untouched.
+    Results are named exactly `<dataset>_<tag>_<split>.csv`, and that full form is what
+    gets matched. Matching the looser `_<tag>_` substring instead also swept up the
+    comparison tables written by `view_stats` -- `view_compare_gine_vs_gin_ref.csv`
+    contains `_gine_` -- so every split archive gained a copy of a cross-split summary
+    that does not belong to any one split.
     """
     dest = os.path.join(RUNS_DIR, variant, "metrics")
     os.makedirs(dest, exist_ok=True)
-    wanted = tuple(f"_{t}_" for t in tags)
+    wanted = {f"{ds}_{t}_{sp}.csv"
+              for ds in datasets_on_disk() for t in tags for sp in ("valid", "test")}
 
     n = 0
     for f in os.listdir(MET_DIR):
-        if f.endswith(".csv") and any(w in f for w in wanted):
+        if f in wanted:
             shutil.copy2(os.path.join(MET_DIR, f), os.path.join(dest, f))
             n += 1
     return dest, n

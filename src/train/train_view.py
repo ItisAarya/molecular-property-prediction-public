@@ -40,7 +40,7 @@ import torch
 from torch.utils.data import DataLoader as TensorLoader, Dataset as TorchDataset, TensorDataset
 
 from src.data.bucketing import LengthBucketSampler, make_token_collate
-from src.eval.metrics import cls_metrics, is_classification, reg_metrics
+from src.eval.metrics import is_classification
 from src.models.encoders.descriptor import DescriptorEncoder
 from src.models.encoders.sequence import SequenceEncoder
 
@@ -48,15 +48,11 @@ from src.models.encoders.sequence import SequenceEncoder
 # heavy dependency that only the graph views need, and requiring it at import time would
 # stop the sequence and descriptor views running anywhere it is not installed -- which is
 # exactly the case on a stock Colab runtime.
-from src.models.heads import (
-    EMBED_DIM, SingleViewModel, masked_bce, masked_mse, pos_weight_from_labels,
-)
+from src.models.heads import EMBED_DIM, SingleViewModel
+from src.train.loop import MET_DIR, fit_and_score, to_device
 from src.utils.seed import set_seed
 
 DATA_DIR = "data"
-PRED_DIR = "results/preds"
-MET_DIR = "results/metrics"
-MODELS_DIR = "models"
 SPLITS = ("train", "valid", "test")
 
 # Which representation each encoder reads. Adding a view means adding it here and a
@@ -80,10 +76,6 @@ def to_device(obj, device):
     if isinstance(obj, tuple):
         return tuple(t.to(device) for t in obj)
     return obj.to(device)
-
-for d in (PRED_DIR, MET_DIR, MODELS_DIR):
-    os.makedirs(d, exist_ok=True)
-
 
 def load_graphs(ds, split):
     obj = torch.load(os.path.join(DATA_DIR, f"{ds}_{split}_graphs.pt"), weights_only=False)
@@ -155,26 +147,7 @@ def split_batch(batch):
     if hasattr(batch, "to_data_list"):
         return batch, torch.stack([g.y for g in batch.to_data_list()]), None
     *inputs, y, idx = batch
-    return tuple(inputs), y, idx
-
-
-def checkpoint_state(model):
-    """
-    The part of the model worth writing to disk: what training changed, plus fitted
-    buffers (BatchNorm statistics, the descriptor scaler's constants).
-
-    A LoRA run carries 44M frozen pretrained parameters that are byte-identical in every
-    checkpoint. Saving the full state dict costs ~180 MB per fit and there are 96 fits in
-    the full protocol -- roughly 17 GB of writes to store the same pretrained encoder
-    ninety-six times. The encoder is reproducible from its name, so only the adapter, the
-    head and the buffers need keeping.
-
-    For the graph and descriptor views every parameter is trainable, so this saves exactly
-    what it saved before.
-    """
-    keep = {n for n, p in model.named_parameters() if p.requires_grad}
-    keep |= {n for n, _ in model.named_buffers()}
-    return {k: v for k, v in model.state_dict().items() if k in keep}
+    return tuple(inputs), y, idx.numpy()
 
 
 def _drop_last(n, batch_size):
@@ -251,44 +224,9 @@ def build_view(encoder_name, ds, batch_size, enc_kwargs, seed=0):
     raise ValueError(f"Unknown encoder: {encoder_name}")
 
 
-@torch.no_grad()
-def predict(model, loader, cls, device, n_rows):
-    """
-    Predictions for one split, always in dataset order.
-
-    Length bucketing visits molecules out of order, and these arrays are saved to
-    `results/preds/` where every downstream stage reads them positionally against the
-    labels. Concatenating in arrival order would misalign predictions with their labels
-    without raising anything -- the metrics would simply be wrong. So batches that report
-    row indices are scattered back into place, and the result is checked for completeness.
-    """
-    model.eval()
-    out, filled, cursor = None, None, 0
-
-    for batch in loader:
-        inputs, _, idx = split_batch(batch)
-        p = model(to_device(inputs, device)).detach().cpu().numpy()
-        if out is None:
-            out = np.empty((n_rows, p.shape[1]), dtype=np.float64)
-            filled = np.zeros(n_rows, dtype=bool)
-        if idx is None:
-            rows = np.arange(cursor, cursor + p.shape[0])
-            cursor += p.shape[0]
-        else:
-            rows = idx.numpy()
-        out[rows] = p
-        filled[rows] = True
-
-    if not filled.all():
-        raise RuntimeError(
-            f"predict covered {int(filled.sum())} of {n_rows} rows -- some molecules were "
-            "never scored, so predictions would not line up with labels."
-        )
-    return 1.0 / (1.0 + np.exp(-out)) if cls else out
-
-
 def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay,
            enc_kwargs, device=None, embed_dim=EMBED_DIM, head_hidden=EMBED_DIM):
+    """Build one view's model and fit it through the shared loop."""
     seed = set_seed()
     cls = is_classification(ds)
     device = device or pick_device("cpu")
@@ -296,80 +234,14 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
     loaders, y, encoder, train_sampler = build_view(
         encoder_name, ds, batch_size, enc_kwargs, seed=seed
     )
-    n_tasks = y["train"].shape[1]
-    n_train = int(y["train"].shape[0])
+    model = SingleViewModel(encoder, n_tasks=y["train"].shape[1], embed_dim=embed_dim,
+                            head_hidden=head_hidden)
 
-    model = SingleViewModel(encoder, n_tasks=n_tasks, embed_dim=embed_dim,
-                            head_hidden=head_hidden).to(device)
-    # Optimise only what is actually trainable. With LoRA the pretrained encoder is
-    # frozen, and handing frozen tensors to Adam would allocate optimiser state for 44M
-    # parameters that never move.
-    trainable = [p for p in model.parameters() if p.requires_grad]
-    opt = torch.optim.Adam(trainable, lr=lr, weight_decay=weight_decay)
-    pos_w = pos_weight_from_labels(y["train"]).to(device) if cls else None
-
-    n_par = sum(p.numel() for p in model.parameters())
-    n_trainable = sum(p.numel() for p in trainable)
-    print(f"\n=== {ds} ({tag}) [seed={seed}, {device.type}] ===")
-    print(f"  {n_train} train molecules, {n_tasks} task(s), "
-          f"{n_par:,} params ({n_trainable:,} trainable), embedding dim {encoder.out_dim}")
-
-    best_score, best_state, bad, best_ep = float("-inf"), None, 0, 0
-    t0 = time.time()
-
-    for ep in range(1, epochs + 1):
-        model.train()
-        # Re-bucket with a different shuffle each epoch, reproducibly.
-        if train_sampler is not None:
-            train_sampler.set_epoch(ep)
-        total = 0.0
-        for batch in loaders["train"]:
-            inputs, yb, _ = split_batch(batch)
-            logits = model(to_device(inputs, device))
-            yb = yb.to(device)
-            loss = masked_bce(logits, yb, pos_w) if cls else masked_mse(logits, yb)
-            opt.zero_grad()
-            loss.backward()
-            opt.step()
-            total += loss.item()
-
-        p_val = predict(model, loaders["valid"], cls, device, int(y["valid"].shape[0]))
-        m = cls_metrics(y["valid"].numpy(), p_val) if cls else reg_metrics(y["valid"].numpy(), p_val, ds)
-        # One score, higher-is-better, so early stopping is identical for both task types.
-        score = m["auc"] if cls else -m["rmse"]
-
-        if score > best_score:
-            best_score, best_ep, bad = score, ep, 0
-            best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-        else:
-            bad += 1
-
-        if ep % 10 == 0 or ep == 1:
-            key = "val_auc" if cls else "val_rmse"
-            val = m["auc"] if cls else m["rmse"]
-            print(f"  epoch {ep:>3}  loss={total:8.3f}  {key}={val:.4f}")
-
-        if bad >= patience:
-            print(f"  early stop at epoch {ep} (best was {best_ep})")
-            break
-
-    if best_state is not None:
-        model.load_state_dict(best_state)
-    torch.save(checkpoint_state(model), os.path.join(MODELS_DIR, f"{ds}_{tag}.pt"))
-
-    results = {}
-    for split in ("valid", "test"):
-        p = predict(model, loaders[split], cls, device, int(y[split].shape[0]))
-        np.save(os.path.join(PRED_DIR, f"{ds}_{tag}_{split}.npy"), p)
-        m = cls_metrics(y[split].numpy(), p) if cls else reg_metrics(y[split].numpy(), p, ds)
-        pd.DataFrame([m]).to_csv(os.path.join(MET_DIR, f"{ds}_{tag}_{split}.csv"), index=False)
-        results[split] = m
-
-    key = "auc" if cls else "rmse"
-    print(f"  valid {key}={results['valid'][key]:.4f}   test {key}={results['test'][key]:.4f}"
-          f"   ({(time.time() - t0) / 60:.1f} min, best epoch {best_ep})")
-    return {"dataset": ds, "tag": tag, f"valid_{key}": results["valid"][key],
-            f"test_{key}": results["test"][key], "params": n_par, "best_epoch": best_ep}
+    return fit_and_score(
+        model, loaders, y, ds=ds, tag=tag, cls=cls, unpack=split_batch, device=device,
+        epochs=epochs, patience=patience, lr=lr, weight_decay=weight_decay,
+        train_sampler=train_sampler, seed=seed,
+    )
 
 
 def main():
