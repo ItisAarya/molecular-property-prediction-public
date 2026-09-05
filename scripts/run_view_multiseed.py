@@ -47,6 +47,11 @@ ENCODER_OF = {
     "seq_frozen": "seq_frozen",   # frozen ChemBERTa, the matched control for lora
 }
 
+# Fusion variants run through a different trainer but the same loop, splits and archive
+# layout, so they are driven from here rather than from a parallel script.
+FUSION_OF = {f"fuse_{m}": m
+             for m in ("concat", "gated", "xattn", "bilinear", "proposed")}
+
 NOISE = ("DEPRECATION", "Skipped loading", "No normalization", "WARNING",
          "Some weights", "You should probably", "not removing")
 
@@ -71,13 +76,15 @@ def already_done(variant, tag, datasets):
     )
 
 
-def run_tag(tag, log, extra_args=()):
-    """Train one encoder across all datasets for the currently materialised split."""
-    proc = subprocess.run(
-        [sys.executable, "-u", "-m", "src.train.train_view",
-         "--encoder", ENCODER_OF[tag], "--tag", tag, *extra_args],
-        capture_output=True, text=True, errors="replace",
-    )
+def run_tag(tag, log, extra_args=(), seq="cached"):
+    """Train one view or one fusion variant, across all datasets, for the live split."""
+    if tag in FUSION_OF:
+        cmd = [sys.executable, "-u", "-m", "src.train.train_fusion",
+               "--mode", FUSION_OF[tag], "--tag", tag, "--seq", seq, *extra_args]
+    else:
+        cmd = [sys.executable, "-u", "-m", "src.train.train_view",
+               "--encoder", ENCODER_OF[tag], "--tag", tag, *extra_args]
+    proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
     output = proc.stdout + proc.stderr
     for line in output.splitlines():
         if line.strip() and not any(n in line for n in NOISE):
@@ -130,6 +137,10 @@ def main():
                          "changes the protocol, so keep it equal across compared tags.")
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=None)
+    ap.add_argument("--seq", default="cached", choices=["cached", "lora"],
+                    help="fusion tags only: which sequence view to use. cached reuses the "
+                         "frozen Phase 0 embeddings and runs on CPU; lora trains adapters "
+                         "end to end and needs a GPU.")
     ap.add_argument("--keep-going", action="store_true",
                     help="carry on trying a tag that has already failed once. By default "
                          "a tag that fails is dropped from the remaining splits, because "
@@ -153,9 +164,10 @@ def main():
                          "complete -- for restarting after a Colab disconnect")
     args = ap.parse_args()
 
+    known = list(ENCODER_OF) + list(FUSION_OF)
     for t in args.tags:
-        if t not in ENCODER_OF:
-            raise SystemExit(f"unknown tag {t}; known: {list(ENCODER_OF)}")
+        if t not in known:
+            raise SystemExit(f"unknown tag {t}; known: {known}")
 
     log_dir = os.path.join(RESULTS, "logs")
     # The trainer creates these when it runs, but archive() reads results/metrics even if
@@ -169,7 +181,7 @@ def main():
 
     # Clear stale archives first, so the resume check below sees these tags as unfinished.
     if args.redo:
-        unknown = [t for t in args.redo if t not in ENCODER_OF]
+        unknown = [t for t in args.redo if t not in ENCODER_OF and t not in FUSION_OF]
         if unknown:
             raise SystemExit(f"--redo names unknown tag(s): {unknown}")
         removed = 0
@@ -220,7 +232,7 @@ def main():
         with open(os.path.join(log_dir, f"views_{variant}.log"), mode, encoding="utf-8") as log:
             for tag in todo:
                 t0 = time.time()
-                ok = run_tag(tag, log, passthrough)
+                ok = run_tag(tag, log, passthrough, seq=args.seq)
                 print(f"    {tag:<10} {'ok' if ok else 'FAILED':<7} {(time.time() - t0) / 60:5.1f} min")
                 if not ok:
                     failed.append(f"{variant}/{tag}")
