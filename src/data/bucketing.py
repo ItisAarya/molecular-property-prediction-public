@@ -56,6 +56,12 @@ class LengthBucketSampler(Sampler):
     Set `shuffle=False` for validation and test: the order is then deterministic. It is
     still permuted relative to the dataset (that is the point), which is why batches carry
     their indices.
+
+    A trailing batch of one molecule is dropped while shuffling. FreeSolv has 513 training
+    molecules against a batch size of 128, leaving exactly one in the last batch, and any
+    model containing BatchNorm -- the descriptor view does -- raises on it. The cached
+    fusion path never hit this because its sampler already dropped such a batch; the
+    end-to-end path did, on the first dataset it touched.
     """
 
     def __init__(self, lengths, batch_size, shuffle=True, drop_last=False, seed=0):
@@ -87,6 +93,13 @@ class LengthBucketSampler(Sampler):
             for b in range(0, len(chunk), self.batch_size):
                 batch = chunk[b:b + self.batch_size]
                 if self.drop_last and len(batch) < self.batch_size:
+                    continue
+                # A batch of one cannot be trained on when the model contains BatchNorm,
+                # which cannot compute a variance from a single sample. Only shuffling
+                # loaders are training loaders, and this drops at most one molecule per
+                # pool. Evaluation loaders keep every row -- dropping one there would
+                # leave a molecule unscored, which `predict` treats as a hard error.
+                if self.shuffle and len(batch) == 1:
                     continue
                 batches.append(batch.tolist())
 
