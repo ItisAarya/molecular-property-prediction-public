@@ -76,14 +76,21 @@ def already_done(variant, tag, datasets):
     )
 
 
-def run_tag(tag, log, extra_args=(), seq="cached"):
-    """Train one view or one fusion variant, across all datasets, for the live split."""
+def run_tag(tag, log, extra_args=(), seq="cached", out_tag=None):
+    """
+    Train one view or one fusion variant, across all datasets, for the live split.
+
+    `out_tag` is what results are written under; it differs from `tag` when a suffix is in
+    use. The architecture is still looked up by `tag`, so `fuse_proposed_e2e` trains the
+    `proposed` mode and archives under a name that cannot collide with the cached run.
+    """
+    out_tag = out_tag or tag
     if tag in FUSION_OF:
         cmd = [sys.executable, "-u", "-m", "src.train.train_fusion",
-               "--mode", FUSION_OF[tag], "--tag", tag, "--seq", seq, *extra_args]
+               "--mode", FUSION_OF[tag], "--tag", out_tag, "--seq", seq, *extra_args]
     else:
         cmd = [sys.executable, "-u", "-m", "src.train.train_view",
-               "--encoder", ENCODER_OF[tag], "--tag", tag, *extra_args]
+               "--encoder", ENCODER_OF[tag], "--tag", out_tag, *extra_args]
     proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
     output = proc.stdout + proc.stderr
     for line in output.splitlines():
@@ -137,6 +144,11 @@ def main():
                          "changes the protocol, so keep it equal across compared tags.")
     ap.add_argument("--patience", type=int, default=None)
     ap.add_argument("--batch-size", type=int, default=None)
+    ap.add_argument("--tag-suffix", default="", metavar="S",
+                    help="append '_S' to the name results are archived under, while still "
+                         "selecting the architecture by the base tag. Use it when the same "
+                         "architecture is run in a second setting -- the end-to-end fusion "
+                         "runs would otherwise overwrite the cached ones file for file.")
     ap.add_argument("--seq", default="cached", choices=["cached", "lora"],
                     help="fusion tags only: which sequence view to use. cached reuses the "
                          "frozen Phase 0 embeddings and runs on CPU; lora trains adapters "
@@ -190,13 +202,16 @@ def main():
             if not os.path.isdir(dest):
                 continue
             for f in os.listdir(dest):
-                if any(f"_{t}_" in f for t in args.redo):
+                if any(f"_{t}{suffix}_" in f for t in args.redo):
                     os.remove(os.path.join(dest, f))
                     removed += 1
         print(f"--redo {' '.join(args.redo)}: discarded {removed} archived metric file(s)")
 
     # Options handed straight to the trainer. Held identical across tags so the
     # comparison isolates the encoder rather than the training budget.
+    suffix = f"_{args.tag_suffix}" if args.tag_suffix else ""
+    out_tag_of = {t: f"{t}{suffix}" for t in args.tags}
+
     passthrough = ["--device", args.device]
     if args.datasets:
         passthrough += ["--datasets", *args.datasets]
@@ -209,7 +224,7 @@ def main():
         print(f"\n{'=' * 70}\n{variant}\n{'=' * 70}")
         todo = args.tags
         if args.resume:
-            done = [t for t in args.tags if already_done(variant, t, all_datasets)]
+            done = [t for t in args.tags if already_done(variant, out_tag_of[t], all_datasets)]
             todo = [t for t in args.tags if t not in done]
             for t in done:
                 print(f"    {t:<10} already complete, skipping")
@@ -232,13 +247,13 @@ def main():
         with open(os.path.join(log_dir, f"views_{variant}.log"), mode, encoding="utf-8") as log:
             for tag in todo:
                 t0 = time.time()
-                ok = run_tag(tag, log, passthrough, seq=args.seq)
+                ok = run_tag(tag, log, passthrough, seq=args.seq, out_tag=out_tag_of[tag])
                 print(f"    {tag:<10} {'ok' if ok else 'FAILED':<7} {(time.time() - t0) / 60:5.1f} min")
                 if not ok:
                     failed.append(f"{variant}/{tag}")
                     broken.add(tag)
 
-        dest, n = archive(variant, args.tags)
+        dest, n = archive(variant, [out_tag_of[t] for t in args.tags])
         print(f"  archived {n} metric files -> {dest}")
 
     if args.restore != "none":
@@ -249,7 +264,7 @@ def main():
         # under results/runs/ are authoritative, so remove the ambiguous working copies.
         removed = 0
         for f in os.listdir(MET_DIR):
-            if f.endswith(".csv") and any(f"_{t}_" in f for t in args.tags):
+            if f.endswith(".csv") and any(f"_{out_tag_of[t]}_" in f for t in args.tags):
                 os.remove(os.path.join(MET_DIR, f))
                 removed += 1
         print(f"\nremoved {removed} stale working-copy metric file(s) from {MET_DIR}/")
