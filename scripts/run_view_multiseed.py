@@ -38,6 +38,7 @@ from src.data.materialize import active_variant, materialize
 RESULTS = "results"
 RUNS_DIR = os.path.join(RESULTS, "runs")
 MET_DIR = os.path.join(RESULTS, "metrics")
+PRED_DIR = os.path.join(RESULTS, "preds")
 
 ENCODER_OF = {
     "gin_ref": "gin",        # the inherited 2-layer GIN, as an ablation reference
@@ -119,16 +120,34 @@ def archive(variant, tags):
     contains `_gine_` -- so every split archive gained a copy of a cross-split summary
     that does not belong to any one split.
     """
+    datasets = datasets_on_disk()
+    splits = ("valid", "test")
+
     dest = os.path.join(RUNS_DIR, variant, "metrics")
     os.makedirs(dest, exist_ok=True)
-    wanted = {f"{ds}_{t}_{sp}.csv"
-              for ds in datasets_on_disk() for t in tags for sp in ("valid", "test")}
+    wanted = {f"{ds}_{t}_{sp}.csv" for ds in datasets for t in tags for sp in splits}
 
     n = 0
     for f in os.listdir(MET_DIR):
         if f in wanted:
             shutil.copy2(os.path.join(MET_DIR, f), os.path.join(dest, f))
             n += 1
+
+    # Predictions too, not just metrics.
+    #
+    # These were metrics-only, which meant per-split predictions for the view and fusion
+    # models were never kept -- results/preds/ held only whichever variant happened to run
+    # last. Conformal prediction and calibration both work from saved predictions, so
+    # Phase 3 could not be applied to any model trained after Phase 0 without retraining
+    # everything. The metrics are a summary; the predictions are the evidence.
+    pred_dest = os.path.join(RUNS_DIR, variant, "preds")
+    os.makedirs(pred_dest, exist_ok=True)
+    wanted_p = {f"{ds}_{t}_{sp}.npy" for ds in datasets for t in tags for sp in splits}
+    for f in os.listdir(PRED_DIR):
+        if f in wanted_p:
+            shutil.copy2(os.path.join(PRED_DIR, f), os.path.join(pred_dest, f))
+            n += 1
+
     return dest, n
 
 
@@ -184,7 +203,7 @@ def main():
     log_dir = os.path.join(RESULTS, "logs")
     # The trainer creates these when it runs, but archive() reads results/metrics even if
     # every tag failed before getting that far -- which turned one failure into two.
-    for d in (log_dir, MET_DIR, RUNS_DIR):
+    for d in (log_dir, MET_DIR, PRED_DIR, RUNS_DIR):
         os.makedirs(d, exist_ok=True)
     started = time.time()
     failed = []
