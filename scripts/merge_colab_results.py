@@ -84,8 +84,21 @@ def main():
                     help="report what would be copied without writing anything")
     args = ap.parse_args()
 
+    # Expand ~ ourselves. Neither cmd.exe nor PowerShell expands it in an argument to a
+    # native command, so it arrives here as a literal directory name and the file is
+    # reported missing when it is sitting right there.
+    args.zip_path = os.path.expanduser(args.zip_path)
+
     if not os.path.exists(args.zip_path):
-        raise SystemExit(f"Not found: {args.zip_path}")
+        hint = ""
+        folder = os.path.dirname(args.zip_path) or "."
+        if os.path.isdir(folder):
+            near = sorted(f for f in os.listdir(folder) if f.endswith(".zip"))
+            if near:
+                hint = (chr(10) + chr(10) + "Zip files in that folder:" + chr(10)
+                        + chr(10).join("  " + f for f in near))
+        raise SystemExit(f"Not found: {args.zip_path}{hint}")
+
     if not os.path.isdir(RUNS_DIR):
         raise SystemExit(f"{RUNS_DIR} does not exist -- run this from the project root.")
 
