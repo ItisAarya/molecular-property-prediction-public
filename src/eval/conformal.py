@@ -64,6 +64,7 @@ import os
 import numpy as np
 import pandas as pd
 
+from src.eval.calibration import apply_map, fit_logistic, fit_temperature
 from src.eval.metrics import is_classification
 from src.eval.similarity import distance_bins, nearest_train_similarity
 
@@ -242,7 +243,47 @@ def load_preds(ds, variant, tag):
     return out
 
 
-def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_test=None):
+def recalibrate(y_cal, p_cal, p_test, kind):
+    """
+    Fit a probability calibration map on the calibration split, apply it to both.
+
+    TEMPERATURE SCALING CANNOT CHANGE A CONFORMAL SET. Verified numerically and true by
+    construction: the conformal score is 1-p for an active and p for an inactive, and the
+    sigmoid temperature map is symmetric about 0.5, g(1-p) = 1-g(p) to machine precision.
+    So both classes' scores pass through the *same* strictly increasing map, the quantile
+    moves with them, and every `score <= q` comparison is preserved. Split conformal is
+    invariant to monotone transformations of its score, so the sets come back bit for bit
+    identical even though the probabilities themselves changed by up to 0.02.
+
+    It is kept as an option precisely to make that visible: "calibrate, then conformalise"
+    is a natural thing to try and, for binary tasks with this score, it is wasted effort.
+
+    Platt/logistic scaling is different. Its intercept breaks the symmetry, so the two
+    classes' scores move differently and the sets genuinely change -- substantially, in
+    favour of the minority class, because `fit_logistic` is fitted with balanced class
+    weights. That is a real effect but an accidental one: `--conditional` reaches the same
+    place deliberately and keeps the guarantee.
+    """
+    ok = np.isfinite(y_cal) & np.isfinite(p_cal)
+    if kind == "none" or ok.sum() < 10 or len(np.unique(y_cal[ok])) < 2:
+        return p_cal, p_test
+    try:
+        if kind == "temperature":
+            method = {"kind": "temperature", "T": fit_temperature(p_cal[ok], y_cal[ok])}
+        else:
+            fit = fit_logistic(p_cal[ok], y_cal[ok])
+            if fit is None:
+                return p_cal, p_test
+            method = {"kind": "logistic", "a": fit[0], "b": fit[1]}
+        return apply_map(p_cal, method), apply_map(p_test, method)
+    except Exception:
+        # A fit that will not converge is not worth failing the run over; the
+        # uncalibrated probabilities are a valid conformal input either way.
+        return p_cal, p_test
+
+
+def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_test=None,
+             calibrate="none"):
     """Conformal behaviour for one model on one split variant."""
     preds = load_preds(ds, variant, tag)
     if preds is None:
@@ -252,8 +293,10 @@ def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_
         y = load_labels(ds, variant, raw=False)
         rows = []
         for t in range(y["valid"].shape[1]):
-            r = binary_sets(y["valid"][:, t], preds["valid"][:, t],
-                            y["test"][:, t], preds["test"][:, t],
+            pc, pt = preds["valid"][:, t], preds["test"][:, t]
+            if calibrate != "none":
+                pc, pt = recalibrate(y["valid"][:, t], pc, pt, calibrate)
+            r = binary_sets(y["valid"][:, t], pc, y["test"][:, t], pt,
                             alpha, conditional=conditional, mask_test=mask_test)
             if r:
                 rows.append(r)
@@ -283,14 +326,15 @@ def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_
 # --------------------------------------------------------------------------------------
 # Reporting
 # --------------------------------------------------------------------------------------
-def by_distance(ds, variant, tag, alpha, score, conditional):
+def by_distance(ds, variant, tag, alpha, score, conditional, calibrate="none"):
     """Coverage split by Tanimoto distance from the nearest training molecule."""
     sim = nearest_train_similarity(ds, variant, "test")
     out = []
     for label, mask in distance_bins(sim):
         if mask.sum() < 10:
             continue
-        r = evaluate(ds, variant, tag, alpha, score, conditional, mask_test=mask)
+        r = evaluate(ds, variant, tag, alpha, score, conditional, mask_test=mask,
+                     calibrate=calibrate)
         if r:
             r["band"] = label
             r["n_band"] = int(mask.sum())
@@ -312,6 +356,11 @@ def main():
     ap.add_argument("--conditional", action="store_true",
                     help="fit a separate quantile per class, so coverage holds within "
                          "each class rather than only on average")
+    ap.add_argument("--calibrate", default="none",
+                    choices=["none", "temperature", "logistic"],
+                    help="classification only: recalibrate probabilities on the "
+                         "calibration split before conformal. `temperature` provably "
+                         "changes nothing (see recalibrate); `logistic` does.")
     ap.add_argument("--by-distance", action="store_true",
                     help="report coverage by Tanimoto similarity to the nearest "
                          "training molecule")
@@ -328,7 +377,8 @@ def main():
             if args.by_distance:
                 per = []
                 for v in args.variants:
-                    per += by_distance(ds, v, tag, args.alpha, args.score, args.conditional)
+                    per += by_distance(ds, v, tag, args.alpha, args.score,
+                                       args.conditional, args.calibrate)
                 if not per:
                     missing.append(f"{tag}/{ds}")
                     continue
@@ -344,8 +394,8 @@ def main():
                     rows.append(agg)
                 continue
 
-            per = [evaluate(ds, v, tag, args.alpha, args.score, args.conditional)
-                   for v in args.variants]
+            per = [evaluate(ds, v, tag, args.alpha, args.score, args.conditional,
+                            calibrate=args.calibrate) for v in args.variants]
             per = [r for r in per if r]
             if not per:
                 missing.append(f"{tag}/{ds}")
@@ -389,8 +439,9 @@ def main():
         print()
 
     os.makedirs(MET_DIR, exist_ok=True)
-    suffix = ("_bydistance" if args.by_distance
-              else ("_conditional" if args.conditional else f"_{args.score}"))
+    suffix = (f"_{args.calibrate}" if args.calibrate != "none" else "") + (
+             "_bydistance" if args.by_distance
+             else ("_conditional" if args.conditional else f"_{args.score}"))
     out = os.path.join(MET_DIR, f"conformal_alpha{args.alpha:g}{suffix}.csv")
     df.to_csv(out, index=False)
     print(f"Wrote {out}")
