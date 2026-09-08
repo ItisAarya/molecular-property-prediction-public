@@ -143,6 +143,9 @@ def archive(variant, tags):
     pred_dest = os.path.join(RUNS_DIR, variant, "preds")
     os.makedirs(pred_dest, exist_ok=True)
     wanted_p = {f"{ds}_{t}_{sp}.npy" for ds in datasets for t in tags for sp in splits}
+    # Fusion gate attributions, where the variant has a gate.
+    wanted_p |= {f"{ds}_{t}_{sp}_gate.npy"
+                 for ds in datasets for t in tags for sp in splits}
     for f in os.listdir(PRED_DIR):
         if f in wanted_p:
             shutil.copy2(os.path.join(PRED_DIR, f), os.path.join(pred_dest, f))

@@ -55,7 +55,7 @@ from src.models.encoders.descriptor import DescriptorEncoder
 from src.models.fusion import MODES
 from src.models.heads import EMBED_DIM
 from src.models.multiview import MultiViewModel
-from src.train.loop import MET_DIR, fit_and_score
+from src.train.loop import MET_DIR, PRED_DIR, fit_and_score, to_device
 from src.utils.seed import set_seed
 
 DATA_DIR = "data"
@@ -234,6 +234,41 @@ def build_encoders(parts, seq_mode, graph_encoder, hidden, dropout):
     return {name: encoders[name] for name in VIEW_ORDER}
 
 
+@torch.no_grad()
+def save_gate_weights(model, loaders, y, device, ds, tag):
+    """
+    Record the per-molecule view weights the gate assigned, for valid and test.
+
+    These are the interpretability output: which representation a given molecule -- and,
+    aggregated, a given dataset -- actually leans on. They are produced during the forward
+    pass and otherwise discarded, and the checkpoint on disk only ever holds the last split
+    trained, so unless they are written here they cannot be recovered without retraining.
+
+    Rows are scattered back by index for the same reason predictions are: the loader may
+    visit molecules out of order, and a silently permuted attribution would be worse than
+    none at all.
+    """
+    model.eval()
+    for split in ("valid", "test"):
+        n = int(y[split].shape[0])
+        out, filled = None, np.zeros(n, dtype=bool)
+        for batch in loaders[split]:
+            views, _, idx = unpack(batch)
+            model(to_device(views, device))
+            w = model.view_weights()
+            if w is None:
+                return None
+            w = w.detach().cpu().numpy()
+            if out is None:
+                out = np.empty((n, w.shape[1]), dtype=np.float32)
+            out[idx] = w
+            filled[idx] = True
+        if out is None or not filled.all():
+            return None
+        np.save(os.path.join(PRED_DIR, f"{ds}_{tag}_{split}_gate.npy"), out)
+    return model.view_names
+
+
 def run_ds(ds, args, device):
     seed = set_seed()
     cls = is_classification(ds)
@@ -250,12 +285,20 @@ def run_ds(ds, args, device):
                            d=args.embed_dim, rank=args.rank, n_layers=args.xattn_layers,
                            n_heads=args.xattn_heads)
 
-    return fit_and_score(
+    row = fit_and_score(
         model, loaders, y, ds=ds, tag=args.tag, cls=cls, unpack=unpack, device=device,
         epochs=args.epochs, patience=args.patience, lr=args.lr,
         weight_decay=args.weight_decay, train_sampler=train_sampler, seed=seed,
         extra={"mode": args.mode, "seq": args.seq},
     )
+
+    # fit_and_score restores the best epoch's weights in place, so the model is now the
+    # one that produced the reported numbers -- which is the one whose attributions are
+    # worth keeping.
+    names = save_gate_weights(model, loaders, y, device, ds, args.tag)
+    if names:
+        row["gate_views"] = "|".join(names)
+    return row
 
 
 def main():
