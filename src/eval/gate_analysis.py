@@ -81,11 +81,16 @@ def main():
     ap.add_argument("--tag", default="fuse_gated")
     ap.add_argument("--datasets", nargs="+", default=None)
     ap.add_argument("--variants", nargs="+", default=[f"seed{i}" for i in range(5)])
+    ap.add_argument("--views", nargs="+", default=list(VIEW_NAMES), choices=list(VIEW_NAMES),
+                    help="which views this tag was trained with, in order. A "
+                         "leave-one-view-out run has fewer gate columns, and labelling "
+                         "them wrong would silently mislabel the whole attribution.")
     ap.add_argument("--by-distance", action="store_true")
     args = ap.parse_args()
 
     pool_index = json.load(open(os.path.join(POOL_DIR, "pool_index.json")))
     datasets = args.datasets or list(pool_index)
+    views = tuple(v for v in VIEW_NAMES if v in args.views)
 
     rows, missing = [], []
     for ds in datasets:
@@ -100,7 +105,7 @@ def main():
                         continue
                     rows.append({"dataset": ds, "band": label, "n": int(mask.sum()),
                                  **{v: float(w[mask, i].mean())
-                                    for i, v in enumerate(VIEW_NAMES)}})
+                                    for i, v in enumerate(views)}})
             continue
 
         per = [load_gate(ds, v, args.tag) for v in args.variants]
@@ -110,13 +115,15 @@ def main():
             continue
         means = np.stack([w.mean(axis=0) for w in per])          # (splits, views)
         row = {"dataset": ds, "n_splits": len(per)}
-        for i, v in enumerate(VIEW_NAMES):
+        for i, v in enumerate(views):
             row[v] = float(means[:, i].mean())
             row[f"{v}_ci"] = float(2.776 * means[:, i].std(ddof=1) / np.sqrt(len(per))) \
                 if len(per) > 1 else np.nan
-        row["gate_prefers"] = VIEW_NAMES[int(np.argmax(means.mean(axis=0)))]
-        row["best_alone"] = best_single_view(ds, args.variants)
-        row["agrees"] = row["gate_prefers"] == row["best_alone"]
+        row["gate_prefers"] = views[int(np.argmax(means.mean(axis=0)))]
+        best = best_single_view(ds, args.variants)
+        # Only compare against views this run actually had.
+        row["best_alone"] = best if best in views else f"{best} (excluded)"
+        row["agrees"] = row["gate_prefers"] == best
         rows.append(row)
 
     if not rows:
@@ -130,20 +137,20 @@ def main():
     if args.by_distance:
         print(f"Gate attribution by distance to the training set ({args.tag})\n")
         print(f"{'dataset':<15}{'similarity':<12}{'n':>6}" +
-              "".join(f"{v:>9}" for v in VIEW_NAMES))
+              "".join(f"{v:>9}" for v in views))
         for ds in df.dataset.unique():
             sub = df[df.dataset == ds]
             for band in sorted(sub.band.unique()):
                 b = sub[sub.band == band]
                 print(f"{ds:<15}{band:<12}{b.n.mean():>6.0f}" +
-                      "".join(f"{b[v].mean():>9.3f}" for v in VIEW_NAMES))
+                      "".join(f"{b[v].mean():>9.3f}" for v in views))
     else:
         print(f"Mean gate weight per view ({args.tag}), "
               f"mean +/- 95% CI over {len(args.variants)} seeded splits\n")
-        print(f"{'dataset':<15}" + "".join(f"{v:>18}" for v in VIEW_NAMES) +
+        print(f"{'dataset':<15}" + "".join(f"{v:>18}" for v in views) +
               f"{'gate prefers':>14}{'best alone':>12}{'':>4}")
         for _, r in df.iterrows():
-            cells = "".join(f"{r[v]:>11.3f}+-{r[f'{v}_ci']:.3f}" for v in VIEW_NAMES)
+            cells = "".join(f"{r[v]:>11.3f}+-{r[f'{v}_ci']:.3f}" for v in views)
             mark = "" if r.agrees else "  <- disagrees"
             print(f"{r.dataset:<15}{cells}{r.gate_prefers:>14}{str(r.best_alone):>12}{mark}")
         n_agree = int(df.agrees.sum())
