@@ -1,0 +1,86 @@
+# configs/shared.yaml
+#
+# The one hyper-parameter setting every model in this project was trained under.
+#
+# THIS FILE IS THE CLAIM, AND scripts/check_configs.py IS THE PROOF.
+#
+# Every comparison in the results tables rests on a single sentence: "one fixed
+# hyper-parameter setting, held identical across models, which is what makes the
+# comparisons fair but leaves the absolute numbers untuned." That sentence is only worth
+# anything if the setting is written down somewhere a reader can check, and if it cannot
+# drift away from the code without something failing.
+#
+# So these values are not read at training time as overrides -- they are asserted against
+# the trainers' own argparse defaults by `python -m scripts.check_configs`. If someone
+# changes a default in `src/train/train_view.py` and does not change it here, the check
+# fails and the discrepancy is caught before it reaches a results table. Committing to a
+# config the code merely *might* read would be weaker: nothing would notice the drift.
+#
+# Optuna (02_ENHANCEMENT_PLAN.md section 4.3) has never been run. See src/tune/ for the
+# study that would do it and why it has not been.
+
+training:
+  epochs: 100          # upper bound; every run early-stops well before this
+  patience: 15         # epochs without validation improvement before stopping
+  batch_size: 128
+  lr: 0.001
+  weight_decay: 0.0001
+
+# The width every view is projected to before the head, and the head's hidden width.
+# Held identical on purpose: sizing the head from each encoder's natural output was a
+# real confound (Sessions 9-10) -- the sequence views were training a 2.36M-parameter
+# head against a 147k-parameter adapter, so "which representation is better" was partly
+# "which one got the bigger head".
+representation:
+  embed_dim: 256
+  head_hidden: 256
+  hidden: 256
+
+encoders:
+  gine:
+    layers: 4
+    readout: mean+sum
+    residual: true
+    jk: false
+    dropout: 0.3
+  gin:                 # the inherited 2-layer reference; shape is fixed by the original
+    dropout: 0.3
+  attentivefp:         # external baseline, published MoleculeNet defaults
+    layers: 4
+    timesteps: 2
+    dropout: 0.3
+  desc:
+    dropout: 0.3
+    use_ecfp: true
+    use_descriptors: true
+  seq_frozen:
+    pooling: cls+mean
+  lora:
+    pooling: cls+mean
+    lora_r: 8
+    lora_alpha: 16
+    lora_dropout: 0.1
+
+fusion:
+  dropout: 0.3
+  rank: 64             # low-rank bilinear projection rank
+  xattn_layers: 2
+  xattn_heads: 4
+  graph_encoder: gine
+  seq: cached          # `cached` frozen embeddings; `lora` is the end-to-end setting
+
+conformal:
+  alpha: 0.1           # nominal 90% coverage
+  raps_lambda: 0.1
+  raps_k_reg: 1
+
+evaluation:
+  variants: [deepchem, seed0, seed1, seed2, seed3, seed4]
+  # The canonical DeepChem split is reported alongside the five seeded ones, never
+  # instead of them: they differ by up to 0.18 AUC on the same model and code.
+  seeded_variants: [seed0, seed1, seed2, seed3, seed4]
+  alpha: 0.05                    # per-test significance level
+  correction: holm               # family-wise correction across the 8 datasets
+  min_detectable_effect:
+    auc: 0.02
+    rmse: 0.10
