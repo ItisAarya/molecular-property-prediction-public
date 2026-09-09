@@ -53,6 +53,17 @@ ENCODER_OF = {
 FUSION_OF = {f"fuse_{m}": m
              for m in ("concat", "gated", "xattn", "bilinear", "proposed")}
 
+# Leave-one-view-out ablations. The gate gives the graph view 0.4-1.1% of the weight on
+# every dataset, which suggests it is redundant -- but a low weight only says the gate
+# routed little through, not that nothing was lost. Retraining without each view is what
+# actually answers that.
+FUSION_VIEWS = {
+    "fuse_gated_nograph": ("gated", ["seq", "desc"]),
+    "fuse_gated_noseq": ("gated", ["graph", "desc"]),
+    "fuse_gated_nodesc": ("gated", ["graph", "seq"]),
+}
+FUSION_OF.update({tag: mode for tag, (mode, _) in FUSION_VIEWS.items()})
+
 NOISE = ("DEPRECATION", "Skipped loading", "No normalization", "WARNING",
          "Some weights", "You should probably", "not removing")
 
@@ -88,7 +99,10 @@ def run_tag(tag, log, extra_args=(), seq="cached", out_tag=None):
     out_tag = out_tag or tag
     if tag in FUSION_OF:
         cmd = [sys.executable, "-u", "-m", "src.train.train_fusion",
-               "--mode", FUSION_OF[tag], "--tag", out_tag, "--seq", seq, *extra_args]
+               "--mode", FUSION_OF[tag], "--tag", out_tag, "--seq", seq]
+        if tag in FUSION_VIEWS:
+            cmd += ["--views", *FUSION_VIEWS[tag][1]]
+        cmd += list(extra_args)
     else:
         cmd = [sys.executable, "-u", "-m", "src.train.train_view",
                "--encoder", ENCODER_OF[tag], "--tag", out_tag, *extra_args]

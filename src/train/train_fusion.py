@@ -66,20 +66,28 @@ VIEW_ORDER = ("graph", "seq", "desc")
 # --------------------------------------------------------------------------------------
 # Loading
 # --------------------------------------------------------------------------------------
-def load_split(ds, split, seq_mode):
-    """Every view for one split, plus labels. Row i is the same molecule in all of them."""
-    ecfp = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_ecfp.npz"), allow_pickle=True)
-    desc = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_desc.npz"), allow_pickle=True)
-    graphs = torch.load(os.path.join(DATA_DIR, f"{ds}_{split}_graphs.pt"),
-                        weights_only=False)["graphs"]
+def load_split(ds, split, seq_mode, views=VIEW_ORDER):
+    """
+    The requested views for one split, plus labels. Row i is the same molecule in all.
 
+    `ecfp` is always read: it carries the labels and the SMILES the alignment check uses,
+    whichever views are active.
+    """
+    ecfp = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_ecfp.npz"), allow_pickle=True)
     out = {
         "ecfp": torch.tensor(ecfp["X"], dtype=torch.float32),
-        "desc": torch.tensor(desc["X"], dtype=torch.float32),
-        "graphs": graphs,
         "y": torch.tensor(ecfp["y"], dtype=torch.float32),
         "smiles": [str(s) for s in ecfp["smiles"]],
     }
+
+    if "desc" in views:
+        desc = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_desc.npz"), allow_pickle=True)
+        out["desc"] = torch.tensor(desc["X"], dtype=torch.float32)
+    if "graph" in views:
+        out["graphs"] = torch.load(os.path.join(DATA_DIR, f"{ds}_{split}_graphs.pt"),
+                                   weights_only=False)["graphs"]
+    if "seq" not in views:
+        return out
 
     if seq_mode == "cached":
         emb = np.load(os.path.join(DATA_DIR, f"{ds}_{split}_chemberta.npz"))
@@ -105,18 +113,20 @@ def check_alignment(parts):
     for split, p in parts.items():
         n = len(p["smiles"])
         assert p["ecfp"].shape[0] == n, f"{split}: ecfp rows != molecules"
-        assert p["desc"].shape[0] == n, f"{split}: descriptor rows != molecules"
-        assert len(p["graphs"]) == n, f"{split}: graph count != molecules"
         assert p["y"].shape[0] == n, f"{split}: label rows != molecules"
+        if "desc" in p:
+            assert p["desc"].shape[0] == n, f"{split}: descriptor rows != molecules"
         if "seq" in p:
             assert p["seq"].shape[0] == n, f"{split}: cached embedding rows != molecules"
-        else:
+        elif "input_ids" in p:
             assert p["input_ids"].shape[0] == n, f"{split}: token rows != molecules"
-        # The graph objects carry their own labels; they must match the label matrix.
-        ymat = torch.stack([g.y for g in p["graphs"]])
-        both = ~(torch.isnan(ymat) | torch.isnan(p["y"]))
-        assert torch.allclose(ymat[both], p["y"][both]), \
-            f"{split}: graph labels disagree with the label matrix -- views are misaligned"
+        if "graphs" in p:
+            assert len(p["graphs"]) == n, f"{split}: graph count != molecules"
+            # The graph objects carry their own labels; they must match the matrix.
+            ymat = torch.stack([g.y for g in p["graphs"]])
+            both = ~(torch.isnan(ymat) | torch.isnan(p["y"]))
+            assert torch.allclose(ymat[both], p["y"][both]), (
+                f"{split}: graph labels disagree with the label matrix -- misaligned")
     return True
 
 
@@ -136,22 +146,31 @@ class _IndexDataset(Dataset):
         return i
 
 
-def make_collate(part, seq_mode):
-    """Build one batch of all three views from a list of row indices."""
-    from torch_geometric.data import Batch
+def make_collate(part, seq_mode, active=VIEW_ORDER):
+    """
+    Build one batch of the active views from a list of row indices.
+
+    torch_geometric is imported only when the graph view is active, so a leave-one-out run
+    that drops it needs no PyG at all -- which also makes that ablation runnable anywhere
+    the sequence-only notebook runs.
+    """
+    if "graph" in active:
+        from torch_geometric.data import Batch
 
     def collate(indices):
         idx = torch.as_tensor(indices, dtype=torch.long)
-        views = {
-            "graph": Batch.from_data_list([part["graphs"][int(i)] for i in idx]),
-            "desc": (part["ecfp"][idx], part["desc"][idx]),
-        }
-        if seq_mode == "cached":
-            views["seq"] = part["seq"][idx]
-        else:
-            mask = part["attention_mask"][idx]
-            width = max(int(mask.sum(dim=1).max().item()), 1)
-            views["seq"] = (part["input_ids"][idx][:, :width], mask[:, :width])
+        views = {}
+        if "graph" in active:
+            views["graph"] = Batch.from_data_list([part["graphs"][int(i)] for i in idx])
+        if "desc" in active:
+            views["desc"] = (part["ecfp"][idx], part["desc"][idx])
+        if "seq" in active:
+            if seq_mode == "cached":
+                views["seq"] = part["seq"][idx]
+            else:
+                mask = part["attention_mask"][idx]
+                width = max(int(mask.sum(dim=1).max().item()), 1)
+                views["seq"] = (part["input_ids"][idx][:, :width], mask[:, :width])
         return views, part["y"][idx], idx.numpy()
 
     return collate
@@ -162,7 +181,7 @@ def unpack(batch):
     return batch[0], batch[1], batch[2]
 
 
-def build_loaders(parts, batch_size, seq_mode, seed):
+def build_loaders(parts, batch_size, seq_mode, seed, active=VIEW_ORDER):
     loaders, train_sampler = {}, None
     for split in SPLITS:
         n = len(parts[split]["smiles"])
@@ -180,7 +199,7 @@ def build_loaders(parts, batch_size, seq_mode, seed):
             train_sampler = sampler
         loaders[split] = DataLoader(
             _IndexDataset(n), batch_sampler=sampler,
-            collate_fn=make_collate(parts[split], seq_mode))
+            collate_fn=make_collate(parts[split], seq_mode, active))
     return loaders, train_sampler
 
 
@@ -215,23 +234,27 @@ class _PlainBatchSampler:
 # --------------------------------------------------------------------------------------
 # Model
 # --------------------------------------------------------------------------------------
-def build_encoders(parts, seq_mode, graph_encoder, hidden, dropout):
-    from src.models.encoders.graph import build_graph_encoder
-
+def build_encoders(parts, seq_mode, graph_encoder, hidden, dropout, active=VIEW_ORDER):
     train = parts["train"]
-    encoders = {
-        "graph": build_graph_encoder(graph_encoder, in_dim=train["graphs"][0].x.size(1),
-                                     hidden=hidden),
-        "desc": DescriptorEncoder.fit(train["ecfp"], train["desc"], hidden=hidden,
-                                      dropout=dropout),
-    }
-    if seq_mode == "cached":
-        encoders["seq"] = CachedEmbeddingEncoder(train["seq"].shape[1])
-    else:
-        from src.models.encoders.sequence import SequenceEncoder
-        encoders["seq"] = SequenceEncoder(lora_r=8)
-    # Fixed order, so the gate's weight columns always mean the same thing.
-    return {name: encoders[name] for name in VIEW_ORDER}
+    encoders = {}
+
+    if "graph" in active:
+        from src.models.encoders.graph import build_graph_encoder
+        encoders["graph"] = build_graph_encoder(
+            graph_encoder, in_dim=train["graphs"][0].x.size(1), hidden=hidden)
+    if "desc" in active:
+        encoders["desc"] = DescriptorEncoder.fit(
+            train["ecfp"], train["desc"], hidden=hidden, dropout=dropout)
+    if "seq" in active:
+        if seq_mode == "cached":
+            encoders["seq"] = CachedEmbeddingEncoder(train["seq"].shape[1])
+        else:
+            from src.models.encoders.sequence import SequenceEncoder
+            encoders["seq"] = SequenceEncoder(lora_r=8)
+
+    # Fixed order, so the gate's weight columns always mean the same thing -- and so a
+    # leave-one-out run's columns line up with the corresponding subset of a full run's.
+    return {name: encoders[name] for name in VIEW_ORDER if name in encoders}
 
 
 @torch.no_grad()
@@ -273,14 +296,16 @@ def run_ds(ds, args, device):
     seed = set_seed()
     cls = is_classification(ds)
 
-    parts = {s: load_split(ds, s, args.seq) for s in SPLITS}
+    active = tuple(v for v in VIEW_ORDER if v in args.views)
+    parts = {s: load_split(ds, s, args.seq, active) for s in SPLITS}
     if args.check_alignment:
         check_alignment(parts)
 
-    loaders, train_sampler = build_loaders(parts, args.batch_size, args.seq, seed)
+    loaders, train_sampler = build_loaders(parts, args.batch_size, args.seq, seed, active)
     y = {s: parts[s]["y"] for s in SPLITS}
 
-    encoders = build_encoders(parts, args.seq, args.graph_encoder, args.hidden, args.dropout)
+    encoders = build_encoders(parts, args.seq, args.graph_encoder, args.hidden,
+                              args.dropout, active)
     model = MultiViewModel(encoders, mode=args.mode, n_tasks=y["train"].shape[1],
                            d=args.embed_dim, rank=args.rank, n_layers=args.xattn_layers,
                            n_heads=args.xattn_heads)
@@ -289,7 +314,7 @@ def run_ds(ds, args, device):
         model, loaders, y, ds=ds, tag=args.tag, cls=cls, unpack=unpack, device=device,
         epochs=args.epochs, patience=args.patience, lr=args.lr,
         weight_decay=args.weight_decay, train_sampler=train_sampler, seed=seed,
-        extra={"mode": args.mode, "seq": args.seq},
+        extra={"mode": args.mode, "seq": args.seq, "views": "|".join(active)},
     )
 
     # fit_and_score restores the best epoch's weights in place, so the model is now the
@@ -309,6 +334,11 @@ def main():
     ap.add_argument("--seq", default="cached", choices=["cached", "lora"],
                     help="cached = frozen ChemBERTa vectors from Phase 0 (CPU-friendly); "
                          "lora = train adapters end to end (needs a GPU)")
+    ap.add_argument("--views", nargs="+", default=list(VIEW_ORDER),
+                    choices=list(VIEW_ORDER),
+                    help="which views to fuse. Dropping one is the leave-one-view-out "
+                         "ablation: it answers whether that view carries anything the "
+                         "others do not, which a gate weight on its own cannot.")
     ap.add_argument("--graph-encoder", default="gine", choices=["gine", "gin"])
     ap.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
     ap.add_argument("--epochs", type=int, default=100)
