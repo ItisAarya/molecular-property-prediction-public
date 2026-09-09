@@ -47,6 +47,15 @@ the plain version hides a different failure:
    missed on the rest, which inverts the point of the split. Splitting coverage by Tanimoto
    distance to the nearest training molecule turns that into a measurement.
 
+4. **Answering "either"** (`--set-score`). A binary prediction set containing *both* classes
+   is trivially correct and says nothing. `02_ENHANCEMENT_PLAN.md` §8 named RAPS for this
+   module; RAPS and APS are implemented and measured, and both are unusable here -- on
+   Tox21 with `rf` at a nominal 90%, APS reaches 99.9% coverage at a mean set size of 1.98
+   out of a maximum of 2, and RAPS 96.5% at 1.27, against LAC's 90.7% at 0.98. APS and RAPS
+   are designed for many-class problems where ranking down the class list is informative;
+   with two classes the cumulative score has nowhere to go. LAC (Sadinle 2019) is what this
+   project reports, and the substitution is a measured choice rather than an omission.
+
 WHY THE QUANTILE HAS THE +1
 ---------------------------
 With n calibration points the threshold is the ceil((n+1)(1-alpha))-th smallest score, not
@@ -132,6 +141,50 @@ def regression_intervals(y_cal, p_cal, y_test, p_test, alpha=0.1,
     }
 
 
+def cqr_intervals(y_cal, lo_cal, hi_cal, y_test, lo_test, hi_test, alpha=0.1,
+                  mask_test=None):
+    """
+    Conformalized Quantile Regression (Romano, Patterson & Candes 2019).
+
+    The model already predicts an interval [lo, hi] from the pinball loss. CQR asks only
+    how wrong that interval is, through the conformity score
+
+        E = max(lo - y,  y - hi)
+
+    which is negative when the truth is comfortably inside, and equal to the distance
+    outside when it is not. The calibrated interval is [lo - Q, hi + Q] for Q the usual
+    conformal quantile of E. Note that Q can be **negative**: if the quantile model was
+    already too conservative, CQR tightens the interval rather than padding it, which the
+    residual-based scores in this module cannot do.
+
+    Why it matters here: `--score absolute` gives every molecule the same width, and
+    `--score normalized` varies width by how much three base models disagree -- a proxy.
+    CQR varies width by what the model itself believes about *this* molecule's conditional
+    spread, which is the thing the width was supposed to mean all along. Whether that
+    actually beats the disagreement proxy on these datasets is an empirical question and
+    the reason both are implemented.
+    """
+    ok_cal = np.isfinite(y_cal) & np.isfinite(lo_cal) & np.isfinite(hi_cal)
+    e_cal = np.maximum(lo_cal[ok_cal] - y_cal[ok_cal], y_cal[ok_cal] - hi_cal[ok_cal])
+    q = conformal_quantile(e_cal, alpha)
+
+    ok = np.isfinite(y_test) & np.isfinite(lo_test) & np.isfinite(hi_test)
+    if mask_test is not None:
+        ok = ok & mask_test
+    if not ok.any() or not np.isfinite(q):
+        return None
+
+    lo, hi = lo_test[ok] - q, hi_test[ok] + q
+    width = np.maximum(hi - lo, 0.0)
+    covered = (y_test[ok] >= lo) & (y_test[ok] <= hi)
+    return {
+        "coverage": float(covered.mean()),
+        "mean_width": float(width.mean()),
+        "width_spread": float(width.std()),
+        "n": int(ok.sum()),
+    }
+
+
 def disagreement_sigma(ds, variant, split, n_rows):
     """
     Per-molecule difficulty, estimated from how much the base models disagree.
@@ -163,14 +216,75 @@ def disagreement_sigma(ds, variant, split, n_rows):
 # --------------------------------------------------------------------------------------
 # Binary classification
 # --------------------------------------------------------------------------------------
+RAPS_LAMBDA = 0.1     # RAPS penalty per rank beyond k_reg
+RAPS_K_REG = 1        # ranks up to here are unpenalised
+
+
+def binary_scores(p, cls, set_score="lac", lam=RAPS_LAMBDA, k_reg=RAPS_K_REG):
+    """
+    The conformal score for class `cls` at predicted positive-probability `p`.
+
+    Three scoring rules, because `02_ENHANCEMENT_PLAN.md` §8 named RAPS and this module
+    was built on LAC without recording why.
+
+    **lac** (least-ambiguous set-valued classifier, Sadinle 2019): `1 - P(cls)`. The class
+    enters the set when the model gives it enough probability. Produces the smallest sets
+    that achieve marginal coverage, and can produce empty ones.
+
+    **aps** (adaptive prediction sets, Romano 2020): rank the classes by probability and
+    score a class by the cumulative probability down to and including it. Binary makes this
+    degenerate in a specific way: the higher-ranked class scores `max(p, 1-p)` and the
+    lower-ranked class scores exactly **1.0**, always, for every molecule. The calibration
+    scores therefore collapse onto "top-class scores in [0.5, 1], plus a spike at 1.0" --
+    and any model that emits saturated probabilities puts *top-class* points on that spike
+    too (a Random Forest with unanimous votes does this for 15% of Tox21 molecules).
+
+    When the quantile lands on the spike, `1.0 <= q` is true and APS admits the lower-ranked
+    class for **every** molecule: every set is {inactive, active}, coverage is ~100%, and
+    the model has answered "could be either" about the entire test set.
+
+    **raps** (regularised APS, Angelopoulos 2021): APS plus `lam * (rank - k_reg)+`. With
+    two classes there is no long tail for the penalty to suppress, so the obvious reading is
+    that it does nothing -- it adds a constant `lam` to the lower-ranked class and leaves
+    the ordering of scores untouched.
+
+    That reading is wrong, and measuring it is why `--set-score raps` exists. The penalty is
+    a function of the *class*, not of the score, so it is not a monotone map on the score and
+    the invariance argument that kills temperature scaling (Session 15) does not transfer.
+    What `lam` actually does is break the tie at the spike: it moves the lower-ranked class
+    to `1 + lam` while leaving saturated top-class points at 1.0, so `1 + lam <= q` stays
+    false where `1.0 <= q` was true. Measured on Tox21 task 0, seed 0 -- both methods pick
+    q = 1.0000, and mean set size is **2.000 for APS against 1.000 for RAPS**.
+
+    The practical conclusion is that neither is usable here (see the module docstring); LAC
+    is what this project reports. But "RAPS = APS when K = 2" is a natural thing to assume
+    and it is false.
+
+    Ties at p = 0.5 are broken toward the positive class so that exactly one class is
+    ranked top; leaving both "top" would score them identically and inflate coverage.
+    """
+    p = np.clip(np.asarray(p, dtype=float), 0.0, 1.0)
+    cls = np.asarray(cls)
+    prob = np.where(cls == 1, p, 1.0 - p)
+    if set_score == "lac":
+        return 1.0 - prob
+
+    is_top = (cls == 1) == (p >= 0.5)
+    aps = np.where(is_top, np.maximum(p, 1.0 - p), 1.0)
+    if set_score == "aps":
+        return aps
+    if set_score == "raps":
+        return aps + lam * np.maximum(0, np.where(is_top, 1, 2) - k_reg)
+    raise ValueError(f"unknown set score {set_score!r}")
+
+
 def binary_sets(y_cal, p_cal, y_test, p_test, alpha=0.1, conditional=False,
-                mask_test=None):
+                mask_test=None, set_score="lac"):
     """
     Split conformal for one binary task, reporting coverage within each class.
 
-    The score for a labelled molecule is 1 - p(its true class). A class enters the
-    prediction set when its own score falls at or below the threshold, giving sets of size
-    0, 1 or 2.
+    A class enters the prediction set when its own score falls at or below the threshold,
+    giving sets of size 0, 1 or 2. See `binary_scores` for the three scoring rules.
 
     `conditional=True` fits a separate threshold per class (Mondrian conformal). The
     marginal version guarantees coverage averaged over classes, which on data that is 6-9%
@@ -181,7 +295,7 @@ def binary_sets(y_cal, p_cal, y_test, p_test, alpha=0.1, conditional=False,
     yc, pc = y_cal[ok_cal], np.clip(p_cal[ok_cal], 0.0, 1.0)
     if yc.size == 0:
         return None
-    score_cal = np.where(yc == 1, 1.0 - pc, pc)
+    score_cal = binary_scores(pc, yc, set_score)
 
     if conditional:
         # Too few of a class to calibrate it is a real possibility here -- SIDER's rarest
@@ -200,8 +314,8 @@ def binary_sets(y_cal, p_cal, y_test, p_test, alpha=0.1, conditional=False,
         return None
     yt, pt = y_test[ok], np.clip(p_test[ok], 0.0, 1.0)
 
-    in_pos = (1.0 - pt) <= q_pos
-    in_neg = pt <= q_neg
+    in_pos = binary_scores(pt, np.ones_like(pt, dtype=int), set_score) <= q_pos
+    in_neg = binary_scores(pt, np.zeros_like(pt, dtype=int), set_score) <= q_neg
     sizes = in_pos.astype(int) + in_neg.astype(int)
     covered = np.where(yt == 1, in_pos, in_neg)
 
@@ -283,7 +397,7 @@ def recalibrate(y_cal, p_cal, p_test, kind):
 
 
 def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_test=None,
-             calibrate="none"):
+             calibrate="none", set_score="lac"):
     """Conformal behaviour for one model on one split variant."""
     preds = load_preds(ds, variant, tag)
     if preds is None:
@@ -297,7 +411,8 @@ def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_
             if calibrate != "none":
                 pc, pt = recalibrate(y["valid"][:, t], pc, pt, calibrate)
             r = binary_sets(y["valid"][:, t], pc, y["test"][:, t], pt,
-                            alpha, conditional=conditional, mask_test=mask_test)
+                            alpha, conditional=conditional, mask_test=mask_test,
+                            set_score=set_score)
             if r:
                 rows.append(r)
         if not rows:
@@ -312,6 +427,18 @@ def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_
     mean, std = label_scale(ds)
     y = load_labels(ds, variant, raw=True)
     conv = lambda p: p.reshape(len(p), -1)[:, 0] * std[0] + mean[0]
+
+    if score == "cqr":
+        # The quantile model saves (n, 2) in z-scored units, same as every other
+        # prediction here, so the same affine map returns chemical units.
+        col = lambda p, j: p.reshape(len(p), -1)[:, j] * std[0] + mean[0]
+        if preds["valid"].reshape(len(preds["valid"]), -1).shape[1] < 2:
+            return None
+        return cqr_intervals(
+            y["valid"][:, 0], col(preds["valid"], 0), col(preds["valid"], 1),
+            y["test"][:, 0], col(preds["test"], 0), col(preds["test"], 1),
+            alpha, mask_test)
+
     sig_cal = sig_test = None
     if score == "normalized":
         sc = disagreement_sigma(ds, variant, "valid", preds["valid"].shape[0])
@@ -326,7 +453,8 @@ def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_
 # --------------------------------------------------------------------------------------
 # Reporting
 # --------------------------------------------------------------------------------------
-def by_distance(ds, variant, tag, alpha, score, conditional, calibrate="none"):
+def by_distance(ds, variant, tag, alpha, score, conditional, calibrate="none",
+                set_score="lac"):
     """Coverage split by Tanimoto distance from the nearest training molecule."""
     sim = nearest_train_similarity(ds, variant, "test")
     out = []
@@ -334,7 +462,7 @@ def by_distance(ds, variant, tag, alpha, score, conditional, calibrate="none"):
         if mask.sum() < 10:
             continue
         r = evaluate(ds, variant, tag, alpha, score, conditional, mask_test=mask,
-                     calibrate=calibrate)
+                     calibrate=calibrate, set_score=set_score)
         if r:
             r["band"] = label
             r["n_band"] = int(mask.sum())
@@ -350,9 +478,12 @@ def main():
     ap.add_argument("--variants", nargs="+", default=[f"seed{i}" for i in range(5)])
     ap.add_argument("--alpha", type=float, default=0.1,
                     help="miss rate; 0.1 means a nominal 90%% coverage target")
-    ap.add_argument("--score", default="absolute", choices=["absolute", "normalized"],
-                    help="regression score: constant width, or width scaled by a "
-                         "per-molecule difficulty estimate from base-model disagreement")
+    ap.add_argument("--score", default="absolute",
+                    choices=["absolute", "normalized", "cqr"],
+                    help="regression score: constant width; width scaled by a per-molecule "
+                         "difficulty estimate from base-model disagreement; or CQR, which "
+                         "conformalises a trained quantile model (needs --tags qdesc, "
+                         "produced by src.train.train_quantile)")
     ap.add_argument("--conditional", action="store_true",
                     help="fit a separate quantile per class, so coverage holds within "
                          "each class rather than only on average")
@@ -361,6 +492,11 @@ def main():
                     help="classification only: recalibrate probabilities on the "
                          "calibration split before conformal. `temperature` provably "
                          "changes nothing (see recalibrate); `logistic` does.")
+    ap.add_argument("--set-score", default="lac", choices=["lac", "aps", "raps"],
+                    help="classification set-construction score. `lac` is 1-p(true class) "
+                         "and is the default; `aps` and `raps` are the methods named in "
+                         "the plan -- see binary_scores for why raps cannot differ from "
+                         "aps when there are only two classes")
     ap.add_argument("--by-distance", action="store_true",
                     help="report coverage by Tanimoto similarity to the nearest "
                          "training molecule")
@@ -378,7 +514,8 @@ def main():
                 per = []
                 for v in args.variants:
                     per += by_distance(ds, v, tag, args.alpha, args.score,
-                                       args.conditional, args.calibrate)
+                                       args.conditional, args.calibrate,
+                                       set_score=args.set_score)
                 if not per:
                     missing.append(f"{tag}/{ds}")
                     continue
@@ -395,7 +532,8 @@ def main():
                 continue
 
             per = [evaluate(ds, v, tag, args.alpha, args.score, args.conditional,
-                            calibrate=args.calibrate) for v in args.variants]
+                            calibrate=args.calibrate, set_score=args.set_score)
+                   for v in args.variants]
             per = [r for r in per if r]
             if not per:
                 missing.append(f"{tag}/{ds}")
@@ -416,6 +554,8 @@ def main():
     df = pd.DataFrame(rows)
     mode = ("by distance" if args.by_distance
             else ("class-conditional" if args.conditional else f"{args.score} score"))
+    if args.set_score != "lac":
+        mode += f", {args.set_score} sets"
     print(f"Split conformal [{mode}], nominal {nominal:.0f}%, "
           f"mean over {len(args.variants)} seeded splits\n")
 
@@ -441,7 +581,8 @@ def main():
     os.makedirs(MET_DIR, exist_ok=True)
     suffix = (f"_{args.calibrate}" if args.calibrate != "none" else "") + (
              "_bydistance" if args.by_distance
-             else ("_conditional" if args.conditional else f"_{args.score}"))
+             else ("_conditional" if args.conditional else f"_{args.score}")) + (
+             f"_{args.set_score}" if args.set_score != "lac" else "")
     out = os.path.join(MET_DIR, f"conformal_alpha{args.alpha:g}{suffix}.csv")
     df.to_csv(out, index=False)
     print(f"Wrote {out}")
