@@ -46,6 +46,10 @@ ENCODER_OF = {
     "desc": "desc",          # ECFP + RDKit 2-D descriptors (Phase 1b)
     "lora": "lora",          # ChemBERTa + LoRA (Phase 1c)
     "seq_frozen": "seq_frozen",   # frozen ChemBERTa, the matched control for lora
+    # External baseline (Phase 4). Registered here rather than in a parallel script so it
+    # is measured on the same splits, under the same protocol, as everything it is being
+    # compared against.
+    "attentivefp": "attentivefp",
 }
 
 # Fusion variants run through a different trainer but the same loop, splits and archive
@@ -63,6 +67,13 @@ FUSION_VIEWS = {
     "fuse_gated_nodesc": ("gated", ["graph", "seq"]),
 }
 FUSION_OF.update({tag: mode for tag, (mode, _) in FUSION_VIEWS.items()})
+
+# Bilinear-rank sweep (02_ENHANCEMENT_PLAN.md section 7, ablation 4). The rank sets how
+# many parameters the second-order term gets: 2*d*r per view against d^2 for a full
+# bilinear form, so r=16 is a 16x smaller interaction than r=128. The default everywhere
+# else is 64. Registered rather than run -- see PROGRESS.md.
+FUSION_RANK = {f"fuse_bilinear_r{r}": ("bilinear", r) for r in (16, 32, 128)}
+FUSION_OF.update({tag: mode for tag, (mode, _) in FUSION_RANK.items()})
 
 NOISE = ("DEPRECATION", "Skipped loading", "No normalization", "WARNING",
          "Some weights", "You should probably", "not removing")
@@ -102,6 +113,8 @@ def run_tag(tag, log, extra_args=(), seq="cached", out_tag=None):
                "--mode", FUSION_OF[tag], "--tag", out_tag, "--seq", seq]
         if tag in FUSION_VIEWS:
             cmd += ["--views", *FUSION_VIEWS[tag][1]]
+        if tag in FUSION_RANK:
+            cmd += ["--rank", str(FUSION_RANK[tag][1])]
         cmd += list(extra_args)
     else:
         cmd = [sys.executable, "-u", "-m", "src.train.train_view",

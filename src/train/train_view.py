@@ -57,7 +57,7 @@ SPLITS = ("train", "valid", "test")
 
 # Which representation each encoder reads. Adding a view means adding it here and a
 # branch in `build_view`; the training loop below never changes.
-GRAPH_ENCODERS = ("gine", "gin")
+GRAPH_ENCODERS = ("gine", "gin", "attentivefp")
 DESCRIPTOR_ENCODERS = ("desc",)
 SEQUENCE_ENCODERS = ("lora", "seq_frozen")
 
@@ -247,7 +247,8 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--encoder", default="gine",
-                    choices=["gine", "gin", "desc", "lora", "seq_frozen"])
+                    choices=["gine", "gin", "attentivefp", "desc", "lora",
+                             "seq_frozen"])
     ap.add_argument("--tag", default=None, help="output name; defaults to --encoder")
     ap.add_argument("--datasets", nargs="+", default=None)
     ap.add_argument("--epochs", type=int, default=100)
@@ -261,6 +262,8 @@ def main():
     ap.add_argument("--jk", action="store_true")
     ap.add_argument("--readout", default="mean+sum", choices=["mean", "sum", "mean+sum"])
     ap.add_argument("--dropout", type=float, default=0.3)
+    ap.add_argument("--timesteps", type=int, default=2,
+                    help="AttentiveFP: rounds of graph-level attention pooling")
     # Ablations for the descriptor view: which half of the input is doing the work.
     ap.add_argument("--no-ecfp", action="store_true",
                     help="desc only: drop the fingerprint, keep the 2-D descriptors")
@@ -285,6 +288,9 @@ def main():
     if args.encoder == "gine":
         enc_kwargs.update(n_layers=args.layers, residual=not args.no_residual,
                           jk=args.jk, readout=args.readout)
+    elif args.encoder == "attentivefp":
+        enc_kwargs.update(layers=args.layers, timesteps=args.timesteps,
+                          dropout=args.dropout)
     elif args.encoder == "desc":
         enc_kwargs.update(dropout=args.dropout, use_ecfp=not args.no_ecfp,
                           use_desc=not args.no_descriptors)

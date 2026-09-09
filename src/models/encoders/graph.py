@@ -157,10 +157,57 @@ class GINEncoder(nn.Module):
         return global_mean_pool(self.dropout(x), batch)
 
 
+class AttentiveFPEncoder(nn.Module):
+    """
+    AttentiveFP (Xiong et al. 2020) as an external baseline, via PyTorch Geometric.
+
+    This is the second of the two standard external baselines `02_ENHANCEMENT_PLAN.md` §7
+    asks for. It is wrapped as an *encoder* rather than run as a standalone model on
+    purpose: it then trains through the same loop, the same splits, the same 256-d
+    projection and the same head as every other view in this project. A baseline trained by
+    its own author's recipe and compared against ours would confound the architecture with
+    the training protocol, which is the exact failure this project exists to document.
+
+    What is genuinely AttentiveFP here is the message passing and the readout: the GRU-based
+    node update over attended neighbourhoods, and the `num_timesteps` rounds of
+    graph-level attention pooling that replace a mean or sum. `out_channels` is set to the
+    common embedding width so the trailing linear layer acts as the projection every other
+    encoder gets.
+
+    The published defaults for MoleculeNet are 2-3 layers and 2 timesteps; those are the
+    defaults here, and like every other model in this project they are held fixed rather
+    than tuned, so the comparison is of architectures under one budget.
+    """
+
+    def __init__(self, in_dim, hidden=256, layers=3, timesteps=2, dropout=0.2,
+                 edge_dim=7, **_):
+        super().__init__()
+        from torch_geometric.nn.models import AttentiveFP
+
+        self.edge_dim = edge_dim
+        self.net = AttentiveFP(in_channels=in_dim, hidden_channels=hidden,
+                               out_channels=hidden, edge_dim=edge_dim,
+                               num_layers=layers, num_timesteps=timesteps,
+                               dropout=dropout)
+        self.out_dim = hidden
+
+    def forward(self, data):
+        x, edge_index, batch = data.x, data.edge_index, data.batch
+        edge_attr = getattr(data, "edge_attr", None)
+        # Same lone-atom guard as GINEEncoder: no bonds means no edge rows, but the edge
+        # projection still needs the right width.
+        if edge_attr is None or edge_attr.numel() == 0:
+            edge_attr = torch.zeros((edge_index.size(1), self.edge_dim),
+                                    device=x.device, dtype=x.dtype)
+        return self.net(x, edge_index, edge_attr, batch)
+
+
 def build_graph_encoder(name="gine", in_dim=34, **kwargs):
     """Factory so a config file can name an encoder without importing the class."""
     if name == "gine":
         return GINEEncoder(in_dim=in_dim, **kwargs)
     if name == "gin":
         return GINEncoder(in_dim=in_dim, **kwargs)
+    if name == "attentivefp":
+        return AttentiveFPEncoder(in_dim=in_dim, **kwargs)
     raise ValueError(f"unknown graph encoder: {name}")
