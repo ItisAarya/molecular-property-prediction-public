@@ -51,3 +51,9 @@ data/splits/
 
 # Colab bundle (regenerate with scripts/make_colab_bundle.py)
 mpp_colab_bundle.zip
+
+# Colab bundles are build products of scripts/make_colab_bundle.py. The fusion one is
+# tracked because it is small and the notebook names it; the Phase 3 regeneration bundle
+# carries the cached ChemBERTa embeddings and is 126 MB, over GitHub's 100 MB file limit.
+#   python -m scripts.make_colab_bundle --preset fusion-cached --out mpp_phase3_regen.zip
+mpp_phase3_regen.zip
