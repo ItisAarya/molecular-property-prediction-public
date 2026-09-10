@@ -111,6 +111,34 @@ def checks(draft):
                   r"\| `desc` \| [\d.]+% \| ([\d.]+)% \|",
                   100 * float(de.coverage_pos.iloc[0]), 0.05)
 
+    d = compare("attentivefp", "gin_ref_gpu")
+    if d is not None:
+        claim("AttentiveFP vs inherited GIN: datasets favoured",
+              r"\| AttentiveFP vs `gin_ref` \(inherited\)\* \| (\d)/8",
+              float(d.across_wins.iloc[0]), 0)
+    d = compare("fuse_proposed_gpu", "attentivefp")
+    if d is not None:
+        claim("proposed vs AttentiveFP: datasets favoured",
+              r"\| \*\*`proposed` vs AttentiveFP\*\* \| \*\*(\d)/8\*\*",
+              float(d.across_wins.iloc[0]), 0)
+        claim("proposed vs AttentiveFP: sign p",
+              r"\| \*\*`proposed` vs AttentiveFP\*\* \| \*\*\d/8\*\* \| ([\d.]+)",
+              float(d.across_p_sign.iloc[0]), 5e-3)
+
+    # Encoder sizes: the draft quotes each figure at least once, so a changed architecture
+    # cannot leave a stale parameter count in the prose. Newlines are normalised first
+    # because the draft is hard-wrapped and a count can straddle a line break.
+    from src.models.encoders.graph import build_graph_encoder
+
+    flat = " ".join(draft.split())
+    for enc, label in (("attentivefp", "AttentiveFP params"),
+                       ("gine", "GINE params"),
+                       ("gin", "inherited GIN params")):
+        n = sum(q.numel() for q in build_graph_encoder(enc, in_dim=34, hidden=256).parameters())
+        quoted = f"{n:,}" in flat
+        out.append((label, float(n) if quoted else None, float(n), 0,
+                    None if quoted else f"{n:,} not quoted anywhere in the draft"))
+
     e = os.path.join(MET, "ece_multiseed.csv")
     if os.path.exists(e):
         ec = pd.read_csv(e)

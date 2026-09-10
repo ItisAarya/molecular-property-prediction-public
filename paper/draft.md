@@ -38,6 +38,11 @@ the adaptive set-valued scores commonly recommended (APS, RAPS) are unusable at 
 and that conformalized quantile regression is the only score we tested that yields interval
 widths carrying per-molecule information.
 
+An external baseline run through the identical protocol — AttentiveFP, same splits, same
+head, same budget — is itself statistically indistinguishable from the inherited two-layer
+graph network at ten times the parameters, and our fusion model is favoured over it on 7 of
+8 datasets without reaching significance.
+
 We report the negative results because the protocol was built to make them believable.
 
 ---
@@ -311,6 +316,59 @@ how much each view matters.** Both facts are needed: the agreement check says th
 not noise, the ablation says they are not necessity. Interpretability claims built on
 attention or gate weights should be accompanied by the corresponding removal experiment.
 
+### 5.5 An external baseline
+
+Every comparison so far is internal: our models against each other and against the pipeline
+we inherited. That is the weakest kind of evidence, because it cannot rule out that the whole
+family is poor. We therefore ran **AttentiveFP**, a widely used attention-based graph
+architecture, through the *identical* protocol — same splits, same 256-d projection, same
+head, same fixed hyper-parameters, same accelerator. What remains distinctively AttentiveFP
+is its message passing and its attention-based graph readout; what is held constant is
+everything else. A baseline trained under its own author's recipe and compared against ours
+would confound the architecture with the training protocol, which is the failure this paper
+exists to document.
+
+| comparison | favoured | sign | *dz* | raw | after Holm |
+|---|---|---|---|---|---|
+| AttentiveFP vs `gine` (ours) | 7/8 | 0.0703 | **0.0391** | **0.0234** | 0 / 0 |
+| AttentiveFP vs `gin_ref` (inherited)* | 6/8 | 0.2891 | 0.1953 | 0.1094 | 0 / 0 |
+| AttentiveFP vs `desc` | 2/8 | 0.2891 | 0.1484 | 0.3125 | 0 / 0 |
+| **`proposed` vs AttentiveFP** | **7/8** | 0.0703 | 0.0547 | 0.0547 | 0 / 0 |
+
+\* Against the accelerator-matched instance of every baseline, per §7: AttentiveFP ran on
+the same hardware as the models it is compared with here, so none of these is a
+cross-hardware comparison.
+
+Three readings.
+
+**AttentiveFP beats our edge-aware graph encoder** (unit-dependent: significant on both
+Wilcoxon variants, not on the sign test) at roughly twice the parameters — 1,986,304 against
+1,070,852. That is the expected direction, and it is reassuring that the protocol detects it:
+the published architecture is better than the one we built to represent it.
+
+**AttentiveFP does not beat the inherited 2-layer GIN** — 6 of 8 by mean, no across-dataset
+difference on any statistic, nothing surviving correction, at nearly ten times the parameters
+(1,986,304 against 207,360). Nor does it beat a fingerprint-plus-descriptor MLP, which is
+favoured over it on 6 of 8.
+
+**Our fusion model is favoured over AttentiveFP on 7 of 8 datasets and does not reach
+significance** on any of the three statistics (0.055–0.070). The plan's success criterion was
+to be *competitive with or beating* a strong external baseline on most datasets. Competitive
+is met; beating is not established, and with n = 8 the sign test cannot reach 0.05 from a 7–1
+split however large the effect.
+
+One inconsistency deserves stating rather than hiding: AttentiveFP beats `gine`,
+AttentiveFP ties `gin_ref`, and `gine` ties `gin_ref`. Those three cannot all be strictly
+true of an underlying ordering. With eight paired observations the tests are underpowered
+enough that intransitive verdicts are expected, and reading any single one of them as an
+ordering is exactly the over-reading this protocol is built to prevent.
+
+The wider point is the one the whole ladder makes. A published attention-based graph
+architecture, a bond-aware graph encoder, a pretrained language model and a three-view fusion
+block are, on these eight benchmarks under a controlled protocol, all statistically
+indistinguishable from a two-layer graph network and from a multilayer perceptron over
+fingerprints and computed descriptors.
+
 ---
 
 ## 6. Calibration and conformal uncertainty
@@ -512,10 +570,9 @@ transcribed. The fixed hyper-parameter setting is machine-checked against the tr
 
 - Two end-to-end ladder rungs (`xattn`, `bilinear`), which would attribute the end-to-end
   variant's wins to a specific mechanism.
-- External baselines: AttentiveFP (implemented, runs through the identical protocol) and
-  Chemprop (implemented, runs as itself on identical splits). §3's success criterion
-  "competitive with a strong external baseline" is the one claim in this work that remains
-  untested.
+- Chemprop, the second external baseline (implemented, runs as itself on identical splits;
+  it pins its own dependency versions and therefore needs a separate environment).
+  AttentiveFP is done and reported in §5.5.
 - Bilinear rank sweep.
 
 ---
@@ -529,7 +586,9 @@ paper reporting only that comparison would be publishable and misleading.
 
 The mechanisms we implemented work as specified — verified, not assumed — and do not pay on
 these benchmarks. The cheap gate matches the expensive block. The graph view can be deleted
-without measurable loss. Gate weights reorganise when a 0.4%-weight view is removed, so they
+without measurable loss. A published attention-based graph architecture, run through the same
+protocol at ten times the parameters, is indistinguishable from the two-layer network it was
+meant to improve on. Gate weights reorganise when a 0.4%-weight view is removed, so they
 should not be read as importance. A 90% conformal guarantee can cover 9.7% of the compounds
 a toxicity screen exists to find. And a fully seeded pipeline, moved to a different GPU, is a
 different model.
