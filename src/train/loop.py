@@ -172,9 +172,21 @@ def fit_and_score(model, loaders, y, ds, tag, cls, unpack, device,
         np.save(os.path.join(PRED_DIR, f"{ds}_{tag}_{split}.npy"), p)
         m = (cls_metrics(y[split].numpy(), p) if cls
              else reg_metrics(y[split].numpy(), p, ds))
-        pd.DataFrame([m]).to_csv(
-            os.path.join(MET_DIR, f"{ds}_{tag}_{split}.csv"), index=False)
         results[split] = m
+        # Provenance, written alongside the numbers rather than inferred later.
+        #
+        # Session 20 had to work out from wall-clock timings which archived results came
+        # from the local CPU and which from a Colab T4, because nothing recorded it. That
+        # mattered: the same code, seed and splits on a different device produce a
+        # different model -- dropout masks are drawn on-device, so CPU and CUDA pull from
+        # different generators -- and 18% of single-split numbers moved by more than the
+        # minimum detectable effect. The five-split mean absorbs it, but a reader cannot
+        # check that without knowing which rows came from which machine.
+        row = dict(m)
+        row["device"] = device.type if hasattr(device, "type") else str(device)
+        row["seed"] = seed
+        pd.DataFrame([row]).to_csv(
+            os.path.join(MET_DIR, f"{ds}_{tag}_{split}.csv"), index=False)
 
     key = "auc" if cls else "rmse"
     if verbose:
