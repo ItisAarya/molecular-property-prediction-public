@@ -209,6 +209,8 @@
 | conditional          | ens                | esol          | 94.6     |              |              |               | 4.153      | 0.0          |
 | conditional          | ens                | lipophilicity | 89.1     |              |              |               | 2.341      | 0.0          |
 | cqr                  | qdesc              | esol          | 87.7     |              |              |               | 2.509      | 0.821        |
+| cqr                  | qdesc              | lipophilicity | 87.8     |              |              |               | 2.215      | 0.455        |
+| cqr                  | qdesc              | freesolv      | 85.8     |              |              |               | 2.393      | 1.345        |
 | logistic_absolute    | rf                 | tox21         | 90.0     | 85.7         | 90.2         | 1.401         |            |              |
 | normalized           | rf                 | tox21         | 90.7     | 9.8          | 96.6         | 0.977         |            |              |
 | normalized           | rf                 | bbbp          | 90.1     | 98.2         | 58.8         | 1.056         |            |              |
