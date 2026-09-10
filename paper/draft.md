@@ -30,10 +30,11 @@ generalises furthest — that a fully seeded pipeline run on a different GPU is 
 model**, moving 18% of single-split numbers by more than the effect size the field reports
 differences at, while the five-split mean absorbs it entirely.
 
-On uncertainty, a nominal 90% conformal guarantee covers **9.7–9.8% of active compounds**
-for the two models that emit near-singleton prediction sets, and 71–78% for every other
-architecture we tested; class-conditional conformal repairs this at a visible cost in set
-size. We show that temperature scaling provably cannot alter a binary conformal set, that
+On uncertainty, we corroborate a recently reported failure — a nominal 90% conformal
+guarantee covers **9.7–9.8% of active compounds** for the two models that emit near-singleton
+prediction sets, and 71–78% for every other architecture we tested, with class-conditional
+conformal repairing it at a visible cost in set size — and extend it across thirteen models,
+showing the between-architecture spread is smaller than any model's gap to nominal. We show that temperature scaling provably cannot alter a binary conformal set, that
 the adaptive set-valued scores commonly recommended (APS, RAPS) are unusable at two classes,
 and that conformalized quantile regression is the only score we tested that yields interval
 widths carrying per-molecule information.
@@ -411,6 +412,27 @@ and the method, not of the model.
 actives rise to 87–91% for every model, with the price openly visible in mean set size
 (0.98 → 1.52 for the random forest; ~1.2 → ~1.4 for the fusion ladder).
 
+**This result is not ours first.** Tursunbadalov & Tursunbadalov (arXiv:2607.06605, July 2026)
+report the same failure and the same fix, independently and four months before this draft: on
+four datasets marginal conformal meets its global 90% target while minority coverage falls to
+64.8% on BBBP, 38.9% on a Tox21 endpoint and 4.2% on ClinTox, it reproduces across a random
+forest, a graph network and a frozen chemical language model, and class-conditional conformal
+closes it for a modest increase in set size. Their conservation identity — the minority's
+shortfall equals the majority's surplus amplified by the imbalance ratio — is a cleaner
+explanation of the magnitude than anything we offer.
+
+We report our measurement as **independent corroboration on a wider model set**, not as a
+discovery. What it adds is breadth and one mechanism: thirteen models including every rung of
+a fusion ladder, where the spread between the best and worst architecture on minority coverage
+(71.3% to 77.9%) is smaller than any of their gaps to nominal, and where the two models that
+fail worst are exactly the two whose mean set size is ≈ 1.0 — on 6–9% positive data, a marginal
+guarantee can be met with confident singletons of the majority class. That set-size diagnostic
+is complementary to their coverage-gap diagnostic and predicts *which* models will fail.
+
+The rest of §6 does not overlap with their work: §6.3's invariance proof, §6.4's analysis of
+APS/RAPS at two classes, §6.5's regression scores and §6.6's distance stratification are, as
+far as we can determine, not covered there.
+
 ### 6.3 Temperature scaling provably cannot change a binary conformal set
 
 The conformal score is `1 − p` for an active and `p` for an inactive, and the temperature map
@@ -590,7 +612,8 @@ without measurable loss. A published attention-based graph architecture, run thr
 protocol at ten times the parameters, is indistinguishable from the two-layer network it was
 meant to improve on. Gate weights reorganise when a 0.4%-weight view is removed, so they
 should not be read as importance. A 90% conformal guarantee can cover 9.7% of the compounds
-a toxicity screen exists to find. And a fully seeded pipeline, moved to a different GPU, is a
+a toxicity screen exists to find — a failure independently reported months before this work,
+which we corroborate across thirteen models and tie to prediction-set size. And a fully seeded pipeline, moved to a different GPU, is a
 different model.
 
 None of these is a statement about a particular architecture. They are statements about what
