@@ -33,8 +33,9 @@ differences at, while the five-split mean absorbs it entirely.
 On uncertainty, we corroborate a recently reported failure — a nominal 90% conformal
 guarantee covers **9.7–9.8% of active compounds** for the two models that emit near-singleton
 prediction sets, and 71–78% for every other architecture we tested, with class-conditional
-conformal repairing it at a visible cost in set size — and extend it across thirteen models,
-showing the between-architecture spread is smaller than any model's gap to nominal. We show that temperature scaling provably cannot alter a binary conformal set, that
+conformal repairing it at a visible cost in set size — and extend it across fifteen models,
+showing the between-architecture spread is smaller than any model's gap to nominal and that
+mean prediction-set size predicts which models fail. We show that temperature scaling provably cannot alter a binary conformal set, that
 the adaptive set-valued scores commonly recommended (APS, RAPS) are unusable at two classes,
 and that conformalized quantile regression is the only score we tested that yields interval
 widths carrying per-molecule information.
@@ -335,8 +336,12 @@ exists to document.
 |---|---|---|---|---|---|
 | AttentiveFP vs `gine` (ours) | 7/8 | 0.0703 | **0.0391** | **0.0234** | 0 / 0 |
 | AttentiveFP vs `gin_ref` (inherited)* | 6/8 | 0.2891 | 0.1953 | 0.1094 | 0 / 0 |
+| **Chemprop vs `gin_ref`** | 4/8 | 1.0000 | 0.9453 | 0.8438 | 0 / 0 |
+| Chemprop vs AttentiveFP | 4/8 | 1.0000 | 1.0000 | 1.0000 | 0 / 0 |
 | AttentiveFP vs `desc` | 2/8 | 0.2891 | 0.1484 | 0.3125 | 0 / 0 |
+| **Chemprop vs `desc`** | 2/8 | 0.2891 | 0.1094 | 0.3828 | 0 / **1** |
 | **`proposed` vs AttentiveFP** | **7/8** | 0.0703 | 0.0547 | 0.0547 | 0 / 0 |
+| **`proposed` vs Chemprop** | **6/8** | 0.2891 | 0.1094 | 0.1953 | **2** / 0 |
 
 \* Against the accelerator-matched instance of every baseline, per §7: AttentiveFP ran on
 the same hardware as the models it is compared with here, so none of these is a
@@ -349,16 +354,23 @@ Wilcoxon variants, not on the sign test) at roughly twice the parameters — 1,9
 1,070,852. That is the expected direction, and it is reassuring that the protocol detects it:
 the published architecture is better than the one we built to represent it.
 
-**AttentiveFP does not beat the inherited 2-layer GIN** — 6 of 8 by mean, no across-dataset
-difference on any statistic, nothing surviving correction, at nearly ten times the parameters
-(1,986,304 against 207,360). Nor does it beat a fingerprint-plus-descriptor MLP, which is
-favoured over it on 6 of 8.
+**Neither external baseline beats the inherited 2-layer GIN.** AttentiveFP is favoured on 6 of
+8 and Chemprop on 4 of 8, with no across-dataset difference on any statistic and nothing
+surviving correction — AttentiveFP at nearly ten times the inherited encoder's parameters
+(1,986,304 against 207,360). The two published methods are also indistinguishable from *each
+other* (4/8, p = 1.00 on all three statistics).
 
-**Our fusion model is favoured over AttentiveFP on 7 of 8 datasets and does not reach
-significance** on any of the three statistics (0.055–0.070). The plan's success criterion was
-to be *competitive with or beating* a strong external baseline on most datasets. Competitive
-is met; beating is not established, and with n = 8 the sign test cannot reach 0.05 from a 7–1
-split however large the effect.
+**Neither beats a fingerprint-plus-descriptor MLP either.** `desc` is favoured over each of
+them on 6 of 8, and decisively beats Chemprop on one dataset after correction. A pair of
+well-regarded graph architectures, trained on the same splits with the same budget, do not
+separate from a multilayer perceptron over computed chemistry.
+
+**Our fusion model is favoured over both and reaches significance against neither across
+datasets** — 7 of 8 over AttentiveFP (0.055–0.070), 6 of 8 over Chemprop (0.11–0.29), though
+2 datasets survive correction in the Chemprop comparison. The plan's criterion was to be
+*competitive with or beating* a strong external baseline on most datasets. **Competitive is
+met on both; beating is not established on either**, and with n = 8 the sign test cannot reach
+0.05 from a 7–1 split however large the effect.
 
 One inconsistency deserves stating rather than hiding: AttentiveFP beats `gine`,
 AttentiveFP ties `gin_ref`, and `gine` ties `gin_ref`. Those three cannot all be strictly
@@ -366,11 +378,11 @@ true of an underlying ordering. With eight paired observations the tests are und
 enough that intransitive verdicts are expected, and reading any single one of them as an
 ordering is exactly the over-reading this protocol is built to prevent.
 
-The wider point is the one the whole ladder makes. A published attention-based graph
-architecture, a bond-aware graph encoder, a pretrained language model and a three-view fusion
-block are, on these eight benchmarks under a controlled protocol, all statistically
-indistinguishable from a two-layer graph network and from a multilayer perceptron over
-fingerprints and computed descriptors.
+The wider point is the one the whole ladder makes. Two published graph architectures — one
+attention-based, one a directed message-passing network — a bond-aware graph encoder, a
+pretrained language model and a three-view fusion block are, on these eight benchmarks under
+a controlled protocol, all statistically indistinguishable from a two-layer graph network and
+from a multilayer perceptron over fingerprints and computed descriptors.
 
 ### 5.6 Which mechanism does the work?
 
@@ -415,11 +427,12 @@ not the expensive one, and the mechanism that is expensive does not work.**
 
 ### 6.1 Post-hoc calibration mostly does not transfer
 
-Across 55 (model, dataset) pairs and five seeded splits, fitting a temperature or Platt map
-and evaluating test ECE: calibration **decisively helps on 19, hurts on 0, and is inside its
-own interval on 36**. Where it helps it helps the worst-calibrated models and never rescues
+Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature or Platt map
+and evaluating test ECE: calibration **decisively helps on 20, hurts on 1, and is inside its
+own interval on 44**. Where it helps it helps the worst-calibrated models and never rescues
 one that was already well calibrated. A map fitted on one partition largely does not transfer
-to a scaffold-shifted test set by more than that partition's own noise.
+to a scaffold-shifted test set by more than that partition's own noise — and on one pair
+(Chemprop on SIDER, 0.106 to 0.113) it transfers in the wrong direction.
 
 ### 6.2 The guarantee is met by covering the wrong molecules
 
@@ -431,21 +444,37 @@ is not covered:
 
 | model | overall | **actives** | mean set size |
 |---|---|---|---|
-| Random forest | 90.7% | **9.8%** | 0.98 |
 | SMILES transformer | 91.0% | **9.7%** | 0.99 |
+| Random forest | 90.7% | **9.8%** | 0.98 |
+| **Chemprop** | 90.6% | **14.1%** | 0.97 |
+| `fuse_gated_nograph` | 89.9% | 71.1% | 1.16 |
 | `fuse_concat` | 89.8% | 71.3% | 1.19 |
 | `fuse_gated` | 90.3% | 72.4% | 1.17 |
 | `fuse_proposed` | 89.4% | 72.7% | 1.20 |
 | `gin_ref` | 89.8% | 76.8% | 1.26 |
 | `desc` | 90.0% | 77.9% | 1.21 |
+| AttentiveFP | 90.3% | 79.8% | 1.23 |
 
-The ~10% failure is **not an outlier but a mechanism**: it appears in exactly the two models
-whose mean set size is ≈ 1.0. On data that is 6–9% positive, a marginal 90% guarantee can be
-satisfied by emitting confident singletons of the majority class. Every other architecture
-we tested — including every rung of the fusion ladder — under-covers actives by 12–19 points,
-and the spread between the best and worst architecture on that column (71.3% to 77.9%) is
-**smaller than any of their gaps to nominal**. The under-coverage is a property of the data
-and the method, not of the model.
+The catastrophic failure is **not an outlier but a mechanism, and mean set size predicts it.**
+Across **15 models** on Tox21 the column splits cleanly in two, with nothing in between:
+
+| group | models | actives covered |
+|---|---|---|
+| mean set size ≤ 1.05 | 3 (random forest, SMILES transformer, **Chemprop**) | **9.7 – 14.1%** |
+| mean set size > 1.05 | 12 (everything else) | 71.1 – 79.8% |
+
+A **57-point gap** separates the two groups. On data that is 6–9% positive, a marginal 90%
+guarantee can be satisfied by emitting confident singletons of the majority class, and set
+size is exactly the diagnostic for whether a model is doing that. It costs nothing to compute
+and it tells you *which* models will fail before you look at per-class coverage.
+
+That a well-regarded published method (Chemprop) sits in the failing group alongside a random
+forest is the part worth emphasising: this is not a property of weak models.
+
+Within the larger group, every architecture — including every rung of the fusion ladder and
+both external baselines — under-covers actives by 10–19 points, and the spread between the
+best and worst (71.1% to 79.8%) is **smaller than any of their gaps to nominal**. The
+under-coverage there is a property of the data and the method, not of the model.
 
 **Class-conditional (Mondrian) conformal repairs it**, fitting a separate quantile per class:
 actives rise to 87–91% for every model, with the price openly visible in mean set size
@@ -629,9 +658,6 @@ transcribed. The fixed hyper-parameter setting is machine-checked against the tr
 
 **Pending compute** *(does not affect any conclusion above)*:
 
-- Chemprop, the second external baseline (implemented, runs as itself on identical splits;
-  it pins its own dependency versions and therefore needs a separate environment).
-  AttentiveFP is done and reported in §5.5.
 - Bilinear rank sweep.
 
 ---
@@ -650,7 +676,7 @@ protocol at ten times the parameters, is indistinguishable from the two-layer ne
 meant to improve on. Gate weights reorganise when a 0.4%-weight view is removed, so they
 should not be read as importance. A 90% conformal guarantee can cover 9.7% of the compounds
 a toxicity screen exists to find — a failure independently reported months before this work,
-which we corroborate across thirteen models and tie to prediction-set size. And a fully seeded pipeline, moved to a different GPU, is a
+which we corroborate across fifteen models and tie to prediction-set size. And a fully seeded pipeline, moved to a different GPU, is a
 different model.
 
 None of these is a statement about a particular architecture. They are statements about what

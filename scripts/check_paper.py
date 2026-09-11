@@ -155,8 +155,13 @@ def checks(draft):
     e = os.path.join(MET, "ece_multiseed.csv")
     if os.path.exists(e):
         ec = pd.read_csv(e)
+        # The hurts count is not hard-coded into this pattern: it was 0 until Chemprop
+        # joined, and a check that breaks when an honest number changes trains people to
+        # edit the check instead of the claim.
         claim("calibration: pairs where it helps",
-              r"decisively helps on (\d+), hurts on 0", float(ec.helps.sum()), 0)
+              r"decisively helps on (\d+), hurts on \d+", float(ec.helps.sum()), 0)
+        claim("calibration: pairs where it hurts",
+              r"decisively helps on \d+, hurts on (\d+)", float(ec.hurts.sum()), 0)
         claim("calibration: total pairs",
               r"Across (\d+) \(model, dataset\) pairs", float(len(ec)), 0)
 

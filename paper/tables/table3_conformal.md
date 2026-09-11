@@ -92,6 +92,22 @@
 | absolute             | gin_ref_gpu        | bace          | 85.1     | 83.3         | 84.8         | 1.274         |            |              |
 | absolute             | gin_ref_gpu        | sider         | 90.4     | 90.1         | 85.6         | 1.637         |            |              |
 | absolute             | gin_ref_gpu        | freesolv      | 84.0     |              |              |               | 3.453      | 0.0          |
+| absolute             | attentivefp        | tox21         | 90.3     | 79.8         | 90.9         | 1.233         |            |              |
+| absolute             | attentivefp        | bbbp          | 91.1     | 92.1         | 86.4         | 1.188         |            |              |
+| absolute             | attentivefp        | clintox       | 91.3     | 88.4         | 89.0         | 1.132         |            |              |
+| absolute             | attentivefp        | esol          | 81.1     |              |              |               | 2.171      | 0.0          |
+| absolute             | attentivefp        | lipophilicity | 89.6     |              |              |               | 1.98       | 0.0          |
+| absolute             | attentivefp        | bace          | 85.4     | 85.9         | 85.2         | 1.283         |            |              |
+| absolute             | attentivefp        | sider         | 88.6     | 88.2         | 86.3         | 1.672         |            |              |
+| absolute             | attentivefp        | freesolv      | 92.3     |              |              |               | 3.131      | 0.0          |
+| absolute             | chemprop           | tox21         | 90.6     | 14.1         | 96.0         | 0.974         |            |              |
+| absolute             | chemprop           | bbbp          | 91.3     | 96.2         | 72.6         | 1.068         |            |              |
+| absolute             | chemprop           | clintox       | 92.6     | 64.9         | 54.0         | 1.027         |            |              |
+| absolute             | chemprop           | esol          | 88.2     |              |              |               | 2.461      | 0.0          |
+| absolute             | chemprop           | lipophilicity | 87.3     |              |              |               | 1.799      | 0.0          |
+| absolute             | chemprop           | bace          | 85.9     | 89.2         | 82.4         | 1.214         |            |              |
+| absolute             | chemprop           | sider         | 90.0     | 82.6         | 67.7         | 1.432         |            |              |
+| absolute             | chemprop           | freesolv      | 90.5     |              |              |               | 5.433      | 0.0          |
 | absolute             | rf                 | tox21         | 90.7     | 9.8          | 96.6         | 0.977         |            |              |
 | absolute             | rf                 | bbbp          | 90.1     | 98.2         | 58.8         | 1.056         |            |              |
 | absolute             | rf                 | clintox       | 91.8     | 50.5         | 51.3         | 0.979         |            |              |
@@ -183,6 +199,22 @@
 | conditional          | gin_ref_gpu        | bace          | 88.2     | 90.8         | 83.5         | 1.284         |            |              |
 | conditional          | gin_ref_gpu        | sider         | 91.0     | 92.1         | 91.0         | 1.747         |            |              |
 | conditional          | gin_ref_gpu        | freesolv      | 84.0     |              |              |               | 3.453      | 0.0          |
+| conditional          | attentivefp        | tox21         | 90.3     | 88.2         | 90.4         | 1.402         |            |              |
+| conditional          | attentivefp        | bbbp          | 91.2     | 92.4         | 85.0         | 1.173         |            |              |
+| conditional          | attentivefp        | clintox       | 91.4     | 92.9         | 94.7         | 1.341         |            |              |
+| conditional          | attentivefp        | esol          | 81.1     |              |              |               | 2.171      | 0.0          |
+| conditional          | attentivefp        | lipophilicity | 89.6     |              |              |               | 1.98       | 0.0          |
+| conditional          | attentivefp        | bace          | 88.9     | 91.5         | 85.7         | 1.326         |            |              |
+| conditional          | attentivefp        | sider         | 89.1     | 88.9         | 89.6         | 1.739         |            |              |
+| conditional          | attentivefp        | freesolv      | 92.3     |              |              |               | 3.131      | 0.0          |
+| conditional          | chemprop           | tox21         | 90.6     | 90.7         | 90.6         | 1.444         |            |              |
+| conditional          | chemprop           | bbbp          | 89.5     | 89.3         | 88.8         | 1.275         |            |              |
+| conditional          | chemprop           | clintox       | 90.3     | 91.4         | 91.5         | 1.391         |            |              |
+| conditional          | chemprop           | esol          | 88.2     |              |              |               | 2.461      | 0.0          |
+| conditional          | chemprop           | lipophilicity | 87.3     |              |              |               | 1.799      | 0.0          |
+| conditional          | chemprop           | bace          | 88.3     | 93.2         | 82.6         | 1.304         |            |              |
+| conditional          | chemprop           | sider         | 91.0     | 92.2         | 89.2         | 1.752         |            |              |
+| conditional          | chemprop           | freesolv      | 90.5     |              |              |               | 5.433      | 0.0          |
 | conditional          | rf                 | tox21         | 89.9     | 91.1         | 89.8         | 1.515         |            |              |
 | conditional          | rf                 | bbbp          | 92.0     | 92.7         | 89.2         | 1.203         |            |              |
 | conditional          | rf                 | clintox       | 90.8     | 92.2         | 93.5         | 1.628         |            |              |
