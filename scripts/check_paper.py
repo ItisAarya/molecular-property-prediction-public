@@ -139,6 +139,19 @@ def checks(draft):
         out.append((label, float(n) if quoted else None, float(n), 0,
                     None if quoted else f"{n:,} not quoted anywhere in the draft"))
 
+    # Section 5.6 mechanism attribution: the two comparisons the whole end-to-end run
+    # existed to answer. Both settings are checked so a single re-run cannot quietly flip one.
+    for a, b, pat, label in (
+        ("fuse_bilinear", "fuse_concat",
+         r"\| `bilinear` vs `concat` \| 7/8, \*\*p = ([\d.]+)\*\*", "cached bilinear vs concat dz"),
+        ("fuse_proposed_e2e", "fuse_xattn_e2e",
+         r"\| \*\*`proposed` vs `xattn`\*\* \| 6/8, p = [\d.]+ \| 7/8, \*\*p = ([\d.]+)\*\*",
+         "e2e proposed vs xattn dz"),
+    ):
+        d = compare(a, b)
+        if d is not None:
+            claim(label, pat, float(d.across_p_wilcoxon_dz.iloc[0]), 5e-4)
+
     e = os.path.join(MET, "ece_multiseed.csv")
     if os.path.exists(e):
         ec = pd.read_csv(e)

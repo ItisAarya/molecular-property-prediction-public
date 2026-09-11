@@ -291,7 +291,9 @@ Four readings, in decreasing order of confidence:
 
 **End-to-end adaptation buys nothing.** Training LoRA adapters inside the fusion model
 rather than reading cached frozen embeddings gives 0 improvements and 0 degradations across
-8 datasets, with 7 of 8 means favouring the cached version, for roughly 11 GPU-hours.
+8 datasets, with 7 of 8 means favouring the cached version, for roughly 11 GPU-hours. The
+end-to-end ladder is nonetheless useful as an independent replication of the mechanism
+attribution in §5.6, having been trained months later on different hardware.
 
 ### 5.4 Gate weights measure routing, not necessity
 
@@ -369,6 +371,43 @@ architecture, a bond-aware graph encoder, a pretrained language model and a thre
 block are, on these eight benchmarks under a controlled protocol, all statistically
 indistinguishable from a two-layer graph network and from a multilayer perceptron over
 fingerprints and computed descriptors.
+
+### 5.6 Which mechanism does the work?
+
+The ladder was built so that "fusion helps" could be decomposed. With the end-to-end rungs now
+complete, it can be. The question is whether `proposed`'s advantage comes from cross-attention
+(the mechanism one source proposes) or from the explicit second-order bilinear term (the
+mechanism the other proposes).
+
+Reported in both training settings — cached frozen embeddings and end-to-end adaptation —
+which were trained months apart on different hardware and therefore function as independent
+replications:
+
+| comparison | cached: favoured, *dz* | end-to-end: favoured, *dz* |
+|---|---|---|
+| `bilinear` vs `concat` | 7/8, **p = 0.039** | 6/8, p = 0.078 |
+| `xattn` vs `concat` | 5/8, p = 0.641 | 4/8, p = 0.383 |
+| `proposed` vs `bilinear` | 5/8, p = 0.313 | 6/8, p = 0.148 |
+| **`proposed` vs `xattn`** | 6/8, p = 0.078 | 7/8, **p = 0.016** |
+
+The pattern is the same in both settings and points one way:
+
+- **The bilinear term is doing the work.** It is the only single mechanism that separates from
+  plain concatenation, and it does so in the cached setting at p = 0.039.
+- **Cross-attention is not.** It is indistinguishable from concatenation in both settings
+  (p = 0.64 and p = 0.38), and `proposed` is significantly better than `xattn` alone — meaning
+  what `proposed` adds over cross-attention is precisely the bilinear block.
+- **`proposed` is indistinguishable from `bilinear` alone** in both settings. The 1,054,208
+  cross-attention parameters buy nothing on top of the 99,072-parameter bilinear block.
+
+So of the two mechanisms the literature proposes, one survives this evaluation in weakened
+form and the other does not survive at all.
+
+**But neither clears the cheap baseline.** Against the 16,513-parameter gate in the end-to-end
+setting, `xattn` is favoured on 3 of 8 and `bilinear` on 3 of 8, with nothing surviving
+correction in either case. The second-order term beats naive concatenation and still does not
+beat a per-molecule volume knob. That is the finding in one line: **the mechanism that works is
+not the expensive one, and the mechanism that is expensive does not work.**
 
 ---
 
@@ -590,8 +629,6 @@ transcribed. The fixed hyper-parameter setting is machine-checked against the tr
 
 **Pending compute** *(does not affect any conclusion above)*:
 
-- Two end-to-end ladder rungs (`xattn`, `bilinear`), which would attribute the end-to-end
-  variant's wins to a specific mechanism.
 - Chemprop, the second external baseline (implemented, runs as itself on identical splits;
   it pins its own dependency versions and therefore needs a separate environment).
   AttentiveFP is done and reported in §5.5.
