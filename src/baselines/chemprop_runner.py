@@ -39,7 +39,18 @@ WHAT IS HELD IDENTICAL, AND WHAT IS NOT
 ---------------------------------------
 Identical: the molecules, the split assignment, and the fact that test is scored once.
 
-Not identical, unavoidably: featurisation, optimiser schedule, early-stopping rule and
+Three things were read out of Chemprop's own source before trusting them, because each one
+would have silently invalidated the comparison:
+
+* `--splits-column` genuinely overrides the splitter. It groups the CSV by that column and
+  uses those exact row indices; the `split: RANDOM` that appears in its startup log is an
+  unused default. Our scaffold assignment is what it trains on.
+* `best.pt` is the **best** checkpoint by validation loss, not the last epoch's, so its
+  reported result is selected the same way ours is.
+* Early stopping is active with `patience = epochs` when `--patience` is unset, so it runs the
+  full budget but still restores the best epoch.
+
+Not identical, unavoidably: featurisation, optimiser schedule, learning-rate warmup and
 internal target scaling are Chemprop's own. This is the honest form of an external-baseline
 comparison and the paper says so.
 
@@ -122,23 +133,30 @@ def write_dataset_csv(path, smiles, y, split_of_row, tasks):
     df.to_csv(path, index=False, na_rep="")
 
 
-def read_preds(path, smiles_col, n_tasks):
+def read_preds(path, smiles_col, tasks):
     """
-    Chemprop's prediction CSV, as an (n, n_tasks) array.
+    Chemprop's prediction CSV, as an (n, len(tasks)) array in task order.
 
-    Column names are derived from the model's stored output columns and are not worth
-    predicting from here, so take every numeric column that is not the SMILES column and
-    assert the count rather than trusting a name.
+    Chemprop writes the input file back out with the prediction columns appended, naming them
+    from the model's stored output columns -- which are the target names we passed in. So the
+    reliable route is to look those names up by name, which also keeps multi-task order
+    correct: Tox21 has twelve columns and reading them in the wrong order would silently
+    scramble twelve tasks against their labels.
+
+    Falls back to position only if the names are absent, and asserts the count either way.
     """
     df = pd.read_csv(path)
+    if all(t in df.columns for t in tasks):
+        return df[list(tasks)].apply(pd.to_numeric, errors="coerce").to_numpy(dtype=float)
+
     cols = [c for c in df.columns if c != smiles_col]
     num = df[cols].apply(pd.to_numeric, errors="coerce")
     num = num.loc[:, num.notna().any(axis=0)]
-    if num.shape[1] < n_tasks:
+    if num.shape[1] < len(tasks):
         raise RuntimeError(
-            f"{path}: expected {n_tasks} prediction column(s), found {num.shape[1]} "
+            f"{path}: expected {len(tasks)} prediction column(s), found {num.shape[1]} "
             f"among {list(df.columns)}")
-    return num.iloc[:, :n_tasks].to_numpy(dtype=float)
+    return num.iloc[:, :len(tasks)].to_numpy(dtype=float)
 
 
 def run_one(ds, variant, tag, epochs, workdir, accelerator, seed=42):
@@ -168,6 +186,13 @@ def run_one(ds, variant, tag, epochs, workdir, accelerator, seed=42):
         "--target-columns", *tasks,
         "--splits-column", "split",
         "--epochs", str(epochs),
+        # Chemprop refuses to start unless epochs > warmup_epochs, and its warmup default is
+        # 2. That is invisible at the real setting (50 epochs) and fatal at the smoke-test
+        # setting, which is exactly where it bit: a 2-epoch check died with "The number of
+        # epochs should be higher than the number of epochs during warmup". Capping warmup at
+        # one below the epoch count keeps the published default of 2 for any real run and only
+        # shrinks it for short checks.
+        "--warmup-epochs", str(min(2, max(1, epochs - 1))),
         "--pytorch-seed", str(seed),
         "--data-seed", str(seed),
         "--num-workers", "0",
@@ -190,7 +215,7 @@ def run_one(ds, variant, tag, epochs, workdir, accelerator, seed=42):
             "--accelerator", accelerator,
         ], check=True)
 
-        p = read_preds(preds_csv, "smiles", len(tasks))
+        p = read_preds(preds_csv, "smiles", tasks)
         if p.shape[0] != len(idx[s]):
             raise RuntimeError(
                 f"{ds}/{variant}/{s}: got {p.shape[0]} predictions for {len(idx[s])} "
