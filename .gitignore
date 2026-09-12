@@ -63,3 +63,7 @@ mpp_phase3_regen.zip
 # which was packed before loop.py started recording the device and seed.
 #   python -m scripts.make_colab_bundle --preset fusion-cached --out mpp_rank_sweep.zip
 mpp_rank_sweep.zip
+
+# Editor/agent tooling, not project content. launch.json holds a machine-specific
+# interpreter path, so it is useless to anyone else and misleading if committed.
+.local-tooling/

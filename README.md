@@ -74,6 +74,27 @@ python -m src.eval.view_stats --a fuse_gated --b desc --datasets tox21 bbbp clin
 `python -m scripts.check_configs` asserts that `configs/shared.yaml` still describes the
 trainers' actual defaults. Run it before trusting a comparison.
 
+### Predicting a molecule you type in
+
+```bash
+python -m scripts.train_deploy     # ~35 min CPU: one proposed-fusion model per dataset
+python -m scripts.check_deploy     # proves the live featuriser matches the training features
+streamlit run app/predict_app.py
+```
+
+Enter a SMILES string and get all eight properties, each with a conformal prediction set or
+interval and the model's measured test score beside it. The models are trained on the
+canonical DeepChem split under the same fixed setting as everything else and archived as
+`deploy_proposed`, so the checkpoint, the calibration predictions and the displayed accuracy
+all come from one fit.
+
+`check_deploy` is not optional. Inference rebuilds ECFP, descriptors, graphs and ChemBERTa
+embeddings from a raw string; if any of them drifts from what the pool was built with, the
+model does not fail, it returns confident nonsense.
+
+`app/streamlit_app.py` is the inherited Phase 0 app (five datasets, the baseline pipeline).
+It is kept as the before side of the comparison, not superseded.
+
 ---
 
 ## The evaluation protocol
@@ -123,7 +144,10 @@ src/
   tune/         Optuna study (written, never run — read the docstring first)
   eval/         metrics, paired stats, conformal, calibration, similarity, gate analysis
   baselines/    Chemprop (subprocess) and AttentiveFP (via the encoder interface)
+  deploy/       featurize.py (SMILES -> the three views), predict.py (checkpoint -> answer)
+app/            predict_app.py serves the enhanced models; streamlit_app.py the inherited ones
 notebooks/      Colab notebooks for the GPU runs
+paper/          draft.md, plus two plain-English PDFs explaining the project and the design
 results/        runs/<variant>/{metrics,preds} is the authoritative archive
 ```
 
