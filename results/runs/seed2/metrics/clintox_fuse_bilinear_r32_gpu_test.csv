@@ -1,0 +1,2 @@
+auc,ap,acc,bal_acc,f1,n_tasks_scored,device,seed
+1.0,1.0,1.0,1.0,1.0,2,cuda,42
