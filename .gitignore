@@ -57,3 +57,9 @@ mpp_colab_bundle.zip
 # carries the cached ChemBERTa embeddings and is 126 MB, over GitHub's 100 MB file limit.
 #   python -m scripts.make_colab_bundle --preset fusion-cached --out mpp_phase3_regen.zip
 mpp_phase3_regen.zip
+
+# The bilinear rank sweep's bundle, same preset and the same 100 MB problem (132 MB).
+# Rebuild rather than fetch -- and rebuild it rather than reusing mpp_phase3_regen.zip,
+# which was packed before loop.py started recording the device and seed.
+#   python -m scripts.make_colab_bundle --preset fusion-cached --out mpp_rank_sweep.zip
+mpp_rank_sweep.zip
