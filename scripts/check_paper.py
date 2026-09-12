@@ -97,9 +97,55 @@ def checks(draft):
               r"Wilcoxon on \*dz\* p = ([\d.]+)\)",
               float(d.across_p_wilcoxon_dz.iloc[0]), 5e-3)
 
+    # The set-size diagnostic of section 6.2, and the abstract's restatement of it. These
+    # went stale twice -- once when AttentiveFP joined and once when Chemprop did -- because
+    # the counts are prose, not a generated table, and nothing recomputed them. Every number
+    # in the split is now derived from the archive.
     c = conformal("absolute")
     if c is not None:
-        t = c[c.dataset == "tox21"]
+        t21 = c[c.dataset == "tox21"]
+        small = t21[t21.mean_set_size <= 1.05]
+        big = t21[t21.mean_set_size > 1.05]
+        flat = " ".join(draft.split())
+
+        for label, group, pat in (
+            ("set-size<=1.05 model count", small,
+             r"\| mean set size . 1\.05 \| (\d+) \(random forest"),
+            ("set-size>1.05 model count", big,
+             r"\| mean set size > 1\.05 \| (\d+) \(everything else\)"),
+        ):
+            m = re.search(pat, draft)
+            out.append((label, None if m is None else float(m.group(1)),
+                        float(len(group)), 0,
+                        None if m is not None else "ROW MISSING FROM DRAFT"))
+
+        # Both the abstract and 6.2 quote the two coverage ranges; assert every endpoint.
+        for label, value in (
+            ("failing group: min actives", 100 * float(small.coverage_pos.min())),
+            ("failing group: max actives", 100 * float(small.coverage_pos.max())),
+            ("covering group: min actives", 100 * float(big.coverage_pos.min())),
+            ("covering group: max actives", 100 * float(big.coverage_pos.max())),
+        ):
+            out.append((label, value if f"{value:.1f}" in flat else None, value, 0.05,
+                        None if f"{value:.1f}" in flat
+                        else f"{value:.1f}% not quoted anywhere in the draft"))
+
+        # The total, quoted as a word in both places. Searched in the flattened text: the
+        # draft is hard-wrapped and the abstract breaks this very phrase across a line.
+        WORDS = {"thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16}
+        for pat, label in ((r"extend it across (\w+) models", "abstract model count"),
+                           (r"one mechanism: (\w+) models including", "6.2 model count")):
+            m = re.search(pat, flat)
+            if m is None:
+                out.append((label, None, float(len(t21)), 0, "CLAIM MISSING FROM DRAFT"))
+            else:
+                stated = WORDS.get(m.group(1).lower())
+                out.append((label, None if stated is None else float(stated),
+                            float(len(t21)), 0,
+                            None if stated is not None
+                            else f"could not read '{m.group(1)}' as a number"))
+
+        t = t21
         rf = t[t.tag == "rf"]
         if len(rf):
             claim("Tox21 rf actives coverage",
@@ -139,18 +185,116 @@ def checks(draft):
         out.append((label, float(n) if quoted else None, float(n), 0,
                     None if quoted else f"{n:,} not quoted anywhere in the draft"))
 
-    # Section 5.6 mechanism attribution: the two comparisons the whole end-to-end run
-    # existed to answer. Both settings are checked so a single re-run cannot quietly flip one.
+    # Section 5.6 mechanism attribution. All three settings of the headline row are checked,
+    # so a single re-run cannot quietly flip one, and the end-to-end column is pinned by
+    # position so the three-column table cannot be silently reordered.
     for a, b, pat, label in (
         ("fuse_bilinear", "fuse_concat",
          r"\| `bilinear` vs `concat` \| 7/8, \*\*p = ([\d.]+)\*\*", "cached bilinear vs concat dz"),
+        ("fuse_bilinear_gpu", "fuse_concat_gpu",
+         r"\| `bilinear` vs `concat` \| 7/8, \*\*p = [\d.]+\*\* \| 8/8, \*\*p = ([\d.]+)\*\*",
+         "cached-T4 bilinear vs concat dz"),
         ("fuse_proposed_e2e", "fuse_xattn_e2e",
-         r"\| \*\*`proposed` vs `xattn`\*\* \| 6/8, p = [\d.]+ \| 7/8, \*\*p = ([\d.]+)\*\*",
+         r"\| \*\*`proposed` vs `xattn`\*\* \| 6/8, p = [\d.]+ \| 7/8, p = [\d.]+ "
+         r"\| 7/8, \*\*p = ([\d.]+)\*\*",
          "e2e proposed vs xattn dz"),
     ):
         d = compare(a, b)
         if d is not None:
             claim(label, pat, float(d.across_p_wilcoxon_dz.iloc[0]), 5e-4)
+
+    # Section 5.6, the rank sweep. The whole point of this sub-section is that the p-value
+    # moves with the rank while the effect does not, so every cell of the rank table is
+    # asserted -- a claim this uncomfortable is exactly the one that must not be allowed to
+    # drift, in either direction.
+    RANK_ROW = {
+        16: r"\| 16 \| 24,768 \| (\d)/8 \| ([\d.]+) \| ([\d.]+) \| ([\d.]+) \|",
+        32: r"\| 32 \| 49,536 \| (\d)/8 \| ([\d.]+) \| ([\d.]+) \| ([\d.]+) \|",
+        64: r"\| \*\*64\*\* \| \*\*99,072\*\* \| \*\*(\d)/8\*\* \| \*\*([\d.]+)\*\* "
+            r"\| \*\*([\d.]+)\*\* \| \*\*([\d.]+)\*\* \|",
+        128: r"\| 128 \| 198,144 \| (\d)/8 \| ([\d.]+) \| ([\d.]+) \| ([\d.]+) \|",
+    }
+    for r, pat in RANK_ROW.items():
+        tag = "fuse_bilinear_gpu" if r == 64 else f"fuse_bilinear_r{r}_gpu"
+        d = compare(tag, "fuse_concat_gpu")
+        m = re.search(pat, draft)
+        if d is None:
+            continue
+        if m is None:
+            out.append((f"rank {r} row", None, 0.0, 0, "RANK ROW MISSING FROM DRAFT"))
+            continue
+        for i, (col, tol) in enumerate((("across_wins", 0), ("across_p_sign", 5e-4),
+                                        ("across_p_wilcoxon_dz", 5e-4),
+                                        ("across_p_wilcoxon_raw", 5e-4))):
+            out.append((f"rank {r}: {col}", float(m.group(i + 1)),
+                        float(d[col].iloc[0]), tol, None))
+
+    # Two DIFFERENT comparisons that a careless reading conflates, so both are pinned:
+    # the inertness claim is r128 against r16 (the extremes), while the Gelman-Stern
+    # sentence is r64 against r16 -- the pair whose two arms disagree about significance
+    # against `concat`. Using one archive for both would have silently asserted the wrong
+    # number against the right sentence.
+    d = compare("fuse_bilinear_r128_gpu", "fuse_bilinear_r16_gpu")
+    if d is not None:
+        claim("rank extremes indistinguishable (r128 vs r16)",
+              r"eight times apart . differ at p = (\d\.\d+)",
+              float(d.across_p_wilcoxon_dz.iloc[0]), 5e-4)
+    d = compare("fuse_bilinear_r16_gpu", "fuse_bilinear_gpu")
+    if d is not None:
+        claim("Gelman-Stern pair (r64 vs r16) not significant",
+              r"is \*also\* not significant, at p = (\d\.\d+)",
+              float(d.across_p_wilcoxon_dz.iloc[0]), 5e-4)
+
+    # Fusion-block parameter counts per rank, recomputed from the model definition so the
+    # table cannot quote a size the code no longer builds.
+    from src.models.fusion import build_fusion as _bf
+    for r in (16, 32, 64, 128):
+        n = sum(p.numel() for p in _bf("bilinear", n_views=3, d=256, rank=r).parameters())
+        if f"{n:,}" not in " ".join(draft.split()):
+            out.append((f"rank {r} parameter count", None, float(n), 0,
+                        f"{n:,} not quoted in the draft"))
+
+    # Section 8: the duplicate-label ceiling. Checked against the audit's own output rather
+    # than against numbers typed into the limitations list, and the no-leakage claim is
+    # asserted as a number (zero) rather than left as prose -- it is the load-bearing half.
+    dup_path = os.path.join(MET, "duplicate_audit.csv")
+    if os.path.exists(dup_path):
+        dup = pd.read_csv(dup_path).set_index("dataset")
+        for ds, label in (("bbbp", "BBBP"), ("clintox", "ClinTox"), ("esol", "ESOL")):
+            if ds not in dup.index:
+                continue
+            row = dup.loc[ds]
+            pat = (rf"\| {label} \| ([\d,]+) \| ([\d,]+) \| (\d+) \| (\d+) \|")
+            m = re.search(pat, draft)
+            if m is None:
+                out.append((f"duplicate audit: {label}", None, 0.0, 0,
+                            "ROW MISSING FROM DRAFT"))
+                continue
+            for i, col in enumerate(("rows", "unique_molecules", "duplicate_groups",
+                                     "conflicting_groups")):
+                out.append((f"duplicates {label}: {col}",
+                            float(m.group(i + 1).replace(",", "")),
+                            float(row[col]), 0, None))
+        # The load-bearing half of the limitation: duplicates exist but never cross a split,
+        # so they are a noise ceiling and not leakage. Asserted as a number rather than left
+        # as prose, because it is the half a reader would most want verified.
+        out.append(("duplicates: no group spans a split", 0.0,
+                    float(dup.groups_spanning_splits.sum()), 0, None))
+
+        # "The other five datasets have no duplicates at all" -- spelled number in the prose,
+        # counted from the audit.
+        WORDS = {"three": 3, "four": 4, "five": 5, "six": 6}
+        clean = float((dup.duplicate_groups == 0).sum())
+        m = re.search(r"The other (\w+) datasets have no duplicates at all", draft)
+        if m is None:
+            out.append(("datasets with no duplicates", None, clean, 0,
+                        "CLAIM MISSING FROM DRAFT"))
+        else:
+            stated = WORDS.get(m.group(1).lower())
+            out.append(("datasets with no duplicates",
+                        None if stated is None else float(stated), clean, 0,
+                        None if stated is not None
+                        else f"could not read '{m.group(1)}' as a number"))
 
     e = os.path.join(MET, "ece_multiseed.csv")
     if os.path.exists(e):

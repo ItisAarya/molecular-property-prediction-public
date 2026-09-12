@@ -30,12 +30,20 @@ generalises furthest — that a fully seeded pipeline run on a different GPU is 
 model**, moving 18% of single-split numbers by more than the effect size the field reports
 differences at, while the five-split mean absorbs it entirely.
 
+The protocol also caught our own work. Sweeping the bilinear rank — a constant we had chosen
+once and never examined — leaves the mechanism's effect unchanged in direction at every rank,
+while its across-dataset significance appears at one rank and vanishes at the other three,
+even though the ranks are mutually indistinguishable. A multi-split, family-wise-corrected,
+eight-dataset result can still rest on an arbitrary architectural choice, and we would not
+have known had we not swept it.
+
 On uncertainty, we corroborate a recently reported failure — a nominal 90% conformal
-guarantee covers **9.7–9.8% of active compounds** for the two models that emit near-singleton
-prediction sets, and 71–78% for every other architecture we tested, with class-conditional
-conformal repairing it at a visible cost in set size — and extend it across fifteen models,
-showing the between-architecture spread is smaller than any model's gap to nominal and that
-mean prediction-set size predicts which models fail. We show that temperature scaling provably cannot alter a binary conformal set, that
+guarantee covers **9.7–14.1% of active compounds** for the three models that emit
+near-singleton prediction sets, and 71.1–79.8% for the twelve that do not, with
+class-conditional conformal repairing it at a visible cost in set size — and extend it across
+fifteen models, showing the between-architecture spread is smaller than any model's gap to
+nominal and that mean prediction-set size predicts which models fail, with nothing in between
+the two groups. We show that temperature scaling provably cannot alter a binary conformal set, that
 the adaptive set-valued scores commonly recommended (APS, RAPS) are unusable at two classes,
 and that conformalized quantile regression is the only score we tested that yields interval
 widths carrying per-molecule information.
@@ -391,29 +399,97 @@ complete, it can be. The question is whether `proposed`'s advantage comes from c
 (the mechanism one source proposes) or from the explicit second-order bilinear term (the
 mechanism the other proposes).
 
-Reported in both training settings — cached frozen embeddings and end-to-end adaptation —
-which were trained months apart on different hardware and therefore function as independent
-replications:
+Reported in three settings: the committed cached ladder (frozen embeddings, CPU), the same
+cached ladder regenerated on a T4, and the end-to-end ladder with LoRA adapters trained. The
+first two differ only in hardware, which §7 shows is noise in the five-split mean; the third is
+a genuinely different training regime. Across-dataset Wilcoxon on *dz*:
 
-| comparison | cached: favoured, *dz* | end-to-end: favoured, *dz* |
-|---|---|---|
-| `bilinear` vs `concat` | 7/8, **p = 0.039** | 6/8, p = 0.078 |
-| `xattn` vs `concat` | 5/8, p = 0.641 | 4/8, p = 0.383 |
-| `proposed` vs `bilinear` | 5/8, p = 0.313 | 6/8, p = 0.148 |
-| **`proposed` vs `xattn`** | 6/8, p = 0.078 | 7/8, **p = 0.016** |
+| comparison | cached, CPU | cached, T4 | end-to-end, T4 |
+|---|---|---|---|
+| `bilinear` vs `concat` | 7/8, **p = 0.039** | 8/8, **p = 0.008** | 6/8, p = 0.078 |
+| `xattn` vs `concat` | 5/8, p = 0.641 | 5/8, p = 0.547 | 4/8, p = 0.383 |
+| `proposed` vs `bilinear` | 5/8, p = 0.313 | 3/8, p = 0.547 | 6/8, p = 0.148 |
+| **`proposed` vs `xattn`** | 6/8, p = 0.078 | 7/8, p = 0.109 | 7/8, **p = 0.016** |
 
-The pattern is the same in both settings and points one way:
+The pattern is the same in all three and points one way:
 
 - **The bilinear term is doing the work.** It is the only single mechanism that separates from
-  plain concatenation, and it does so in the cached setting at p = 0.039.
-- **Cross-attention is not.** It is indistinguishable from concatenation in both settings
-  (p = 0.64 and p = 0.38), and `proposed` is significantly better than `xattn` alone — meaning
-  what `proposed` adds over cross-attention is precisely the bilinear block.
-- **`proposed` is indistinguishable from `bilinear` alone** in both settings. The 1,054,208
+  plain concatenation, and it is favoured on 6 to 8 of 8 datasets in every setting.
+- **Cross-attention is not.** It is indistinguishable from concatenation in all three
+  (p = 0.38 to 0.64), and `proposed` is consistently better than `xattn` alone — meaning what
+  `proposed` adds over cross-attention is precisely the bilinear block.
+- **`proposed` is indistinguishable from `bilinear` alone** in all three. The 1,054,208
   cross-attention parameters buy nothing on top of the 99,072-parameter bilinear block.
 
 So of the two mechanisms the literature proposes, one survives this evaluation in weakened
 form and the other does not survive at all.
+
+#### The rank sweep, and what it does to the claim above
+
+The bilinear block's rank *r* sets the size of the second-order interaction: two *d* × *r*
+projections per view pair in place of a full *d* × *d* form. Every result above used r = 64,
+chosen once. Having just identified this block as the mechanism that works, the obvious
+question is whether that choice made it work. We trained r ∈ {16, 32, 128} on the same splits,
+on the same hardware as the cached-T4 column, changing nothing else.
+
+**No rank is distinguishable from any other.** Against r = 64, each of r = 16, 32 and 128 gives
+0 improves, 0 degrades, 8 indistinguishable. The extremes — a 24,768-parameter interaction
+against a 198,144-parameter one, eight times apart — differ at p = 0.844. The block is inert to
+its own capacity across the entire span.
+
+But against the ladder floor, the comparison the claim rests on, the ranks do not agree:
+
+| rank | fusion parameters | favoured vs `concat` | sign | *dz* | raw |
+|---|---|---|---|---|---|
+| 16 | 24,768 | 6/8 | 0.289 | 0.055 | 0.195 |
+| 32 | 49,536 | 6/8 | 0.289 | 0.109 | 0.109 |
+| **64** | **99,072** | **8/8** | **0.008** | **0.008** | **0.008** |
+| 128 | 198,144 | 6/8 | 0.289 | 0.078 | 0.148 |
+
+Only r = 64 reaches significance, and p = 0.008 is the *floor* for n = 8 — the smallest value
+the sign test can return, reachable only by a clean sweep. The per-dataset means say why (mean
+paired difference against `concat`, positive favouring bilinear):
+
+| dataset | r = 16 | r = 32 | r = 64 | r = 128 |
+|---|---|---|---|---|
+| Tox21 | +0.0121 | +0.0125 | +0.0142 | +0.0154 |
+| ClinTox | +0.0171 | +0.0082 | +0.0162 | +0.0100 |
+| **SIDER** | **+0.0535** | **+0.0626** | **+0.0730** | **+0.0629** |
+| Lipophilicity | +0.0045 | +0.0016 | +0.0007 | +0.0017 |
+| FreeSolv | +0.0629 | +0.0774 | +0.0722 | +0.0363 |
+| BBBP | +0.0045 | −0.0018 | +0.0015 | −0.0007 |
+| BACE | −0.0047 | +0.0031 | +0.0065 | +0.0065 |
+| ESOL | −0.0134 | −0.0048 | +0.0129 | −0.0276 |
+
+Five datasets favour the bilinear term at every rank. Three change sign — BBBP, BACE, ESOL —
+and every one of those changes is far below our own minimum detectable effect (§3.5): BBBP moves
+within ±0.005 AUC, BACE within ±0.007 AUC, ESOL within ±0.03 RMSE, against thresholds of ±0.02
+and ±0.10. Only SIDER exceeds the MDE, and it does so at every rank.
+
+The direction therefore holds across six separately trained bilinear models — the three settings
+above plus these three ranks — favoured on 6 to 8 of 8 every time and never once reversed. What
+moves between p = 0.008 and p = 0.109 is which way three datasets sitting at effectively zero
+happen to land.
+
+#### This is our own result failing our own standard
+
+`bilinear`(r = 64) beats `concat` significantly. `bilinear`(r = 16) does not. And
+`bilinear`(r = 64) versus `bilinear`(r = 16) is *also* not significant, at p = 0.641. That is
+exactly the error Gelman and Stern name: the difference between "significant" and "not
+significant" is not itself significant.
+
+We report it because it is the same failure this paper spends its length documenting, one level
+up. §3.2 shows a single scaffold split producing a 0.18 AUC swing; §7 shows a seeded pipeline
+producing a different model on different hardware. Those are arguments that single-run results
+do not survive scrutiny. This is a *multi-split, Holm-corrected, eight-dataset* result whose
+significance still turns on an architectural constant chosen once and never examined — and we
+would not have known had we not run the ablation. A reader is entitled to ask how many published
+fusion results rest on a comparably arbitrary choice that was never swept. We cannot answer that,
+and neither could we have answered it about our own until we looked.
+
+The honest statement of §5.6 is therefore: the bilinear term is the mechanism that separates
+from concatenation, the effect is real, small, and concentrated in one dataset, and its
+across-dataset p-value is not stable to a hyper-parameter that does not otherwise matter.
 
 **But neither clears the cheap baseline.** Against the 16,513-parameter gate in the end-to-end
 setting, `xattn` is favoured on 3 of 8 and `bilinear` on 3 of 8, with nothing surviving
@@ -490,12 +566,15 @@ shortfall equals the majority's surplus amplified by the imbalance ratio — is 
 explanation of the magnitude than anything we offer.
 
 We report our measurement as **independent corroboration on a wider model set**, not as a
-discovery. What it adds is breadth and one mechanism: thirteen models including every rung of
-a fusion ladder, where the spread between the best and worst architecture on minority coverage
-(71.3% to 77.9%) is smaller than any of their gaps to nominal, and where the two models that
-fail worst are exactly the two whose mean set size is ≈ 1.0 — on 6–9% positive data, a marginal
-guarantee can be met with confident singletons of the majority class. That set-size diagnostic
-is complementary to their coverage-gap diagnostic and predicts *which* models will fail.
+discovery. What it adds is breadth and one mechanism: fifteen models including every rung of
+a fusion ladder and two published external baselines, where the spread across the twelve
+architectures that cover the minority class at all (71.1% to 79.8%) is smaller than any of
+their gaps to nominal, and where the three that fail are exactly the three whose mean set size
+is ≈ 1.0 — on 6–9% positive data, a marginal guarantee can be met with confident singletons of
+the majority class. That one of the three is Chemprop, a method a practitioner would actually
+reach for, is what makes this a property of the setting rather than of weak models. The
+set-size diagnostic is complementary to their coverage-gap diagnostic, costs nothing to
+compute, and predicts *which* models will fail.
 
 The rest of §6 does not overlap with their work: §6.3's invariance proof, §6.4's analysis of
 APS/RAPS at two classes, §6.5's regression scores and §6.6's distance stratification are, as
@@ -635,6 +714,31 @@ comparisons of single-split numbers should be treated as uncontrolled.
   manufactured, and we did not do it.
 - **Eight datasets, five seeds.** The across-dataset sign test cannot go below p = 0.0078,
   so a 7–1 split cannot reach significance on that statistic however large the effect.
+- **Our own headline mechanism result is not stable to a hyper-parameter** (§5.6). The
+  bilinear term separates from concatenation at every rank we tried, but only at r = 64 does
+  it reach across-dataset significance, and the ranks are mutually indistinguishable. The
+  effect is real; the p-value attached to it in this paper is partly an artefact of a constant
+  chosen once. We found this because we swept it, and we report it rather than quoting the
+  sweep only where it agrees.
+- **Three of the eight benchmarks contain the same molecule twice with different measured
+  answers**, which puts a ceiling on achievable accuracy that no model can pass. Canonicalising
+  the SMILES reveals what raw strings hide
+  (`python -m scripts.audit_duplicates`):
+
+  | dataset | rows | unique molecules | duplicate groups | groups whose labels conflict |
+  |---|---|---|---|---|
+  | BBBP | 2,039 | 1,975 | 60 | 10 |
+  | ClinTox | 1,480 | 1,461 | 19 | 19 |
+  | ESOL | 1,128 | 1,117 | 11 | 6 |
+
+  The other five datasets have no duplicates at all. Aspirin is one of the BBBP cases, labelled
+  both permeable and not. **This is not leakage:** no duplicate group spans more than one split
+  in any of the eight datasets, because identical molecules share a Murcko scaffold and the
+  scaffold split necessarily keeps them together. A random split would not have — which is a
+  checkable argument for the protocol rather than an asserted one. But 19 self-contradictory
+  groups in a 1,480-molecule dataset is a component of every reported ClinTox error that no
+  architecture can remove, and we are not aware of it being accounted for in the numbers this
+  benchmark is usually compared against.
 - **Two comparisons are cross-hardware** (§7): the LoRA views against the CPU-trained graph
   reference, and the end-to-end ladder against the cached ladder. Both are unbiased in the
   five-split mean, so neither conclusion changes, but the within-device comparisons —
@@ -656,9 +760,11 @@ Every number is generated from archived per-split predictions and metrics by scr
 repository; the tables in this draft are built by `python -m scripts.make_tables` and are not
 transcribed. The fixed hyper-parameter setting is machine-checked against the training code.
 
-**Pending compute** *(does not affect any conclusion above)*:
-
-- Bilinear rank sweep.
+**Pending compute:** none. Every experiment this paper reports is complete. Two ablations
+named in the plan were deliberately not run and are not reported: two of the three
+leave-one-view-out arms (the third, and the only one a claim rests on, is in §5.4), and a motif
+view that was never built. An Optuna study is implemented in the repository and has never been
+run; §8 says why.
 
 ---
 
