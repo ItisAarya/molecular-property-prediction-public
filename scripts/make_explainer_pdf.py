@@ -1,4 +1,4 @@
-import sys, os
+import os
 import scripts._pdflib  # noqa: F401  -- resolves reportlab; must precede its import
 
 from reportlab.lib.pagesizes import A4
@@ -9,7 +9,7 @@ from reportlab.platypus import (SimpleDocTemplate, Paragraph, Spacer, Table, Tab
                                 PageBreak, KeepTogether)
 from reportlab.lib.enums import TA_LEFT
 
-OUT = r"C:/PROJECTS/MPP_enhanced/paper/PROJECT_EXPLAINED.pdf"
+OUT = os.path.join("paper", "PROJECT_EXPLAINED.pdf")
 
 NAVY   = colors.HexColor("#14304F")
 BLUE   = colors.HexColor("#2A6099")

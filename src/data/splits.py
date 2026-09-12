@@ -24,7 +24,10 @@ Out-of-fold (OOF) prediction over the training set, nested twice:
     valid  ------------>  early stopping and model selection only; never fitted on
     test   ------------>  evaluated once, at the very end
 
-`kfold_indices` provides the folds. The nesting matters: the meta-learner consumes base
+`scaffold_kfold_indices` provides the folds -- scaffold-disjoint, not random, because
+random folds were measured to make out-of-fold predictions easier than test ones
+(ESOL: 1.15 logS OOF against 1.69 test), which teaches the meta-learner to trust them
+too much. The nesting matters: the meta-learner consumes base
 predictions, so it needs base predictions that are out-of-sample; the calibrators consume
 meta predictions, so they need meta predictions that are out-of-sample. Skipping the
 second level would just move the leak up a layer.
@@ -168,41 +171,6 @@ def enough_positives(y_part, task, minimum=MIN_POSITIVES):
     if col.size == 0 or len(np.unique(col)) < 2:
         return False
     return int((col == 1).sum()) >= minimum
-
-
-def kfold_indices(dataset, y, n_folds=5, base_seed=0):
-    """
-    Stratified, deterministic K-fold partition of a split (used on `train`).
-
-    Returns a list of index arrays, one per fold, covering every row exactly once.
-
-    This is what makes correct stacking possible. A meta-learner must be fitted on base
-    predictions for molecules the base models did not train on; otherwise it learns to
-    trust predictions that are in-sample and over-confident. Training on fold k-complement
-    and predicting on fold k, for every k, produces exactly that: an out-of-fold prediction
-    for every training molecule.
-
-    Stratification matters more here than usual. Tox21 tasks run as low as 2.5% positives,
-    so an unstratified fold can easily end up with a task that has no positives at all,
-    which makes that task unfittable for that fold.
-    """
-    n = len(y)
-    rng = np.random.default_rng(_dataset_seed(dataset, base_seed + 977))
-    strata = _strata(y)
-
-    buckets = [[] for _ in range(n_folds)]
-    for s in np.unique(strata):
-        members = np.flatnonzero(strata == s)
-        rng.shuffle(members)
-        # Deal the stratum round-robin across folds so each fold gets a near-equal share
-        # of it, rather than slicing (which biases the last fold when sizes do not divide).
-        for i, row in enumerate(members):
-            buckets[i % n_folds].append(row)
-
-    folds = [np.sort(np.array(b, dtype=int)) for b in buckets]
-    covered = np.sort(np.concatenate(folds))
-    assert np.array_equal(covered, np.arange(n)), "folds must cover every row exactly once"
-    return folds
 
 
 def load_y(dataset, split):

@@ -44,23 +44,16 @@ import os
 import numpy as np
 import pandas as pd
 
+from src.data.materialize import dataset_names
+# Shared with the app's provenance lookup on purpose: if the two canonicalisations ever
+# disagreed, the app would call a molecule novel that this audit counts as a duplicate.
+from src.deploy.lookup import canonical
+
 POOL_DIR = os.path.join("data", "pool")
 SPLIT_DIR = os.path.join("data", "splits")
 MET_DIR = os.path.join("results", "metrics")
 OUT = os.path.join(MET_DIR, "duplicate_audit.csv")
 TOL = 1e-6
-
-
-def datasets_on_disk():
-    with open(os.path.join("data", "dataset_meta.json")) as f:
-        return list(json.load(f).keys())
-
-
-def canonical(smiles):
-    from rdkit import Chem, RDLogger
-    RDLogger.DisableLog("rdApp.*")
-    mol = Chem.MolFromSmiles(smiles)
-    return Chem.MolToSmiles(mol) if mol is not None else None
 
 
 def audit(ds, variant="deepchem"):
@@ -112,14 +105,31 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[2])
     ap.add_argument("--datasets", nargs="+", default=None)
     ap.add_argument("--variant", default="deepchem")
+    ap.add_argument("--out", default=OUT,
+                    help="where to write. Defaults to the full-set archive, "
+                         "which a narrowed --datasets run refuses to touch.")
     args = ap.parse_args()
 
-    rows = [audit(ds, args.variant) for ds in (args.datasets or datasets_on_disk())]
+    everything = dataset_names()
+    datasets = args.datasets or everything
+    rows = [audit(ds, args.variant) for ds in datasets]
     df = pd.DataFrame(rows)
-    os.makedirs(MET_DIR, exist_ok=True)
-    df.to_csv(OUT, index=False)
-
     print(df.to_string(index=False))
+
+    # A narrowed run does NOT overwrite the archive. This project has been caught by that
+    # twice already -- a re-run with fewer `--datasets` silently replaced a full result file
+    # with a partial one, and the partial version then disagreed with the paper. `--out`
+    # exists for anyone who genuinely wants a subset on disk.
+    partial = set(datasets) != set(everything)
+    if partial and args.out == OUT:
+        print(f"\nNOT written: this run covers {len(datasets)} of {len(everything)} datasets, "
+              f"and {OUT} is the full-set archive that scripts/check_paper.py asserts "
+              f"against.\nRe-run without --datasets to refresh it, or pass --out to write "
+              f"this subset somewhere else.")
+        return
+
+    os.makedirs(MET_DIR, exist_ok=True)
+    df.to_csv(args.out, index=False)
     print()
     total_cross = int(df.groups_spanning_splits.sum())
     if total_cross:
@@ -129,7 +139,7 @@ def main():
         print("No duplicate group spans more than one split in any dataset -- identical "
               "molecules share a scaffold, so the scaffold split keeps them together. "
               "No leakage.")
-    print(f"\nWrote {OUT}")
+    print(f"\nWrote {args.out}")
 
 
 if __name__ == "__main__":

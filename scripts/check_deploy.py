@@ -34,12 +34,9 @@ import sys
 import numpy as np
 import torch
 
+from src.data.materialize import dataset_names
+
 POOL = os.path.join("data", "pool")
-
-
-def datasets_on_disk():
-    with open(os.path.join("data", "dataset_meta.json")) as f:
-        return list(json.load(f).keys())
 
 
 def check_dataset(ds, n, do_seq):
@@ -134,7 +131,7 @@ def check_end_to_end(ds, tag, variant="deepchem", tol=1e-5):
     archived = np.load(archived_path)
     live, ok = Predictor(ds, tag=tag, variant=variant)._raw(smiles)
     if live is None:
-        return [f"end-to-end: the live featuriser rejected every test molecule"]
+        return ["end-to-end: the live featuriser rejected every test molecule"]
     if int(ok.sum()) != len(smiles):
         return [f"end-to-end: {len(smiles) - int(ok.sum())} test molecule(s) the pool "
                 f"contains are now unfeaturisable"]
@@ -160,7 +157,7 @@ def main():
                          "over every test molecule, which is the slow part)")
     args = ap.parse_args()
 
-    datasets = args.datasets or datasets_on_disk()
+    datasets = args.datasets or dataset_names()
     failures = {}
     for ds in datasets:
         problems = check_dataset(ds, args.n, not args.skip_seq)

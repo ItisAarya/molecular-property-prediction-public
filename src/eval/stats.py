@@ -44,7 +44,6 @@ Reaching p < 0.05 by this route needs more seeds, or aggregation across datasets
 """
 
 import argparse
-import json
 import os
 import warnings
 
@@ -52,6 +51,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sps
 
+from src.eval.intervals import ci95
 from src.eval.metrics import is_classification
 from src.eval.view_stats import across_datasets, holm
 
@@ -64,9 +64,6 @@ MET_DIR = os.path.join(RESULTS, "metrics")
 # Which metric decides each task type, and whether larger is better.
 PRIMARY = {"classification": ("test_auc", True), "regression": ("test_rmse", False)}
 MODELS = ["rf", "gnn", "trf", "hybrid", "ens"]
-
-T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447,
-          8: 2.365, 9: 2.306, 10: 2.262}
 
 
 def is_cls(ds):
@@ -94,19 +91,6 @@ def load_runs(variants):
     if not frames:
         raise SystemExit("No seeded runs found. Run: python -m scripts.run_split")
     return pd.concat(frames, ignore_index=True)
-
-
-def ci95(values):
-    """Mean and 95% t-interval half-width. Half-width is NaN for a single observation."""
-    v = np.asarray([x for x in values if np.isfinite(x)], dtype=float)
-    n = len(v)
-    if n == 0:
-        return np.nan, np.nan, np.nan, 0
-    mean, sd = float(v.mean()), float(v.std(ddof=1)) if n > 1 else 0.0
-    if n < 2:
-        return mean, 0.0, np.nan, n
-    t = T_CRIT.get(n, 1.96)
-    return mean, sd, t * sd / np.sqrt(n), n
 
 
 def summarise(df):

@@ -60,6 +60,21 @@ def active_variant():
     return json.load(open(ACTIVE_FILE))["variant"]
 
 
+def dataset_names():
+    """
+    Every dataset the prep pipeline has staged, in `dataset_meta.json` order.
+
+    Lives here because this module already owns `dataset_meta.json`. It was previously
+    copied verbatim into four scripts, which is three more places for the path to go stale.
+    """
+    meta_path = os.path.join(DATA_DIR, "dataset_meta.json")
+    if not os.path.exists(meta_path):
+        raise FileNotFoundError(
+            f"{meta_path} -- run: python -m scripts.prep_moleculenet")
+    with open(meta_path, encoding="utf-8") as f:
+        return list(json.load(f).keys())
+
+
 def load_split(ds, variant):
     path = os.path.join(SPLIT_DIR, f"{ds}_{variant}.json")
     if not os.path.exists(path):

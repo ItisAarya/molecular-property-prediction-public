@@ -26,11 +26,12 @@ The architecture and every hyper-parameter are the trainer's own defaults, which
 """
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
 import sys
+
+from src.data.materialize import dataset_names
 
 MET_DIR = os.path.join("results", "metrics")
 PRED_DIR = os.path.join("results", "preds")
@@ -39,11 +40,6 @@ MODELS_DIR = "models"
 VARIANT = "deepchem"
 TAG = "deploy_proposed"
 MODE = "proposed"
-
-
-def datasets_on_disk():
-    with open(os.path.join("data", "dataset_meta.json")) as f:
-        return list(json.load(f).keys())
 
 
 def missing(datasets):
@@ -74,7 +70,7 @@ def main():
     ap.add_argument("--device", default="cpu", choices=["cpu", "cuda", "auto"])
     args = ap.parse_args()
 
-    datasets = args.datasets or datasets_on_disk()
+    datasets = args.datasets or dataset_names()
 
     if not args.archive_only:
         from src.data.materialize import active_variant, materialize

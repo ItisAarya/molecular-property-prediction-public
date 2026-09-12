@@ -58,7 +58,7 @@ import numpy as np
 import torch
 import yaml
 
-from src.eval.conformal import binary_scores, conformal_quantile
+from src.eval.conformal import binary_scores, conformal_quantile, label_scale
 from src.eval.metrics import is_classification
 
 CONFIG = os.path.join("configs", "shared.yaml")
@@ -101,12 +101,6 @@ def datasets():
 
 def tasks_of(ds):
     return list(meta()[ds]["tasks"])
-
-
-def label_scale(ds):
-    """(mean, std) per task. Regression labels were z-scored; classification ones were not."""
-    pool = np.load(os.path.join(POOL_DIR, f"{ds}_ecfp.npz"), allow_pickle=True)
-    return np.asarray(pool["y_mean"], dtype=float), np.asarray(pool["y_std"], dtype=float)
 
 
 def _load_state(model, state, path):

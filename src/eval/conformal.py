@@ -509,7 +509,6 @@ def main():
     rows, missing = [], []
     for tag in args.tags:
         for ds in datasets:
-            cls = pool_index[ds]["task_type"] == "classification"
             if args.by_distance:
                 per = []
                 for v in args.variants:

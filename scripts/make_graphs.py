@@ -1,6 +1,5 @@
 # scripts/make_graphs.py
 import os, json, torch, pandas as pd
-import numpy as np
 from rdkit import Chem
 from rdkit import RDLogger
 from rdkit.Chem import rdchem

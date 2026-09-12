@@ -54,7 +54,6 @@ import numpy as np
 import pandas as pd
 
 from src.eval.metrics import cls_metrics, is_classification, reg_metrics
-from src.eval.similarity import _tanimoto_max
 
 POOL_DIR = os.path.join("data", "pool")
 SPLIT_DIR = os.path.join("data", "splits")
