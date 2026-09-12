@@ -48,7 +48,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
 
-from src.data.bucketing import LengthBucketSampler, POOL_MULTIPLIER
+from src.data.bucketing import LengthBucketSampler
 from src.eval.metrics import is_classification
 from src.models.encoders.cached import CachedEmbeddingEncoder
 from src.models.encoders.descriptor import DescriptorEncoder

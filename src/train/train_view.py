@@ -32,7 +32,6 @@ off the validation split, leaving it free for exactly this.
 import argparse
 import json
 import os
-import time
 
 import numpy as np
 import pandas as pd
@@ -49,7 +48,7 @@ from src.models.encoders.sequence import SequenceEncoder
 # stop the sequence and descriptor views running anywhere it is not installed -- which is
 # exactly the case on a stock Colab runtime.
 from src.models.heads import EMBED_DIM, SingleViewModel
-from src.train.loop import MET_DIR, fit_and_score, to_device
+from src.train.loop import MET_DIR, fit_and_score
 from src.utils.seed import set_seed
 
 DATA_DIR = "data"
@@ -68,14 +67,6 @@ def pick_device(name="auto"):
         name = "cuda" if torch.cuda.is_available() else "cpu"
     return torch.device(name)
 
-
-def to_device(obj, device):
-    """Move a batch to the device, whichever representation it is."""
-    if device.type == "cpu":
-        return obj
-    if isinstance(obj, tuple):
-        return tuple(t.to(device) for t in obj)
-    return obj.to(device)
 
 def load_graphs(ds, split):
     obj = torch.load(os.path.join(DATA_DIR, f"{ds}_{split}_graphs.pt"), weights_only=False)

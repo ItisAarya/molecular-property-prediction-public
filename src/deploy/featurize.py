@@ -55,14 +55,6 @@ _TOK = None
 _TRF = None
 
 
-def descriptor_names():
-    """The 217 descriptor column names, in the fixed order the models were trained on."""
-    global _DESC_FUNCS
-    if _DESC_FUNCS is None:
-        _DESC_FUNCS = descriptor_functions()
-    return [n for n, _ in _DESC_FUNCS]
-
-
 def _funcs():
     global _DESC_FUNCS
     if _DESC_FUNCS is None:

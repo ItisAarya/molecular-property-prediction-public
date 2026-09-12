@@ -38,7 +38,7 @@ if str(ROOT) not in sys.path:
 os.chdir(ROOT)  # every path in src/deploy is relative to the project root
 
 from src.deploy.lookup import find  # noqa: E402
-from src.deploy.predict import DESCRIPTIONS, Predictor, datasets, tasks_of  # noqa: E402
+from src.deploy.predict import DESCRIPTIONS, Predictor, datasets  # noqa: E402
 from src.eval.metrics import is_classification  # noqa: E402
 
 st.set_page_config(page_title="Molecular property prediction", page_icon="*", layout="wide")

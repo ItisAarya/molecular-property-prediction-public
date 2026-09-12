@@ -55,12 +55,12 @@ import pandas as pd
 from src.data.splits import enough_positives
 from src.eval.calibration import apply_map, choose_map, ece, reliability_plot
 from src.eval.metrics import is_classification
+from src.eval.intervals import ci95
 
 POOL_DIR = os.path.join("data", "pool")
 SPLIT_DIR = os.path.join("data", "splits")
 RUNS_DIR = os.path.join("results", "runs")
 MET_DIR = os.path.join("results", "metrics")
-T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571}
 
 
 def load_labels(ds, variant, split):
@@ -122,13 +122,6 @@ def one_split(ds, variant, tag, plot=False):
             "n_tasks": p_te.shape[1], "n_maps_fitted": n_fitted}
 
 
-def ci95(v):
-    v = np.asarray([x for x in v if np.isfinite(x)], dtype=float)
-    if v.size < 2:
-        return (float(v[0]), 0.0) if v.size else (np.nan, np.nan)
-    return float(v.mean()), float(T_CRIT.get(v.size, 1.96) * v.std(ddof=1) / np.sqrt(v.size))
-
-
 def main():
     ap = argparse.ArgumentParser(
         description="Expected calibration error across seeded splits, fitted on valid.")
@@ -153,10 +146,10 @@ def main():
             if not per:
                 missing.append(f"{tag}/{ds}")
                 continue
-            raw_m, raw_h = ci95([r["ece_raw"] for r in per])
-            cal_m, cal_h = ci95([r["ece_cal"] for r in per])
+            raw_m, _, raw_h, _ = ci95([r["ece_raw"] for r in per])
+            cal_m, _, cal_h, _ = ci95([r["ece_cal"] for r in per])
             delta = [r["ece_cal"] - r["ece_raw"] for r in per]
-            d_m, d_h = ci95(delta)
+            d_m, _, d_h, _ = ci95(delta)
             rows.append({
                 "tag": tag, "dataset": ds, "n_splits": len(per),
                 "protocol": "valid-fit",

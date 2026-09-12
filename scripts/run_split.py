@@ -34,7 +34,6 @@ because its frozen encoder reads cached embeddings, and the Random Forest is a f
 """
 
 import argparse
-import json
 import os
 import shutil
 import subprocess

@@ -1,5 +1,5 @@
 # scripts/tokenize_smiles.py
-import os, json, numpy as np, pandas as pd, torch
+import os, json, pandas as pd, torch
 from transformers import AutoTokenizer
 
 import argparse

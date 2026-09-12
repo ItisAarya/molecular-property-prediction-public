@@ -111,9 +111,6 @@ class SequenceEncoder(nn.Module):
 
         self.out_dim = hidden * (2 if pooling == "cls+mean" else 1)
 
-    def trainable_parameter_count(self):
-        return sum(p.numel() for p in self.parameters() if p.requires_grad)
-
     def train(self, mode=True):
         """
         Keep a frozen encoder in eval mode even inside a training loop.

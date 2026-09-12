@@ -18,13 +18,11 @@ typed, so the document cannot drift from the results.
 import json
 import os
 import re
-import sys
 from collections import Counter
 
 import scripts._pdflib  # noqa: F401  -- resolves reportlab; must precede its import
 
 import numpy as np
-import torch
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4

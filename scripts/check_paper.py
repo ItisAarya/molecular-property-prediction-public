@@ -31,25 +31,8 @@ import sys
 import numpy as np
 import pandas as pd
 
-from src.eval.metrics import is_classification
-
 DRAFT = os.path.join("paper", "draft.md")
-RUNS = os.path.join("results", "runs")
 MET = os.path.join("results", "metrics")
-SEEDS = [f"seed{i}" for i in range(5)]
-
-
-def test_metric(variant, ds, tag):
-    p = os.path.join(RUNS, variant, "metrics", f"{ds}_{tag}_test.csv")
-    if not os.path.exists(p):
-        return None
-    r = pd.read_csv(p).iloc[0]
-    return float(r["auc" if is_classification(ds) else "rmse"])
-
-
-def seed_mean(ds, tag):
-    v = [test_metric(s, ds, tag) for s in SEEDS]
-    return float(np.mean(v)) if all(x is not None for x in v) else None
 
 
 def compare(a, b):

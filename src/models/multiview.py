@@ -21,7 +21,6 @@ must differ in *how views are combined* and in nothing else; if the fusion model
 views a wider projection than the baselines got, a win would partly be extra capacity.
 """
 
-import torch
 import torch.nn as nn
 
 from src.models.fusion import build_fusion

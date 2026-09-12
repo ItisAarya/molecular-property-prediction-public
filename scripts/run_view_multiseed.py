@@ -26,14 +26,13 @@ loss, class weighting and early stopping, so the comparison isolates the represe
 """
 
 import argparse
-import json
 import os
 import shutil
 import subprocess
 import sys
 import time
 
-from src.data.materialize import active_variant, materialize
+from src.data.materialize import active_variant, dataset_names, materialize
 
 RESULTS = "results"
 RUNS_DIR = os.path.join(RESULTS, "runs")
@@ -77,11 +76,6 @@ FUSION_OF.update({tag: mode for tag, (mode, _) in FUSION_RANK.items()})
 
 NOISE = ("DEPRECATION", "Skipped loading", "No normalization", "WARNING",
          "Some weights", "You should probably", "not removing")
-
-
-def datasets_on_disk():
-    with open(os.path.join("data", "dataset_meta.json")) as f:
-        return list(json.load(f).keys())
 
 
 def already_done(variant, tag, datasets):
@@ -147,7 +141,7 @@ def archive(variant, tags):
     contains `_gine_` -- so every split archive gained a copy of a cross-split summary
     that does not belong to any one split.
     """
-    datasets = datasets_on_disk()
+    datasets = dataset_names()
     splits = ("valid", "test")
 
     dest = os.path.join(RUNS_DIR, variant, "metrics")
@@ -237,30 +231,41 @@ def main():
         os.makedirs(d, exist_ok=True)
     started = time.time()
     failed = []
-    all_datasets = args.datasets or datasets_on_disk()
+    all_datasets = args.datasets or dataset_names()
     broken = set()
+
+    # The archived name a tag writes under. Defined BEFORE --redo uses it: it used to be
+    # set below, after the --redo block, so `--redo` raised UnboundLocalError on its first
+    # matching file and the flag had never once worked. It failed safe -- the exception
+    # came before any deletion -- but the docstring advertised a feature that did not run.
+    suffix = f"_{args.tag_suffix}" if args.tag_suffix else ""
+    out_tag_of = {t: f"{t}{suffix}" for t in args.tags}
 
     # Clear stale archives first, so the resume check below sees these tags as unfinished.
     if args.redo:
         unknown = [t for t in args.redo if t not in ENCODER_OF and t not in FUSION_OF]
         if unknown:
             raise SystemExit(f"--redo names unknown tag(s): {unknown}")
+        # Exact filenames, not a substring match. `_{tag}_` also matches every suffixed
+        # archive of the same architecture, so `--redo gine` would have deleted
+        # `<ds>_gine_gpu_<split>.csv` as well -- a different experiment, and the one the
+        # device study rests on. `archive()` was already fixed for this same class of bug;
+        # this path had it too.
+        doomed = {f"{ds}_{t}{suffix}_{sp}.csv"
+                  for ds in all_datasets for t in args.redo for sp in ("valid", "test")}
         removed = 0
         for variant in args.variants:
             dest = os.path.join(RUNS_DIR, variant, "metrics")
             if not os.path.isdir(dest):
                 continue
             for f in os.listdir(dest):
-                if any(f"_{t}{suffix}_" in f for t in args.redo):
+                if f in doomed:
                     os.remove(os.path.join(dest, f))
                     removed += 1
         print(f"--redo {' '.join(args.redo)}: discarded {removed} archived metric file(s)")
 
     # Options handed straight to the trainer. Held identical across tags so the
     # comparison isolates the encoder rather than the training budget.
-    suffix = f"_{args.tag_suffix}" if args.tag_suffix else ""
-    out_tag_of = {t: f"{t}{suffix}" for t in args.tags}
-
     passthrough = ["--device", args.device]
     if args.datasets:
         passthrough += ["--datasets", *args.datasets]

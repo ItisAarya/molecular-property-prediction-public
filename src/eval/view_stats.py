@@ -53,11 +53,11 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sps
 
+from src.eval.intervals import ci95
 from src.eval.metrics import is_classification
 
 RESULTS = "results"
 RUNS_DIR = os.path.join(RESULTS, "runs")
-T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447, 8: 2.365}
 
 
 def _is_cls(ds):
@@ -78,15 +78,6 @@ def load_tag(variant, ds, tag):
     row = pd.read_csv(path).iloc[0]
     key = "auc" if _is_cls(ds) else "rmse"
     return float(row[key])
-
-
-def ci95(v):
-    v = np.asarray(v, dtype=float)
-    n = len(v)
-    if n < 2:
-        return float(v.mean()) if n else np.nan, 0.0, np.nan
-    sd = float(v.std(ddof=1))
-    return float(v.mean()), sd, T_CRIT.get(n, 1.96) * sd / np.sqrt(n)
 
 
 def holm(pvals):
@@ -193,8 +184,8 @@ def main():
 
         va = np.array([p[0] for p in pairs])
         vb = np.array([p[1] for p in pairs])
-        ma, sa, ha = ci95(va)
-        mb, sb, hb = ci95(vb)
+        ma, sa, ha, _ = ci95(va)
+        mb, sb, hb, _ = ci95(vb)
 
         diff = (va - vb) if higher else (vb - va)   # positive = candidate is better
         wins = int((diff > 0).sum())
@@ -217,7 +208,7 @@ def main():
         #
         # The correct comparison is the mean difference against its own 95% interval,
         # which is equivalent to the paired t-test at the same alpha.
-        md, sd_diff, hd = ci95(diff)
+        md, sd_diff, hd, _ = ci95(diff)
         decisive = abs(md) > hd
         verdict = ("improves" if md > 0 else "degrades") if decisive else "inside noise"
 
@@ -306,11 +297,11 @@ def main():
     if all(p < 0.05 for p in ps):
         print(f"  -> {args.a} beats {args.b} across datasets on all three statistics.")
     elif any(p < 0.05 for p in ps):
-        print(f"  -> mixed: significant on some statistics and not others. The claim is "
-              f"unit-dependent and must be reported as such.")
+        print("  -> mixed: significant on some statistics and not others. The claim is "
+              "unit-dependent and must be reported as such.")
     else:
-        print(f"  -> no across-dataset difference. Any per-dataset win above is a local "
-              f"result, not a general one.")
+        print("  -> no across-dataset difference. Any per-dataset win above is a local "
+              "result, not a general one.")
 
     print(f"\nWrote {out}")
 
