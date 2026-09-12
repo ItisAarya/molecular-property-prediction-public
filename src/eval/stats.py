@@ -52,6 +52,9 @@ import numpy as np
 import pandas as pd
 from scipy import stats as sps
 
+from src.eval.metrics import is_classification
+from src.eval.view_stats import across_datasets, holm
+
 warnings.filterwarnings("ignore")
 
 RESULTS = "results"
@@ -60,7 +63,6 @@ MET_DIR = os.path.join(RESULTS, "metrics")
 
 # Which metric decides each task type, and whether larger is better.
 PRIMARY = {"classification": ("test_auc", True), "regression": ("test_rmse", False)}
-CLASSIFICATION = {"tox21", "bbbp", "clintox"}
 MODELS = ["rf", "gnn", "trf", "hybrid", "ens"]
 
 T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447,
@@ -68,7 +70,7 @@ T_CRIT = {2: 12.706, 3: 4.303, 4: 3.182, 5: 2.776, 6: 2.571, 7: 2.447,
 
 
 def is_cls(ds):
-    return ds in CLASSIFICATION
+    return is_classification(ds)
 
 
 def seeded_variants():
@@ -218,6 +220,21 @@ def main():
               f"p={2 ** -(n - 1) if n <= 6 else 0.03:.4f};")
         print("  a clean sweep is therefore not the same as statistical significance at 0.05.")
         print("  The paired t-test and Cohen's dz are shown so no conclusion rests on one number.")
+
+        # Family-wise correction and the across-dataset test, using the same
+        # implementation the view/fusion comparisons use -- one standard, not two.
+        for (a, b), grp in t.groupby(["model_a", "model_b"], sort=False):
+            grp = grp.copy()
+            adj = holm(grp.p_ttest.values)
+            ad = across_datasets(grp.mean_diff.values, grp.cohens_dz.values)
+            survives = [ds for ds, p in zip(grp.dataset, adj) if p < 0.05]
+            raw = [ds for ds, p in zip(grp.dataset, grp.p_ttest) if p < 0.05]
+            print(f"\n  {a} vs {b}, over {ad['n_datasets']} dataset(s)")
+            print(f"      per-dataset p<0.05: {', '.join(raw) or 'none'}"
+                  f"   after Holm: {', '.join(survives) or 'none'}")
+            print(f"      across datasets: favoured on {ad['wins']}/{ad['n_datasets']}, "
+                  f"sign p={ad['p_sign']:.4f}, Wilcoxon(dz) p={ad['p_wilcoxon_dz']:.4f}, "
+                  f"Wilcoxon(raw) p={ad['p_wilcoxon_raw']:.4f}")
 
     print(f"\nWrote {MET_DIR}/multiseed_summary.csv and multiseed_tests.csv")
 

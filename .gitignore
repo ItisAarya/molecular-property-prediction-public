@@ -48,3 +48,22 @@ wandb/
 # Pooled features + generated split indices (rebuilt by scripts/build_pool.py + make_splits.py)
 data/pool/
 data/splits/
+
+# Colab bundle (regenerate with scripts/make_colab_bundle.py)
+mpp_colab_bundle.zip
+
+# Colab bundles are build products of scripts/make_colab_bundle.py. The fusion one is
+# tracked because it is small and the notebook names it; the Phase 3 regeneration bundle
+# carries the cached ChemBERTa embeddings and is 126 MB, over GitHub's 100 MB file limit.
+#   python -m scripts.make_colab_bundle --preset fusion-cached --out mpp_phase3_regen.zip
+mpp_phase3_regen.zip
+
+# The bilinear rank sweep's bundle, same preset and the same 100 MB problem (132 MB).
+# Rebuild rather than fetch -- and rebuild it rather than reusing mpp_phase3_regen.zip,
+# which was packed before loop.py started recording the device and seed.
+#   python -m scripts.make_colab_bundle --preset fusion-cached --out mpp_rank_sweep.zip
+mpp_rank_sweep.zip
+
+# Editor/agent tooling, not project content. launch.json holds a machine-specific
+# interpreter path, so it is useless to anyone else and misleading if committed.
+.local-tooling/

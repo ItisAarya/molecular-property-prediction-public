@@ -1,0 +1,59 @@
+# environment.yml
+#
+#   conda env create -f environment.yml && conda activate mpp
+#
+# Pinned, because the results in this repository were produced under these versions and a
+# silent minor-version bump is exactly the kind of thing that moves a fourth decimal place
+# and cannot be traced afterwards.
+#
+# PyTorch Geometric is the awkward one. It is needed only by the graph view; every other
+# view, the descriptor and sequence fusion models, and all of the evaluation run without
+# it. The Colab notebooks do not install it at all, which is why `torch_geometric` is
+# imported inside the graph branch rather than at module level -- a top-level import would
+# kill every non-graph run on a runtime that lacks it.
+#
+# `chemprop` is deliberately absent. It pins its own torch and lightning versions and will
+# happily move the ones every result here was produced under. Install it in a separate
+# environment when running that baseline (see src/baselines/chemprop_runner.py).
+
+name: mpp
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - pip=24.0
+
+  # Scientific core
+  - numpy=1.26.4
+  - scipy=1.11.4
+  - pandas=2.2.2
+  - scikit-learn=1.4.2
+  - matplotlib=3.9.4
+  - pyyaml=6.0.2
+
+  # Deep learning
+  - pytorch=2.3.1
+  - cpuonly            # swap for `pytorch-cuda=12.1` on a GPU machine
+
+  - pip:
+      # Chemistry
+      - rdkit==2025.3.5
+      - deepchem==2.8.0
+
+      # Sequence view
+      - transformers==4.43.4
+      - tokenizers==0.19.1
+      - peft==0.12.0
+
+      # Hyper-parameter search (src/tune/ -- written, never run)
+      - optuna==4.5.0
+
+      # Graph view only. Install after torch, and match the torch/CUDA build:
+      #   pip install torch_geometric==2.6.1
+      # Its optional compiled extras (torch-scatter, torch-sparse) are NOT required by
+      # anything here -- the encoders use only GINConv/GINEConv/AttentiveFP and the
+      # pooling helpers, all of which are pure-PyTorch in PyG 2.x.
+      - torch_geometric==2.6.1

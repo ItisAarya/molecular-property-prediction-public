@@ -16,6 +16,9 @@ import os
 import numpy as np
 import pandas as pd
 from rdkit import Chem, RDLogger
+import argparse
+
+from scripts.dataset_select import add_datasets_arg, resolve
 
 RDLogger.DisableLog("rdApp.*")
 
@@ -33,9 +36,16 @@ def check(label, condition, detail=""):
 
 
 def main():
+    ap = argparse.ArgumentParser(
+        description="Assert every prepared artifact is internally consistent."
+    )
+    add_datasets_arg(ap)
+    args = ap.parse_args()
+
     meta = json.load(open(os.path.join(DATA_DIR, "dataset_meta.json")))
 
-    for ds, info in meta.items():
+    for ds in resolve(args.datasets, meta):
+        info = meta[ds]
         tasks = info["tasks"]
         n_tasks = len(tasks)
         y_mean = np.asarray(info["y_mean"], dtype=np.float32)

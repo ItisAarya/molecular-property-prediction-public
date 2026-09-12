@@ -1,0 +1,9 @@
+dataset,tag,valid_auc,test_auc,params,trainable,best_epoch,mode,seq,gate_views,valid_rmse,test_rmse
+tox21,fuse_gated,0.858012695638725,0.842239952437943,2064785,2064785,4,gated,cached,graph|seq|desc,,
+bbbp,fuse_gated,0.9541678205483246,0.9482909728308501,2060934,2060934,15,gated,cached,graph|seq|desc,,
+clintox,fuse_gated,0.9659086862211862,0.9903770620581304,2061191,2061191,7,gated,cached,graph|seq|desc,,
+esol,fuse_gated,,,2057094,2057094,23,gated,cached,graph|seq|desc,0.8522063978144756,0.9105750021162218
+lipophilicity,fuse_gated,,,2060422,2060422,47,gated,cached,graph|seq|desc,0.7041326585950195,0.6838295405064253
+bace,fuse_gated,0.8590017825311943,0.7684848484848484,2056582,2056582,30,gated,cached,graph|seq|desc,,
+sider,fuse_gated,0.6105904131856457,0.6291961289721498,2068128,2068128,19,gated,cached,graph|seq|desc,,
+freesolv,fuse_gated,,,2053510,2053510,22,gated,cached,graph|seq|desc,0.8282942233579013,0.7793591589642472

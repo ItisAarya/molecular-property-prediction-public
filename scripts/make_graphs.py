@@ -6,11 +6,23 @@ from rdkit import RDLogger
 from rdkit.Chem import rdchem
 from torch_geometric.data import Data
 
+import argparse
+
+from scripts.dataset_select import add_datasets_arg, resolve
+
 RDLogger.DisableLog('rdApp.*')
 
 IN_DIR = "data"
 OUT_DIR = "data"
-GRAPH_MAX_ATOMS = 150  # skip unusually large mols
+# Upper bound on molecule size, a guard against pathological input rather than a
+# modelling choice. The inherited value of 150 silently dropped 29 SIDER molecules
+# (2% of the dataset) -- peptide and oligonucleotide therapeutics of up to 492 atoms,
+# all of which parse fine. Dropping them would also break the pool, which requires the
+# fingerprint, graph and token views to stay row-aligned.
+#
+# Raising this is a no-op for every dataset prepared before SIDER: the largest molecule
+# among them is 136 atoms (ClinTox), so no previously built graph file can change.
+GRAPH_MAX_ATOMS = 600
 
 # ---------- Feature helpers ----------
 def atom_features(a: rdchem.Atom):
@@ -103,10 +115,16 @@ def build_for_split(ds, split_tag, task_cols):
     print(f"{ds} {split_tag}: saved {kept} graphs")
 
 def main():
+    ap = argparse.ArgumentParser(
+        description="Build RDKit molecular graphs from the prepared CSVs."
+    )
+    add_datasets_arg(ap)
+    args = ap.parse_args()
+
     with open(os.path.join(IN_DIR, "dataset_meta.json"), "r") as f:
         meta = json.load(f)
-    for ds, info in meta.items():
-        train_csv = info["csv"]["train"]
+    for ds in resolve(args.datasets, meta):
+        train_csv = meta[ds]["csv"]["train"]
         task_cols = [c for c in pd.read_csv(train_csv).columns if c != "smiles"]
         for split in ["train","valid","test"]:
             build_for_split(ds, split, task_cols)

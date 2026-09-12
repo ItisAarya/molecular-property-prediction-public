@@ -2,6 +2,10 @@
 import os, json, numpy as np, pandas as pd, torch
 from transformers import AutoTokenizer
 
+import argparse
+
+from scripts.dataset_select import add_datasets_arg, resolve
+
 IN_DIR = "data"
 OUT_DIR = "data"
 MODEL = "seyonec/ChemBERTa-zinc-base-v1"   # common SMILES model
@@ -20,10 +24,14 @@ def tokenize_split(tokenizer, ds, split_tag):
     print(f"{ds} {split_tag}: tokens {enc['input_ids'].shape}")
 
 def main():
+    ap = argparse.ArgumentParser(description="Tokenize SMILES for the ChemBERTa encoder.")
+    add_datasets_arg(ap)
+    args = ap.parse_args()
+
     tokenizer = AutoTokenizer.from_pretrained(MODEL)
     with open(os.path.join(IN_DIR, "dataset_meta.json")) as f:
         meta = json.load(f)
-    for ds in meta.keys():
+    for ds in resolve(args.datasets, meta):
         for split in ["train","valid","test"]:
             tokenize_split(tokenizer, ds, split)
 

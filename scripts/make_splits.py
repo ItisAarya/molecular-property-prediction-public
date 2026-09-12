@@ -39,6 +39,8 @@ import os
 
 import numpy as np
 
+from scripts.dataset_select import add_datasets_arg, resolve
+
 from src.data.splits import _murcko_scaffold, random_scaffold_split
 
 DATA_DIR = "data"
@@ -116,14 +118,17 @@ def write_split(ds, name, idx, meta):
 
 
 def main():
-    ap = argparse.ArgumentParser()
+    ap = argparse.ArgumentParser(
+        description="Write the DeepChem and seeded scaffold splits as index arrays."
+    )
     ap.add_argument("--seeds", nargs="+", type=int, default=DEFAULT_SEEDS)
+    add_datasets_arg(ap)
     args = ap.parse_args()
 
     pool_index = json.load(open(os.path.join(POOL_DIR, "pool_index.json")))
     problems = []
 
-    for ds in pool_index:
+    for ds in resolve(args.datasets, pool_index):
         smiles, y = load_pool(ds)
         is_cls = pool_index[ds]["task_type"] == "classification"
         kind = "classification" if is_cls else "regression"

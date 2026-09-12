@@ -1,0 +1,9 @@
+dataset,rows,unique_molecules,duplicate_groups,conflicting_groups,rows_in_conflicting_groups,groups_spanning_splits
+tox21,7823,7823,0,0,0,0
+bbbp,2039,1975,60,10,20,0
+clintox,1480,1461,19,19,38,0
+esol,1128,1117,11,6,12,0
+lipophilicity,4200,4200,0,0,0,0
+bace,1513,1513,0,0,0,0
+sider,1427,1427,0,0,0,0
+freesolv,642,642,0,0,0,0
