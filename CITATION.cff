@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+message: "If you use this software or its evaluation protocol, please cite it as below."
+title: "Multi-view molecular property prediction, evaluated honestly"
+abstract: >-
+  An evaluation protocol for multi-view molecular property prediction, and a fusion
+  architecture measured under it. Eight MoleculeNet datasets, six scaffold splits, paired
+  comparisons with family-wise correction and an across-dataset test, split-conformal
+  uncertainty, and machine-checked reproducibility gates. Reports negative results: the
+  proposed architecture does not beat a descriptor MLP, a 16,513-parameter gate matches a
+  1,169,793-parameter fusion block, two published external baselines are indistinguishable
+  from a two-layer graph network, and the significance of the paper's own mechanism claim
+  is not stable to an architectural constant.
+type: software
+
+# ---------------------------------------------------------------------------------------
+# BEFORE RELEASING: replace the placeholder below with your real name, and add your ORCID
+# if you have one. A DOI minted against "PLACEHOLDER" is permanent and cannot be edited
+# away. See RELEASING.md, which lists this as a blocking step.
+# ---------------------------------------------------------------------------------------
+authors:
+  - name: "PLACEHOLDER - set your name before minting a DOI"
+    # family-names: ""
+    # given-names: ""
+    # orcid: "https://orcid.org/0000-0000-0000-0000"
+
+repository-code: "https://github.com/ItisAarya/molecular-property-prediction"
+version: "1.0.0"
+date-released: "2026-09-12"
+
+keywords:
+  - molecular property prediction
+  - MoleculeNet
+  - scaffold split
+  - conformal prediction
+  - multi-view learning
+  - reproducibility
+  - negative results
+
+# The inherited baseline pipeline is prior work and is not claimed as original here; it is
+# preserved runnable so that "we fixed the evaluation" is checkable. See README.md.
