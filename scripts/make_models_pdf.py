@@ -21,7 +21,7 @@ import re
 import sys
 from collections import Counter
 
-sys.path.insert(0, r".pdflib")
+import scripts._pdflib  # noqa: F401  -- resolves reportlab; must precede its import
 
 import numpy as np
 import torch

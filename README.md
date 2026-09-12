@@ -95,6 +95,21 @@ model does not fail, it returns confident nonsense.
 `app/streamlit_app.py` is the inherited Phase 0 app (five datasets, the baseline pipeline).
 It is kept as the before side of the comparison, not superseded.
 
+### Rebuilding the explainer PDFs
+
+`paper/PROJECT_EXPLAINED.pdf` and `paper/MODELS_AND_DATA_EXPLAINED.pdf` need `reportlab`,
+which is deliberately **not** a project dependency — nothing is installed into the environment
+the archived results were produced under. Install it beside the project instead:
+
+```bash
+python -m pip install --target .pdflib reportlab
+python -m scripts.make_explainer_pdf
+python -m scripts.make_models_pdf
+```
+
+`.pdflib/` is gitignored; `MPP_PDFLIB` overrides the location. Every number in both PDFs is
+computed from the repository at build time rather than typed.
+
 ---
 
 ## The evaluation protocol

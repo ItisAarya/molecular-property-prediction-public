@@ -1,0 +1,24 @@
+{
+  "title": "Multi-view molecular property prediction, evaluated honestly",
+  "upload_type": "software",
+  "description": "<p>An evaluation protocol for multi-view molecular property prediction, and a fusion architecture measured under it. Eight MoleculeNet datasets, six scaffold splits (the DeepChem canonical split plus five seeded), paired comparisons with Holm correction and an across-dataset test, split-conformal uncertainty (LAC, APS, RAPS, class-conditional, CQR), and machine-checked reproducibility gates that fail the build when a number, a config or a featuriser drifts.</p><p>The results are largely negative and are reported as such: the proposed fusion architecture does not beat a fingerprint-plus-descriptor MLP (4 of 8 datasets, p = 0.55); a 16,513-parameter gate matches a 1,169,793-parameter fusion block; roughly eleven GPU-hours of LoRA adaptation buy nothing over a cached frozen embedding; two published external baselines (AttentiveFP, Chemprop) are statistically indistinguishable from a two-layer graph network; a nominal 90% conformal guarantee covers 9.7-14.1% of active compounds for three of fifteen models, with mean prediction-set size predicting which; a fully seeded pipeline moved to a different GPU is a different model, moving 18% of single-split numbers by more than the field's reported effect sizes; and the significance of the paper's own mechanism claim is not stable to an architectural constant that does not otherwise matter.</p><p>The inherited baseline pipeline is prior work, is not claimed as original here, and is preserved runnable so that claims about fixing its evaluation are checkable.</p>",
+  "creators": [
+    {
+      "name": "PLACEHOLDER - set your name before minting a DOI"
+    }
+  ],
+  "keywords": [
+    "molecular property prediction",
+    "MoleculeNet",
+    "scaffold split",
+    "conformal prediction",
+    "uncertainty quantification",
+    "multi-view learning",
+    "graph neural networks",
+    "reproducibility",
+    "negative results"
+  ],
+  "language": "eng",
+  "version": "1.0.0",
+  "access_right": "open"
+}

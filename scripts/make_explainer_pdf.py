@@ -1,5 +1,5 @@
 import sys, os
-sys.path.insert(0, r".pdflib")
+import scripts._pdflib  # noqa: F401  -- resolves reportlab; must precede its import
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
