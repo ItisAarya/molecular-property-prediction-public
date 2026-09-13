@@ -3,7 +3,7 @@ app/predict_app.py
 
 Type a molecule in, get every property this project can predict, with its uncertainty.
 
-    streamlit run app/predict_app.py
+    python -m streamlit run app/predict_app.py
 
 WHAT THIS SERVES
 ----------------
@@ -44,7 +44,23 @@ from src.eval.metrics import is_classification  # noqa: E402
 st.set_page_config(page_title="Molecular property prediction", page_icon="*", layout="wide")
 
 # Molecules a viewer will recognise, so a demo does not depend on typing SMILES correctly.
+#
+# The first group is the point of the demo. Each was screened against all eight datasets and
+# is novel at three levels: the molecule is in none of the pools, its Bemis-Murcko scaffold is
+# in none of the training splits, and its nearest-neighbour Tanimoto to the training set is
+# low (shown in brackets). The 0.26-0.35 cases sit in the 0.0-0.3 band where section 6.6
+# measures active coverage collapsing to 52.5% against a nominal 90% -- so these are the
+# hardest cases this project measures, which is the honest thing to demonstrate on.
+#
+# The second group is famous and therefore mostly *in* the training data. They are kept
+# because the contrast is the lesson: the app labels them a memory test, not a prediction.
 EXAMPLES = {
+    "NEW · Apixaban, blood thinner [0.26]": "COc1ccc(-n2nc(C(N)=O)c3c2CCCC3)cc1-n1nc(-c2ccc(N3CCCCC3=O)cc2)cc1",
+    "NEW · Imidacloprid, insecticide [0.28]": "Clc1ccc(CN2CCN/C2=N\\[N+](=O)[O-])nc1",
+    "NEW · Osimertinib, lung cancer [0.35]": "C=CC(=O)Nc1cc(Nc2nccc(-c3cn(C)c4ccccc34)n2)c(OC)cc1N(C)CCN(C)C",
+    "NEW · Remdesivir, COVID [0.36]": "CCC(CC)COC(=O)[C@H](C)N[P@](=O)(OC[C@H]1O[C@](C#N)(c2ccc3c(N)ncnn23)[C@H](O)[C@@H]1O)Oc1ccccc1",
+    "NEW · Nirmatrelvir, Paxlovid [0.44]": "CC1(C)[C@@H]2[C@H]1[C@H](C(=O)N[C@@H](CC1CCNC1=O)C#N)N(C(=O)[C@@H](NC(=O)C(F)(F)F)C(C)(C)C)C2",
+    "NEW · Glyphosate, herbicide [0.55]": "OC(=O)CNCP(=O)(O)O",
     "Aspirin (painkiller)": "CC(=O)Oc1ccccc1C(=O)O",
     "Caffeine (stimulant)": "CN1C=NC2=C1C(=O)N(C)C(=O)N2C",
     "Paracetamol / acetaminophen": "CC(=O)Nc1ccc(O)cc1",

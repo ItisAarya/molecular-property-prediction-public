@@ -479,7 +479,7 @@ exactly the error Gelman and Stern name: the difference between "significant" an
 significant" is not itself significant.
 
 We report it because it is the same failure this paper spends its length documenting, one level
-up. §3.2 shows a single scaffold split producing a 0.18 AUC swing; §7 shows a seeded pipeline
+up. §3.2 shows a single scaffold split producing a 0.22 AUC swing; §7 shows a seeded pipeline
 producing a different model on different hardware. Those are arguments that single-run results
 do not survive scrutiny. This is a *multi-split, Holm-corrected, eight-dataset* result whose
 significance still turns on an architectural constant chosen once and never examined — and we

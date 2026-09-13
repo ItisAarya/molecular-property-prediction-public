@@ -79,8 +79,16 @@ trainers' actual defaults. Run it before trusting a comparison.
 ```bash
 python -m scripts.train_deploy     # ~35 min CPU: one proposed-fusion model per dataset
 python -m scripts.check_deploy     # proves the live featuriser matches the training features
-streamlit run app/predict_app.py
+python -m streamlit run app/predict_app.py
 ```
+
+Then open <http://localhost:8501>.
+
+`python -m streamlit` rather than a bare `streamlit`: the launcher only lands on `PATH` when
+the environment is activated, so the bare form fails with *"'streamlit' is not recognized"* in
+a fresh shell while `python -m` works from whichever interpreter you invoked. Activate the
+environment first (`conda activate mpp`, or `venv\Scripts\activate` on Windows /
+`source venv/bin/activate` elsewhere) and either form works.
 
 Enter a SMILES string and get all eight properties, each with a conformal prediction set or
 interval and the model's measured test score beside it. The models are trained on the
