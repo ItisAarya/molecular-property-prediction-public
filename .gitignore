@@ -71,3 +71,6 @@ mpp_rank_sweep.zip
 # reportlab for the explainer PDFs, installed with --target so it never enters the
 # project environment (see scripts/_pdflib.py).
 .pdflib/
+
+# Overleaf upload bundle, rebuilt by scripts/make_latex.py
+paper/overleaf_project.zip
