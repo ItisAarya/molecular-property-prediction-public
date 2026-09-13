@@ -23,7 +23,17 @@
 \renewcommand{\arraystretch}{1.15}
 
 \title{Cheaper Models, Honest Intervals: An Evaluation Protocol for Multi-View Molecular Property Prediction}
-\author{Author name and affiliation to be added}
+
+% Single author. Venue-neutral on purpose: no \affiliation or \orcid macro is used, because
+% those are defined by publisher classes and not by `article`. Swap this block for the
+% venue's own once a template is chosen.
+\author{%
+  Aarya Sharma \\[2pt]
+  \normalsize Department of Artificial Intelligence and Machine Learning \\
+  \normalsize Universal College of Engineering, University of Mumbai, India \\[2pt]
+  \normalsize \href{mailto:aarya007india@gmail.com}{aarya007india@gmail.com} \\
+  \normalsize ORCID: \href{https://orcid.org/0009-0003-4765-9849}{0009-0003-4765-9849}%
+}
 \date{\today}
 
 \begin{document}
@@ -703,7 +713,7 @@ The transferable claim is not about any architecture. It is that an evaluation s
 
 \section{References}
 
-\textbf{\textbf{[verified]} = checked against the publisher on 2026-09-13} (title, venue, volume, pages, DOI). \textbf{\textbf{[unverified]} = not yet checked; open it before submission.} \code{paper/references\_gap.md} records which claim each reference supports.
+\textbf{All 29 entries were checked against the publisher or the canonical preprint on 2026-09-13} --- title, authors, venue, volume, pages and DOI where one exists. \textbf{[verified]} marks each confirmed entry. \code{paper/references\_gap.md} records which claim each reference supports.
 
 \subsection{Benchmark, data and software}
 
@@ -713,19 +723,19 @@ The transferable claim is not about any architecture. It is that an evaluation s
 \item \textbf{[verified]} Mobley, D. L., \& Guthrie, J. P. (2014). FreeSolv: a database of experimental and calculated hydration free energies, with input files. \emph{Journal of Computer-Aided Molecular Design}, 28(7), 711--720. DOI: 10.1007/s10822-014-9747-x
 \item \textbf{[verified]} Rogers, D., \& Hahn, M. (2010). Extended-connectivity fingerprints. \emph{Journal of Chemical Information and Modeling}, 50(5), 742--754. DOI: 10.1021/ci100050t
 \item Landrum, G. RDKit: open-source cheminformatics. \url{https://www.rdkit.org} --- cite the version pinned in \code{environment.yml}.
-\item \textbf{[unverified]} Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., \& Wu, Z. (2019). \emph{Deep Learning for the Life Sciences}. O'Reilly. --- DeepChem, used for the canonical splits and the ECFP featuriser. \emph{(A software citation may suit better than the book; check what the DeepChem project currently asks for.)}
+\item \textbf{[verified]} Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., \& Wu, Z. (2019). \emph{Deep Learning for the Life Sciences}. O'Reilly. --- DeepChem, used for the canonical splits and the ECFP featuriser. The project has no software paper and asks in its repository that users cite this book, so it is the correct citation rather than a stand-in for one.
 \end{enumerate}
 
 \subsection{Architectures compared}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Xu, K., Hu, W., Leskovec, J., \& Jegelka, S. (2019). How powerful are graph neural networks? \emph{ICLR}. arXiv:1810.00826 --- the GIN baseline encoder.
-\item \textbf{[unverified]} Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., \& Leskovec, J. (2020). Strategies for pre-training graph neural networks. \emph{ICLR}. arXiv:1905.12265 --- GINE and edge features.
+\item \textbf{[verified]} Xu, K., Hu, W., Leskovec, J., \& Jegelka, S. (2019). How powerful are graph neural networks? \emph{7th International Conference on Learning Representations (ICLR)}. arXiv:1810.00826 --- the GIN baseline encoder.
+\item \textbf{[verified]} Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., \& Leskovec, J. (2020). Strategies for pre-training graph neural networks. \emph{ICLR}. arXiv:1905.12265 --- GINE and edge features.
 \item \textbf{[verified]} Xiong, Z., Wang, D., Liu, X., Zhong, F., Wan, X., Li, X., Li, Z., Luo, X., Chen, K., Jiang, H., \& Zheng, M. (2020). Pushing the boundaries of molecular representation for drug discovery with the graph attention mechanism. \emph{Journal of Medicinal Chemistry}, 63(16), 8749--8760. DOI: 10.1021/acs.jmedchem.9b00959 --- AttentiveFP, external baseline (\S5.5).
 \item \textbf{[verified]} Yang, K., Swanson, K., Jin, W., Coley, C., Eiden, P., Gao, H., Guzman-Perez, A., Hopper, T., Kelley, B., Mathea, M., Palmer, A., Settels, V., Jaakkola, T., Jensen, K., \& Barzilay, R. (2019). Analyzing learned molecular representations for property prediction. \emph{Journal of Chemical Information and Modeling}, 59(8), 3370--3388. DOI: 10.1021/acs.jcim.9b00237 --- Chemprop / D-MPNN. A correction was published in 2019; cite the corrected version.
 \item \textbf{[verified]} Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H., Green, W. H., \& McGill, C. J. (2024). Chemprop: a machine learning package for chemical property prediction. \emph{Journal of Chemical Information and Modeling}, 64(1), 9--17. DOI: 10.1021/acs.jcim.3c01250 --- the v2 software actually installed (2.3.1).
-\item \textbf{[unverified]} Chithrananda, S., Grand, G., \& Ramsundar, B. (2020). ChemBERTa: large-scale self-supervised pretraining for molecular property prediction. arXiv:2010.09885 --- the sequence view (\code{seyonec/ChemBERTa-zinc-base-v1}).
-\item \textbf{[unverified]} Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., \& Chen, W. (2022). LoRA: low-rank adaptation of large language models. \emph{ICLR}. arXiv:2106.09685 --- \S5.1's end-to-end sequence setting.
+\item \textbf{[verified]} Chithrananda, S., Grand, G., \& Ramsundar, B. (2020). ChemBERTa: large-scale self-supervised pretraining for molecular property prediction. arXiv:2010.09885, submitted 19 October 2020 --- the sequence view (\code{seyonec/ChemBERTa-zinc-base-v1}).
+\item \textbf{[verified]} Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S. (Shean), Wang, L. (Lu), \& Chen, W. (2022). LoRA: low-rank adaptation of large language models. \emph{ICLR}. arXiv:2106.09685 --- \S5.1's end-to-end sequence setting. Note the two distinct Wang authors, which citation managers routinely merge.
 \end{enumerate}
 
 \subsection{The two fusion proposals this paper tests}
@@ -746,7 +756,7 @@ The transferable claim is not about any architecture. It is that an evaluation s
 \subsection{Uncertainty quantification}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Vovk, V., Gammerman, A., \& Shafer, G. (2005). \emph{Algorithmic Learning in a Random World}. Springer. --- split conformal, and Mondrian (class-conditional) conformal. \emph{(A second edition exists; check which you are citing.)}
+\item \textbf{[verified]} Vovk, V., Gammerman, A., \& Shafer, G. (2022). \emph{Algorithmic Learning in a Random World}, 2nd edition. Springer. DOI: 10.1007/978-3-031-06649-8 --- split conformal, and Mondrian (class-conditional) conformal. The first edition (Springer, 2005) is the one usually cited; both contain the results we use, and we cite the current edition.
 \item \textbf{[verified]} Angelopoulos, A. N., \& Bates, S. (2023). Conformal prediction: a gentle introduction. \emph{Foundations and Trends in Machine Learning}, 16(4), 494--591. DOI: 10.1561/2200000101
 \item \textbf{[verified]} Sadinle, M., Lei, J., \& Wasserman, L. (2019). Least ambiguous set-valued classifiers with bounded error levels. \emph{Journal of the American Statistical Association}, 114(525), 223--234. --- LAC, the score this paper adopts.
 \item \textbf{[verified]} Romano, Y., Sesia, M., \& Candès, E. J. (2020). Classification with valid and adaptive coverage. \emph{Advances in Neural Information Processing Systems} 33. --- APS, measured in \S6.4.

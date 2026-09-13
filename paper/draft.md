@@ -978,9 +978,9 @@ underneath a result nobody had reason to question.
 
 ## References
 
-**✓ = checked against the publisher on 2026-09-13** (title, venue, volume, pages, DOI).
-**⚠ = not yet checked; open it before submission.** `paper/references_gap.md` records which
-claim each reference supports.
+**All 29 entries were checked against the publisher or the canonical preprint on 2026-09-13**
+— title, authors, venue, volume, pages and DOI where one exists. ✓ marks each confirmed entry.
+`paper/references_gap.md` records which claim each reference supports.
 
 ### Benchmark, data and software
 
@@ -998,16 +998,17 @@ claim each reference supports.
    Information and Modeling*, 50(5), 742–754. DOI: 10.1021/ci100050t
 5. Landrum, G. RDKit: open-source cheminformatics. <https://www.rdkit.org> — cite the version
    pinned in `environment.yml`.
-6. ⚠ Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., & Wu, Z. (2019).
+6. ✓ Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., & Wu, Z. (2019).
    *Deep Learning for the Life Sciences*. O'Reilly. — DeepChem, used for the canonical splits
-   and the ECFP featuriser. *(A software citation may suit better than the book; check what
-   the DeepChem project currently asks for.)*
+   and the ECFP featuriser. The project has no software paper and asks in its repository that
+   users cite this book, so it is the correct citation rather than a stand-in for one.
 
 ### Architectures compared
 
-7. ⚠ Xu, K., Hu, W., Leskovec, J., & Jegelka, S. (2019). How powerful are graph neural
-   networks? *ICLR*. arXiv:1810.00826 — the GIN baseline encoder.
-8. ⚠ Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., & Leskovec, J. (2020).
+7. ✓ Xu, K., Hu, W., Leskovec, J., & Jegelka, S. (2019). How powerful are graph neural
+   networks? *7th International Conference on Learning Representations (ICLR)*.
+   arXiv:1810.00826 — the GIN baseline encoder.
+8. ✓ Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., & Leskovec, J. (2020).
    Strategies for pre-training graph neural networks. *ICLR*. arXiv:1905.12265 — GINE and
    edge features.
 9. ✓ Xiong, Z., Wang, D., Liu, X., Zhong, F., Wan, X., Li, X., Li, Z., Luo, X., Chen, K.,
@@ -1024,12 +1025,13 @@ claim each reference supports.
     Green, W. H., & McGill, C. J. (2024). Chemprop: a machine learning package for chemical
     property prediction. *Journal of Chemical Information and Modeling*, 64(1), 9–17.
     DOI: 10.1021/acs.jcim.3c01250 — the v2 software actually installed (2.3.1).
-12. ⚠ Chithrananda, S., Grand, G., & Ramsundar, B. (2020). ChemBERTa: large-scale
-    self-supervised pretraining for molecular property prediction. arXiv:2010.09885 — the
-    sequence view (`seyonec/ChemBERTa-zinc-base-v1`).
-13. ⚠ Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W.
-    (2022). LoRA: low-rank adaptation of large language models. *ICLR*. arXiv:2106.09685
-    — §5.1's end-to-end sequence setting.
+12. ✓ Chithrananda, S., Grand, G., & Ramsundar, B. (2020). ChemBERTa: large-scale
+    self-supervised pretraining for molecular property prediction. arXiv:2010.09885,
+    submitted 19 October 2020 — the sequence view (`seyonec/ChemBERTa-zinc-base-v1`).
+13. ✓ Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S. (Shean), Wang, L.
+    (Lu), & Chen, W. (2022). LoRA: low-rank adaptation of large language models. *ICLR*.
+    arXiv:2106.09685 — §5.1's end-to-end sequence setting. Note the two distinct Wang
+    authors, which citation managers routinely merge.
 
 ### The two fusion proposals this paper tests
 
@@ -1057,9 +1059,10 @@ claim each reference supports.
 
 ### Uncertainty quantification
 
-19. ⚠ Vovk, V., Gammerman, A., & Shafer, G. (2005). *Algorithmic Learning in a Random World*.
-    Springer. — split conformal, and Mondrian (class-conditional) conformal. *(A second
-    edition exists; check which you are citing.)*
+19. ✓ Vovk, V., Gammerman, A., & Shafer, G. (2022). *Algorithmic Learning in a Random
+    World*, 2nd edition. Springer. DOI: 10.1007/978-3-031-06649-8 — split conformal, and
+    Mondrian (class-conditional) conformal. The first edition (Springer, 2005) is the one
+    usually cited; both contain the results we use, and we cite the current edition.
 20. ✓ Angelopoulos, A. N., & Bates, S. (2023). Conformal prediction: a gentle introduction.
     *Foundations and Trends in Machine Learning*, 16(4), 494–591. DOI: 10.1561/2200000101
 21. ✓ Sadinle, M., Lei, J., & Wasserman, L. (2019). Least ambiguous set-valued classifiers
