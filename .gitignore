@@ -74,3 +74,9 @@ mpp_rank_sweep.zip
 
 # Overleaf upload bundle, rebuilt by scripts/make_latex.py
 paper/overleaf_project.zip
+
+# Every Colab bundle is a build product of scripts/make_colab_bundle.py, regenerated in
+# seconds and worth 21 MB in a repository that is otherwise 2 MB. The notebooks name the
+# file they expect; build it before uploading to Drive.
+mpp_fusion_bundle.zip
+mpp_chemprop_bundle.zip
