@@ -116,10 +116,11 @@ def fig1_setsize_vs_coverage():
 
 def fig2_coverage_by_distance():
     """Coverage decaying with Tanimoto distance to the nearest training molecule."""
-    path = os.path.join(MET, "conformal_by_distance_alpha0.1_absolute.csv")
+    path = os.path.join(MET, "conformal_alpha0.1_bydistance.csv")
     if not os.path.exists(path):
-        return print("  fig2 skipped: no by-distance archive "
-                     "(python -m src.eval.conformal --by-distance ...)")
+        return print("  fig2 skipped: no by-distance archive. Generate it with "
+                     "python -m src.eval.conformal --by-distance --datasets tox21 "
+                     "--variants deepchem seed0..seed4 --tags <the 15 tags>")
     d = pd.read_csv(path)
     d = d[d.dataset == "tox21"]
     if d.empty:
@@ -136,7 +137,7 @@ def fig2_coverage_by_distance():
     ax.set_xlabel("Tanimoto similarity to nearest training molecule")
     ax.set_ylabel("conformal coverage (%)")
     ax.set_title("The guarantee decays exactly where novel chemistry lives\n"
-                 "Tox21 test molecules, binned by distance to training", loc="left")
+                 f"Tox21, averaged over {d.tag.nunique()} models and six splits", loc="left")
     ax.set_ylim(0, 100)
     ax.legend(frameon=False, fontsize=8, loc="lower right")
     save(fig, "fig2_coverage_by_distance")

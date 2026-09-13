@@ -336,6 +336,29 @@ def checks(draft):
         ):
             claim(label, pat, abs(seeded - dc), 5e-3)
 
+    # Section 6.6's distance table, now a fifteen-model average rather than one model's.
+    # Every cell is asserted: it is a five-row table of prose numbers, which is exactly the
+    # shape that has gone stale three times in this project already.
+    bd_path = os.path.join(MET, "conformal_alpha0.1_bydistance.csv")
+    if os.path.exists(bd_path):
+        bd = pd.read_csv(bd_path)
+        bd = bd[bd.dataset == "tox21"]
+        if len(bd):
+            g = bd.groupby("band")[["coverage", "coverage_pos", "n_band"]].mean()
+            for band in g.index:
+                r = g.loc[band]
+                lo, hi = band.split("-")
+                pat = (rf"\| {lo}[–-]{hi}[^|]*\| (\d+) \| ([\d.]+)% \| \*?\*?([\d.]+)%")
+                m = re.search(pat, draft)
+                if m is None:
+                    out.append((f"6.6 band {band}", None, 0.0, 0, "ROW MISSING FROM DRAFT"))
+                    continue
+                out.append((f"6.6 {band}: n", float(m.group(1)), float(r.n_band), 0.6, None))
+                out.append((f"6.6 {band}: overall", float(m.group(2)),
+                            100 * float(r.coverage), 0.05, None))
+                out.append((f"6.6 {band}: actives", float(m.group(3)),
+                            100 * float(r.coverage_pos), 0.05, None))
+
     # Section 3.2's asymmetry claim: the canonical split is systematically harder. Recomputed
     # from the archives rather than trusted, because it is a new claim and the three numbers
     # in it (33 of 37, median, 30 beyond the MDE) move together if any archive changes.
