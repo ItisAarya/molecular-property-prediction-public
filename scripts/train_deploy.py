@@ -116,7 +116,7 @@ def main():
     print("Verify the live featuriser still reproduces the training features:")
     print("    python -m scripts.check_deploy")
     print("Then:")
-    print("    streamlit run app/predict_app.py")
+    print("    python -m streamlit run app/predict_app.py")
 
 
 if __name__ == "__main__":

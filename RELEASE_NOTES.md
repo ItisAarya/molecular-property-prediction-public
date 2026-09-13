@@ -21,7 +21,7 @@ archived (model, dataset, split) fits in total.
 class-conditional (Mondrian), CQR, normalised and absolute residual scores — plus post-hoc
 calibration over 65 (model, dataset) pairs.
 
-**A live demo.** `streamlit run app/predict_app.py` predicts all eight properties from a typed
+**A live demo.** `python -m streamlit run app/predict_app.py` predicts all eight properties from a typed
 SMILES string, with a conformal prediction set or interval, the model's measured test score,
 and an honest label saying whether the molecule was in that dataset's training data.
 
