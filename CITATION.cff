@@ -12,18 +12,16 @@ abstract: >-
   is not stable to an architectural constant.
 type: software
 
-# ---------------------------------------------------------------------------------------
-# BEFORE RELEASING: replace the placeholder below with your real name, and add your ORCID
-# if you have one. A DOI minted against "PLACEHOLDER" is permanent and cannot be edited
-# away. See the release checklist, which lists this as a blocking step.
-# ---------------------------------------------------------------------------------------
 authors:
-  - name: "PLACEHOLDER - set your name before minting a DOI"
-    # family-names: ""
-    # given-names: ""
-    # orcid: "https://orcid.org/0000-0000-0000-0000"
+  - family-names: "Sharma"
+    given-names: "Aarya"
+    orcid: "https://orcid.org/0009-0003-4765-9849"
+    email: "aarya007india@gmail.com"
+    affiliation: "Department of Artificial Intelligence and Machine Learning, Universal College of Engineering, University of Mumbai"
 
-repository-code: "https://github.com/ItisAarya/molecular-property-prediction"
+doi: "10.5281/zenodo.22734878"
+repository-code: "https://github.com/ItisAarya/molecular-property-prediction-public"
+url: "https://doi.org/10.5281/zenodo.22734878"
 version: "1.0.0"
 date-released: "2026-09-12"
 

@@ -212,10 +212,19 @@ predictions in `results/runs/`.
 
 ## Citing this work
 
-If you use this code or its evaluation protocol, please cite it. `CITATION.cff` carries the
-machine-readable metadata, and GitHub renders a "Cite this repository" box from it.
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22734878.svg)](https://doi.org/10.5281/zenodo.22734878)
 
-*(A Zenodo DOI will be added here on the first tagged release.)*
+If you use this code or its evaluation protocol, please cite it:
+
+> Sharma, A. (2026). *Multi-view molecular property prediction, evaluated honestly*.
+> Zenodo. https://doi.org/10.5281/zenodo.22734878
+
+The DOI above is the **concept DOI** — it always resolves to the latest release. To cite a
+specific version instead, use that release's own DOI (v1.0.0 is
+[10.5281/zenodo.22734879](https://doi.org/10.5281/zenodo.22734879)).
+
+`CITATION.cff` carries the machine-readable metadata, and GitHub renders a "Cite this
+repository" box from it.
 
 ## Verifying the claims
 
