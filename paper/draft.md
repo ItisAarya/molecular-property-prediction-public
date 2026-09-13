@@ -978,37 +978,38 @@ underneath a result nobody had reason to question.
 
 ## References
 
-Entries marked **✓** were checked against the publisher on 2026-09-13 — title, venue, volume,
-pages and DOI all confirmed. Entries marked **⚠** are drafted from secondary sources and
-**must be opened at the publisher before submission**; do not paste them into a reference list
-as they stand. `paper/references_gap.md` records which claim each reference supports.
+**✓ = checked against the publisher on 2026-09-13** (title, venue, volume, pages, DOI).
+**⚠ = not yet checked; open it before submission.** `paper/references_gap.md` records which
+claim each reference supports.
 
 ### Benchmark, data and software
 
-1. ⚠ Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S.,
+1. ✓ Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S.,
    Leswing, K., & Pande, V. (2018). MoleculeNet: a benchmark for molecular machine learning.
-   *Chemical Science*, 9(2), 513–530. — §3.1, the benchmark suite.
-2. ⚠ Delaney, J. S. (2004). ESOL: estimating aqueous solubility directly from molecular
+   *Chemical Science*, 9(2), 513–530. DOI: 10.1039/c7sc02664a
+2. ✓ Delaney, J. S. (2004). ESOL: estimating aqueous solubility directly from molecular
    structure. *Journal of Chemical Information and Computer Sciences*, 44(3), 1000–1005.
-   — §3.1, and §5.1's claim about the ESOL target being close to a linear function of
-   descriptors.
+   DOI: 10.1021/ci034243x — §3.1, and §5.1's claim that the ESOL target is close to a linear
+   function of descriptors (the original model is a linear regression on nine of them).
 3. ✓ Mobley, D. L., & Guthrie, J. P. (2014). FreeSolv: a database of experimental and
    calculated hydration free energies, with input files. *Journal of Computer-Aided Molecular
    Design*, 28(7), 711–720. DOI: 10.1007/s10822-014-9747-x
-4. ⚠ Rogers, D., & Hahn, M. (2010). Extended-connectivity fingerprints. *Journal of Chemical
-   Information and Modeling*, 50(5), 742–754. — the ECFP component of the descriptor view.
-5. Landrum, G. RDKit: open-source cheminformatics. <https://www.rdkit.org> — descriptors,
-   graphs and scaffolds. Cite the version pinned in `environment.yml`.
+4. ✓ Rogers, D., & Hahn, M. (2010). Extended-connectivity fingerprints. *Journal of Chemical
+   Information and Modeling*, 50(5), 742–754. DOI: 10.1021/ci100050t
+5. Landrum, G. RDKit: open-source cheminformatics. <https://www.rdkit.org> — cite the version
+   pinned in `environment.yml`.
 6. ⚠ Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., & Wu, Z. (2019).
    *Deep Learning for the Life Sciences*. O'Reilly. — DeepChem, used for the canonical splits
-   and the ECFP featuriser.
+   and the ECFP featuriser. *(A software citation may suit better than the book; check what
+   the DeepChem project currently asks for.)*
 
 ### Architectures compared
 
 7. ⚠ Xu, K., Hu, W., Leskovec, J., & Jegelka, S. (2019). How powerful are graph neural
-   networks? *ICLR*. — the GIN baseline encoder.
+   networks? *ICLR*. arXiv:1810.00826 — the GIN baseline encoder.
 8. ⚠ Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., & Leskovec, J. (2020).
-   Strategies for pre-training graph neural networks. *ICLR*. — GINE and edge features.
+   Strategies for pre-training graph neural networks. *ICLR*. arXiv:1905.12265 — GINE and
+   edge features.
 9. ✓ Xiong, Z., Wang, D., Liu, X., Zhong, F., Wan, X., Li, X., Li, Z., Luo, X., Chen, K.,
    Jiang, H., & Zheng, M. (2020). Pushing the boundaries of molecular representation for drug
    discovery with the graph attention mechanism. *Journal of Medicinal Chemistry*, 63(16),
@@ -1017,65 +1018,66 @@ as they stand. `paper/references_gap.md` records which claim each reference supp
     Hopper, T., Kelley, B., Mathea, M., Palmer, A., Settels, V., Jaakkola, T., Jensen, K., &
     Barzilay, R. (2019). Analyzing learned molecular representations for property prediction.
     *Journal of Chemical Information and Modeling*, 59(8), 3370–3388.
-    DOI: 10.1021/acs.jcim.9b00237 — Chemprop / D-MPNN, external baseline (§5.5). A published
-    correction exists (2019); cite the corrected version.
-11. ⚠ Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H.,
+    DOI: 10.1021/acs.jcim.9b00237 — Chemprop / D-MPNN. A correction was published in 2019;
+    cite the corrected version.
+11. ✓ Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H.,
     Green, W. H., & McGill, C. J. (2024). Chemprop: a machine learning package for chemical
-    property prediction. *Journal of Chemical Information and Modeling*. — the v2 software
-    actually installed (2.3.1).
+    property prediction. *Journal of Chemical Information and Modeling*, 64(1), 9–17.
+    DOI: 10.1021/acs.jcim.3c01250 — the v2 software actually installed (2.3.1).
 12. ⚠ Chithrananda, S., Grand, G., & Ramsundar, B. (2020). ChemBERTa: large-scale
-    self-supervised pretraining for molecular property prediction. *arXiv:2010.09885*.
-    — the sequence view (`seyonec/ChemBERTa-zinc-base-v1`).
+    self-supervised pretraining for molecular property prediction. arXiv:2010.09885 — the
+    sequence view (`seyonec/ChemBERTa-zinc-base-v1`).
 13. ⚠ Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W.
-    (2022). LoRA: low-rank adaptation of large language models. *ICLR*. — §5.1's end-to-end
-    sequence setting.
+    (2022). LoRA: low-rank adaptation of large language models. *ICLR*. arXiv:2106.09685
+    — §5.1's end-to-end sequence setting.
 
 ### The two fusion proposals this paper tests
 
-14. ✓ Zhang, R., et al. (2024). MvMRL: a multi-view molecular representation learning method
-    for molecular property prediction. *Briefings in Bioinformatics*, 25(4), bbae298.
-    DOI: 10.1093/bib/bbae298 — the dual cross-attention proposal implemented as the `xattn`
-    rung. *(Author list to be completed from the publisher page.)*
-15. ✓ Multimodal graph fusion with statistically guided parsimonious descriptor selection for
-    molecular property prediction (KROVEX). *Journal of Cheminformatics* (2026).
-    DOI: 10.1186/s13321-025-01140-y — the Kronecker / second-order proposal implemented as
-    the `bilinear` rung. *(Author list to be completed.)* Its own evaluation is FreeSolv, ESOL
-    and two self-curated datasets, and its ablation reports Kronecker fusion beating plain
-    concatenation. §5.3 runs that comparison on eight datasets with multiplicity correction
-    and finds it unit-dependent.
+14. ✓ Zhang, R., Lin, Y., Wu, Y., Deng, L., Zhang, H., Liao, M., & Peng, Y. (2024). MvMRL: a
+    multi-view molecular representation learning method for molecular property prediction.
+    *Briefings in Bioinformatics*, 25(4), bbae298. DOI: 10.1093/bib/bbae298 — the dual
+    cross-attention proposal implemented as the `xattn` rung.
+15. ✓ Jang, Y., Lee, J., Jeong, K., & Kim, J. (2026). Multimodal graph fusion with
+    statistically guided parsimonious descriptor selection for molecular property prediction.
+    *Journal of Cheminformatics*, 18, 18. DOI: 10.1186/s13321-025-01140-y — the Kronecker /
+    second-order proposal (KROVEX) implemented as the `bilinear` rung. Its evaluation is
+    FreeSolv, ESOL and two self-curated datasets, and its ablation reports Kronecker fusion
+    beating plain concatenation; §5.3 runs that comparison on eight datasets with multiplicity
+    correction and finds it unit-dependent.
 
 ### Evaluation methodology
 
-16. ⚠ Demšar, J. (2006). Statistical comparisons of classifiers over multiple data sets.
-    *Journal of Machine Learning Research*, 7, 1–30. — §3.4's commensurability objection,
-    already invoked by name in the text.
-17. ⚠ Holm, S. (1979). A simple sequentially rejective multiple test procedure. *Scandinavian
+16. ✓ Demšar, J. (2006). Statistical comparisons of classifiers over multiple data sets.
+    *Journal of Machine Learning Research*, 7, 1–30. — §3.4's commensurability objection.
+17. ✓ Holm, S. (1979). A simple sequentially rejective multiple test procedure. *Scandinavian
     Journal of Statistics*, 6(2), 65–70. — the family-wise correction used throughout.
-18. ⚠ Gelman, A., & Stern, H. (2006). The difference between "significant" and "not
+18. ✓ Gelman, A., & Stern, H. (2006). The difference between "significant" and "not
     significant" is not itself statistically significant. *The American Statistician*, 60(4),
-    328–331. — §5.6, the error we identify in our own result.
+    328–331. DOI: 10.1198/000313006X152649 — §5.6, the error we identify in our own result.
 
 ### Uncertainty quantification
 
 19. ⚠ Vovk, V., Gammerman, A., & Shafer, G. (2005). *Algorithmic Learning in a Random World*.
-    Springer. — split conformal, and Mondrian (class-conditional) conformal.
+    Springer. — split conformal, and Mondrian (class-conditional) conformal. *(A second
+    edition exists; check which you are citing.)*
 20. ✓ Angelopoulos, A. N., & Bates, S. (2023). Conformal prediction: a gentle introduction.
     *Foundations and Trends in Machine Learning*, 16(4), 494–591. DOI: 10.1561/2200000101
-    — §6's entry point.
-21. ⚠ Sadinle, M., Lei, J., & Wasserman, L. (2019). Least ambiguous set-valued classifiers
+21. ✓ Sadinle, M., Lei, J., & Wasserman, L. (2019). Least ambiguous set-valued classifiers
     with bounded error levels. *Journal of the American Statistical Association*, 114(525),
     223–234. — LAC, the score this paper adopts.
-22. ⚠ Romano, Y., Sesia, M., & Candès, E. J. (2020). Classification with valid and adaptive
-    coverage. *NeurIPS*. — APS, measured in §6.4.
-23. ⚠ Angelopoulos, A. N., Bates, S., Malik, J., & Jordan, M. I. (2021). Uncertainty sets for
-    image classifiers using conformal prediction. *ICLR*. — RAPS, measured in §6.4.
-24. ⚠ Romano, Y., Patterson, E., & Candès, E. J. (2019). Conformalized quantile regression.
-    *NeurIPS*. — CQR, implemented in §6.5.
-25. ⚠ Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern
-    neural networks. *ICML*. — temperature scaling, proved inert for binary conformal in §6.3.
+22. ✓ Romano, Y., Sesia, M., & Candès, E. J. (2020). Classification with valid and adaptive
+    coverage. *Advances in Neural Information Processing Systems* 33. — APS, measured in §6.4.
+23. ✓ Angelopoulos, A. N., Bates, S., Jordan, M. I., & Malik, J. (2021). Uncertainty sets for
+    image classifiers using conformal prediction. *ICLR* (spotlight). arXiv:2009.14193 — RAPS,
+    measured in §6.4.
+24. ✓ Romano, Y., Patterson, E., & Candès, E. J. (2019). Conformalized quantile regression.
+    *Advances in Neural Information Processing Systems* 32. arXiv:1905.03222 — CQR (§6.5).
+25. ✓ Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern
+    neural networks. *Proceedings of the 34th International Conference on Machine Learning*,
+    PMLR 70, 1321–1330. — temperature scaling, proved inert for binary conformal in §6.3.
 26. ✓ Tursunbadalov, M., & Tursunbadalov, M. (2026). A quiet failure in calibrated virtual
     screening: marginal conformal prediction under-covers the minority class, and a
-    class-conditional fix recovers it. *arXiv:2607.06605*, submitted 7 July 2026.
+    class-conditional fix recovers it. arXiv:2607.06605, submitted 7 July 2026.
     — **independently reports the failure §6.2 measures, four months before this work.** They
     report minority coverage as low as 4.2% against a 90% global target across four datasets,
     reproduce it across model families, and explain the magnitude with a conservation
@@ -1083,18 +1085,24 @@ as they stand. `paper/references_gap.md` records which claim each reference supp
 
 ### Activity cliffs and distribution shift
 
-27. ⚠ van Tilborg, D., Alenicheva, A., & Grisoni, F. (2022). Exposing the limitations of
+27. ✓ van Tilborg, D., Alenicheva, A., & Grisoni, F. (2022). Exposing the limitations of
     molecular machine learning with activity cliffs. *Journal of Chemical Information and
-    Modeling*, 62(23), 5938–5951. (A published correction exists; cite the corrected version.)
-    — §6.7's direct predecessor; the definitional difference is recorded there.
+    Modeling*, 62(23), 5938–5951. DOI: 10.1021/acs.jcim.2c01073 — §6.7's direct predecessor.
+    **Two corrections were published** (March 2023 on the early-stopping description, and
+    October 2023 on a software bug in the train/test split, *JCIM* 63(7), 2266, with updated
+    tables and unchanged conclusions). Cite the corrected version, and note the definitional
+    difference recorded in §6.7.
 
 ### Reproducibility and nondeterminism
 
-28. ⚠ Summers, C., & Dinneen, M. J. (2021). Nondeterminism and instability in neural network
-    optimization. *ICML*. — §7's closest antecedent.
-29. ⚠ Investigating the impact of randomness on reproducibility in computer vision (2024).
-    *arXiv:2410.02806*. — reports CUDA-induced randomness producing performance differences
-    up to 4.77% and criticises single-run benchmark reporting; §7's argument in another field.
+28. ✓ Summers, C., & Dinneen, M. J. (2021). Nondeterminism and instability in neural network
+    optimization. *Proceedings of the 38th International Conference on Machine Learning*,
+    PMLR 139, 9913–9922. — §7's closest antecedent.
+29. ✓ Eryılmaz, B., Koraş, O. A., Schlötterer, J., & Seifert, C. (2024). Investigating the
+    impact of randomness on reproducibility in computer vision: a study on applications in
+    civil engineering and medicine. arXiv:2410.02806 — reports CUDA-induced randomness
+    accounting for differences of up to 4.77% in performance scores and criticises single-run
+    benchmark reporting; §7's argument in another field.
 
 ---
 

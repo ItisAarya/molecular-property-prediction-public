@@ -703,70 +703,70 @@ The transferable claim is not about any architecture. It is that an evaluation s
 
 \section{References}
 
-Entries marked \textbf{\textbf{[verified]}} were checked against the publisher on 2026-09-13 --- title, venue, volume, pages and DOI all confirmed. Entries marked \textbf{\textbf{[unverified]}} are drafted from secondary sources and \textbf{must be opened at the publisher before submission}; do not paste them into a reference list as they stand. \code{paper/references\_gap.md} records which claim each reference supports.
+\textbf{\textbf{[verified]} = checked against the publisher on 2026-09-13} (title, venue, volume, pages, DOI). \textbf{\textbf{[unverified]} = not yet checked; open it before submission.} \code{paper/references\_gap.md} records which claim each reference supports.
 
 \subsection{Benchmark, data and software}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S., Leswing, K., \& Pande, V. (2018). MoleculeNet: a benchmark for molecular machine learning. \emph{Chemical Science}, 9(2), 513--530. --- \S3.1, the benchmark suite.
-\item \textbf{[unverified]} Delaney, J. S. (2004). ESOL: estimating aqueous solubility directly from molecular structure. \emph{Journal of Chemical Information and Computer Sciences}, 44(3), 1000--1005. --- \S3.1, and \S5.1's claim about the ESOL target being close to a linear function of descriptors.
+\item \textbf{[verified]} Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S., Leswing, K., \& Pande, V. (2018). MoleculeNet: a benchmark for molecular machine learning. \emph{Chemical Science}, 9(2), 513--530. DOI: 10.1039/c7sc02664a
+\item \textbf{[verified]} Delaney, J. S. (2004). ESOL: estimating aqueous solubility directly from molecular structure. \emph{Journal of Chemical Information and Computer Sciences}, 44(3), 1000--1005. DOI: 10.1021/ci034243x --- \S3.1, and \S5.1's claim that the ESOL target is close to a linear function of descriptors (the original model is a linear regression on nine of them).
 \item \textbf{[verified]} Mobley, D. L., \& Guthrie, J. P. (2014). FreeSolv: a database of experimental and calculated hydration free energies, with input files. \emph{Journal of Computer-Aided Molecular Design}, 28(7), 711--720. DOI: 10.1007/s10822-014-9747-x
-\item \textbf{[unverified]} Rogers, D., \& Hahn, M. (2010). Extended-connectivity fingerprints. \emph{Journal of Chemical Information and Modeling}, 50(5), 742--754. --- the ECFP component of the descriptor view.
-\item Landrum, G. RDKit: open-source cheminformatics. \url{https://www.rdkit.org} --- descriptors, graphs and scaffolds. Cite the version pinned in \code{environment.yml}.
-\item \textbf{[unverified]} Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., \& Wu, Z. (2019). \emph{Deep Learning for the Life Sciences}. O'Reilly. --- DeepChem, used for the canonical splits and the ECFP featuriser.
+\item \textbf{[verified]} Rogers, D., \& Hahn, M. (2010). Extended-connectivity fingerprints. \emph{Journal of Chemical Information and Modeling}, 50(5), 742--754. DOI: 10.1021/ci100050t
+\item Landrum, G. RDKit: open-source cheminformatics. \url{https://www.rdkit.org} --- cite the version pinned in \code{environment.yml}.
+\item \textbf{[unverified]} Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., \& Wu, Z. (2019). \emph{Deep Learning for the Life Sciences}. O'Reilly. --- DeepChem, used for the canonical splits and the ECFP featuriser. \emph{(A software citation may suit better than the book; check what the DeepChem project currently asks for.)}
 \end{enumerate}
 
 \subsection{Architectures compared}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Xu, K., Hu, W., Leskovec, J., \& Jegelka, S. (2019). How powerful are graph neural networks? \emph{ICLR}. --- the GIN baseline encoder.
-\item \textbf{[unverified]} Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., \& Leskovec, J. (2020). Strategies for pre-training graph neural networks. \emph{ICLR}. --- GINE and edge features.
+\item \textbf{[unverified]} Xu, K., Hu, W., Leskovec, J., \& Jegelka, S. (2019). How powerful are graph neural networks? \emph{ICLR}. arXiv:1810.00826 --- the GIN baseline encoder.
+\item \textbf{[unverified]} Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., \& Leskovec, J. (2020). Strategies for pre-training graph neural networks. \emph{ICLR}. arXiv:1905.12265 --- GINE and edge features.
 \item \textbf{[verified]} Xiong, Z., Wang, D., Liu, X., Zhong, F., Wan, X., Li, X., Li, Z., Luo, X., Chen, K., Jiang, H., \& Zheng, M. (2020). Pushing the boundaries of molecular representation for drug discovery with the graph attention mechanism. \emph{Journal of Medicinal Chemistry}, 63(16), 8749--8760. DOI: 10.1021/acs.jmedchem.9b00959 --- AttentiveFP, external baseline (\S5.5).
-\item \textbf{[verified]} Yang, K., Swanson, K., Jin, W., Coley, C., Eiden, P., Gao, H., Guzman-Perez, A., Hopper, T., Kelley, B., Mathea, M., Palmer, A., Settels, V., Jaakkola, T., Jensen, K., \& Barzilay, R. (2019). Analyzing learned molecular representations for property prediction. \emph{Journal of Chemical Information and Modeling}, 59(8), 3370--3388. DOI: 10.1021/acs.jcim.9b00237 --- Chemprop / D-MPNN, external baseline (\S5.5). A published correction exists (2019); cite the corrected version.
-\item \textbf{[unverified]} Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H., Green, W. H., \& McGill, C. J. (2024). Chemprop: a machine learning package for chemical property prediction. \emph{Journal of Chemical Information and Modeling}. --- the v2 software actually installed (2.3.1).
-\item \textbf{[unverified]} Chithrananda, S., Grand, G., \& Ramsundar, B. (2020). ChemBERTa: large-scale self-supervised pretraining for molecular property prediction. \emph{arXiv:2010.09885}. --- the sequence view (\code{seyonec/ChemBERTa-zinc-base-v1}).
-\item \textbf{[unverified]} Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., \& Chen, W. (2022). LoRA: low-rank adaptation of large language models. \emph{ICLR}. --- \S5.1's end-to-end sequence setting.
+\item \textbf{[verified]} Yang, K., Swanson, K., Jin, W., Coley, C., Eiden, P., Gao, H., Guzman-Perez, A., Hopper, T., Kelley, B., Mathea, M., Palmer, A., Settels, V., Jaakkola, T., Jensen, K., \& Barzilay, R. (2019). Analyzing learned molecular representations for property prediction. \emph{Journal of Chemical Information and Modeling}, 59(8), 3370--3388. DOI: 10.1021/acs.jcim.9b00237 --- Chemprop / D-MPNN. A correction was published in 2019; cite the corrected version.
+\item \textbf{[verified]} Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H., Green, W. H., \& McGill, C. J. (2024). Chemprop: a machine learning package for chemical property prediction. \emph{Journal of Chemical Information and Modeling}, 64(1), 9--17. DOI: 10.1021/acs.jcim.3c01250 --- the v2 software actually installed (2.3.1).
+\item \textbf{[unverified]} Chithrananda, S., Grand, G., \& Ramsundar, B. (2020). ChemBERTa: large-scale self-supervised pretraining for molecular property prediction. arXiv:2010.09885 --- the sequence view (\code{seyonec/ChemBERTa-zinc-base-v1}).
+\item \textbf{[unverified]} Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., \& Chen, W. (2022). LoRA: low-rank adaptation of large language models. \emph{ICLR}. arXiv:2106.09685 --- \S5.1's end-to-end sequence setting.
 \end{enumerate}
 
 \subsection{The two fusion proposals this paper tests}
 
 \begin{enumerate}
-\item \textbf{[verified]} Zhang, R., et al. (2024). MvMRL: a multi-view molecular representation learning method for molecular property prediction. \emph{Briefings in Bioinformatics}, 25(4), bbae298. DOI: 10.1093/bib/bbae298 --- the dual cross-attention proposal implemented as the \code{xattn} rung. \emph{(Author list to be completed from the publisher page.)}
-\item \textbf{[verified]} Multimodal graph fusion with statistically guided parsimonious descriptor selection for molecular property prediction (KROVEX). \emph{Journal of Cheminformatics} (2026). DOI: 10.1186/s13321-025-01140-y --- the Kronecker / second-order proposal implemented as the \code{bilinear} rung. \emph{(Author list to be completed.)} Its own evaluation is FreeSolv, ESOL and two self-curated datasets, and its ablation reports Kronecker fusion beating plain concatenation. \S5.3 runs that comparison on eight datasets with multiplicity correction and finds it unit-dependent.
+\item \textbf{[verified]} Zhang, R., Lin, Y., Wu, Y., Deng, L., Zhang, H., Liao, M., \& Peng, Y. (2024). MvMRL: a multi-view molecular representation learning method for molecular property prediction. \emph{Briefings in Bioinformatics}, 25(4), bbae298. DOI: 10.1093/bib/bbae298 --- the dual cross-attention proposal implemented as the \code{xattn} rung.
+\item \textbf{[verified]} Jang, Y., Lee, J., Jeong, K., \& Kim, J. (2026). Multimodal graph fusion with statistically guided parsimonious descriptor selection for molecular property prediction. \emph{Journal of Cheminformatics}, 18, 18. DOI: 10.1186/s13321-025-01140-y --- the Kronecker / second-order proposal (KROVEX) implemented as the \code{bilinear} rung. Its evaluation is FreeSolv, ESOL and two self-curated datasets, and its ablation reports Kronecker fusion beating plain concatenation; \S5.3 runs that comparison on eight datasets with multiplicity correction and finds it unit-dependent.
 \end{enumerate}
 
 \subsection{Evaluation methodology}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Demšar, J. (2006). Statistical comparisons of classifiers over multiple data sets. \emph{Journal of Machine Learning Research}, 7, 1--30. --- \S3.4's commensurability objection, already invoked by name in the text.
-\item \textbf{[unverified]} Holm, S. (1979). A simple sequentially rejective multiple test procedure. \emph{Scandinavian Journal of Statistics}, 6(2), 65--70. --- the family-wise correction used throughout.
-\item \textbf{[unverified]} Gelman, A., \& Stern, H. (2006). The difference between "significant" and "not significant" is not itself statistically significant. \emph{The American Statistician}, 60(4), 328--331. --- \S5.6, the error we identify in our own result.
+\item \textbf{[verified]} Demšar, J. (2006). Statistical comparisons of classifiers over multiple data sets. \emph{Journal of Machine Learning Research}, 7, 1--30. --- \S3.4's commensurability objection.
+\item \textbf{[verified]} Holm, S. (1979). A simple sequentially rejective multiple test procedure. \emph{Scandinavian Journal of Statistics}, 6(2), 65--70. --- the family-wise correction used throughout.
+\item \textbf{[verified]} Gelman, A., \& Stern, H. (2006). The difference between "significant" and "not significant" is not itself statistically significant. \emph{The American Statistician}, 60(4), 328--331. DOI: 10.1198/000313006X152649 --- \S5.6, the error we identify in our own result.
 \end{enumerate}
 
 \subsection{Uncertainty quantification}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Vovk, V., Gammerman, A., \& Shafer, G. (2005). \emph{Algorithmic Learning in a Random World}. Springer. --- split conformal, and Mondrian (class-conditional) conformal.
-\item \textbf{[verified]} Angelopoulos, A. N., \& Bates, S. (2023). Conformal prediction: a gentle introduction. \emph{Foundations and Trends in Machine Learning}, 16(4), 494--591. DOI: 10.1561/2200000101 --- \S6's entry point.
-\item \textbf{[unverified]} Sadinle, M., Lei, J., \& Wasserman, L. (2019). Least ambiguous set-valued classifiers with bounded error levels. \emph{Journal of the American Statistical Association}, 114(525), 223--234. --- LAC, the score this paper adopts.
-\item \textbf{[unverified]} Romano, Y., Sesia, M., \& Candès, E. J. (2020). Classification with valid and adaptive coverage. \emph{NeurIPS}. --- APS, measured in \S6.4.
-\item \textbf{[unverified]} Angelopoulos, A. N., Bates, S., Malik, J., \& Jordan, M. I. (2021). Uncertainty sets for image classifiers using conformal prediction. \emph{ICLR}. --- RAPS, measured in \S6.4.
-\item \textbf{[unverified]} Romano, Y., Patterson, E., \& Candès, E. J. (2019). Conformalized quantile regression. \emph{NeurIPS}. --- CQR, implemented in \S6.5.
-\item \textbf{[unverified]} Guo, C., Pleiss, G., Sun, Y., \& Weinberger, K. Q. (2017). On calibration of modern neural networks. \emph{ICML}. --- temperature scaling, proved inert for binary conformal in \S6.3.
-\item \textbf{[verified]} Tursunbadalov, M., \& Tursunbadalov, M. (2026). A quiet failure in calibrated virtual screening: marginal conformal prediction under-covers the minority class, and a class-conditional fix recovers it. \emph{arXiv:2607.06605}, submitted 7 July 2026. --- \textbf{independently reports the failure \S6.2 measures, four months before this work.} They report minority coverage as low as 4.2\% against a 90\% global target across four datasets, reproduce it across model families, and explain the magnitude with a conservation identity. \S6.2 is written as corroboration on a wider model set, not as discovery.
+\item \textbf{[unverified]} Vovk, V., Gammerman, A., \& Shafer, G. (2005). \emph{Algorithmic Learning in a Random World}. Springer. --- split conformal, and Mondrian (class-conditional) conformal. \emph{(A second edition exists; check which you are citing.)}
+\item \textbf{[verified]} Angelopoulos, A. N., \& Bates, S. (2023). Conformal prediction: a gentle introduction. \emph{Foundations and Trends in Machine Learning}, 16(4), 494--591. DOI: 10.1561/2200000101
+\item \textbf{[verified]} Sadinle, M., Lei, J., \& Wasserman, L. (2019). Least ambiguous set-valued classifiers with bounded error levels. \emph{Journal of the American Statistical Association}, 114(525), 223--234. --- LAC, the score this paper adopts.
+\item \textbf{[verified]} Romano, Y., Sesia, M., \& Candès, E. J. (2020). Classification with valid and adaptive coverage. \emph{Advances in Neural Information Processing Systems} 33. --- APS, measured in \S6.4.
+\item \textbf{[verified]} Angelopoulos, A. N., Bates, S., Jordan, M. I., \& Malik, J. (2021). Uncertainty sets for image classifiers using conformal prediction. \emph{ICLR} (spotlight). arXiv:2009.14193 --- RAPS, measured in \S6.4.
+\item \textbf{[verified]} Romano, Y., Patterson, E., \& Candès, E. J. (2019). Conformalized quantile regression. \emph{Advances in Neural Information Processing Systems} 32. arXiv:1905.03222 --- CQR (\S6.5).
+\item \textbf{[verified]} Guo, C., Pleiss, G., Sun, Y., \& Weinberger, K. Q. (2017). On calibration of modern neural networks. \emph{Proceedings of the 34th International Conference on Machine Learning}, PMLR 70, 1321--1330. --- temperature scaling, proved inert for binary conformal in \S6.3.
+\item \textbf{[verified]} Tursunbadalov, M., \& Tursunbadalov, M. (2026). A quiet failure in calibrated virtual screening: marginal conformal prediction under-covers the minority class, and a class-conditional fix recovers it. arXiv:2607.06605, submitted 7 July 2026. --- \textbf{independently reports the failure \S6.2 measures, four months before this work.} They report minority coverage as low as 4.2\% against a 90\% global target across four datasets, reproduce it across model families, and explain the magnitude with a conservation identity. \S6.2 is written as corroboration on a wider model set, not as discovery.
 \end{enumerate}
 
 \subsection{Activity cliffs and distribution shift}
 
 \begin{enumerate}
-\item \textbf{[unverified]} van Tilborg, D., Alenicheva, A., \& Grisoni, F. (2022). Exposing the limitations of molecular machine learning with activity cliffs. \emph{Journal of Chemical Information and Modeling}, 62(23), 5938--5951. (A published correction exists; cite the corrected version.) --- \S6.7's direct predecessor; the definitional difference is recorded there.
+\item \textbf{[verified]} van Tilborg, D., Alenicheva, A., \& Grisoni, F. (2022). Exposing the limitations of molecular machine learning with activity cliffs. \emph{Journal of Chemical Information and Modeling}, 62(23), 5938--5951. DOI: 10.1021/acs.jcim.2c01073 --- \S6.7's direct predecessor. \textbf{Two corrections were published} (March 2023 on the early-stopping description, and October 2023 on a software bug in the train/test split, \emph{JCIM} 63(7), 2266, with updated tables and unchanged conclusions). Cite the corrected version, and note the definitional difference recorded in \S6.7.
 \end{enumerate}
 
 \subsection{Reproducibility and nondeterminism}
 
 \begin{enumerate}
-\item \textbf{[unverified]} Summers, C., \& Dinneen, M. J. (2021). Nondeterminism and instability in neural network optimization. \emph{ICML}. --- \S7's closest antecedent.
-\item \textbf{[unverified]} Investigating the impact of randomness on reproducibility in computer vision (2024). \emph{arXiv:2410.02806}. --- reports CUDA-induced randomness producing performance differences up to 4.77\% and criticises single-run benchmark reporting; \S7's argument in another field.
+\item \textbf{[verified]} Summers, C., \& Dinneen, M. J. (2021). Nondeterminism and instability in neural network optimization. \emph{Proceedings of the 38th International Conference on Machine Learning}, PMLR 139, 9913--9922. --- \S7's closest antecedent.
+\item \textbf{[verified]} Eryılmaz, B., Koraş, O. A., Schlötterer, J., \& Seifert, C. (2024). Investigating the impact of randomness on reproducibility in computer vision: a study on applications in civil engineering and medicine. arXiv:2410.02806 --- reports CUDA-induced randomness accounting for differences of up to 4.77\% in performance scores and criticises single-run benchmark reporting; \S7's argument in another field.
 \end{enumerate}
 
 
