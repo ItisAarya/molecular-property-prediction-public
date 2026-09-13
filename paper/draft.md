@@ -980,7 +980,6 @@ underneath a result nobody had reason to question.
 
 **All 29 entries were checked against the publisher or the canonical preprint on 2026-09-13**
 — title, authors, venue, volume, pages and DOI where one exists. ✓ marks each confirmed entry.
-`paper/references_gap.md` records which claim each reference supports.
 
 ### Benchmark, data and software
 

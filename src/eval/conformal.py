@@ -48,7 +48,7 @@ the plain version hides a different failure:
    distance to the nearest training molecule turns that into a measurement.
 
 4. **Answering "either"** (`--set-score`). A binary prediction set containing *both* classes
-   is trivially correct and says nothing. `02_ENHANCEMENT_PLAN.md` §8 named RAPS for this
+   is trivially correct and says nothing. the study plan §8 named RAPS for this
    module; RAPS and APS are implemented and measured, and both are unusable here -- on
    Tox21 with `rf` at a nominal 90%, APS reaches 99.9% coverage at a mean set size of 1.98
    out of a maximum of 2, and RAPS 96.5% at 1.27, against LAC's 90.7% at 0.98. APS and RAPS
@@ -224,7 +224,7 @@ def binary_scores(p, cls, set_score="lac", lam=RAPS_LAMBDA, k_reg=RAPS_K_REG):
     """
     The conformal score for class `cls` at predicted positive-probability `p`.
 
-    Three scoring rules, because `02_ENHANCEMENT_PLAN.md` §8 named RAPS and this module
+    Three scoring rules, because the study plan §8 named RAPS and this module
     was built on LAC without recording why.
 
     **lac** (least-ambiguous set-valued classifier, Sadinle 2019): `1 - P(cls)`. The class

@@ -67,10 +67,10 @@ FUSION_VIEWS = {
 }
 FUSION_OF.update({tag: mode for tag, (mode, _) in FUSION_VIEWS.items()})
 
-# Bilinear-rank sweep (02_ENHANCEMENT_PLAN.md section 7, ablation 4). The rank sets how
+# Bilinear-rank sweep (the study plan section 7, ablation 4). The rank sets how
 # many parameters the second-order term gets: 2*d*r per view against d^2 for a full
 # bilinear form, so r=16 is a 16x smaller interaction than r=128. The default everywhere
-# else is 64. Registered rather than run -- see PROGRESS.md.
+# else is 64. Registered rather than run -- see the project log.
 FUSION_RANK = {f"fuse_bilinear_r{r}": ("bilinear", r) for r in (16, 32, 128)}
 FUSION_OF.update({tag: mode for tag, (mode, _) in FUSION_RANK.items()})
 

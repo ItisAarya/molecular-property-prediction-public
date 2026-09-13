@@ -18,7 +18,7 @@ over local structure; a scaffold split does not separate cliff partners, because
 a scaffold. So a model can score well overall while being systematically wrong exactly where
 the chemistry is hard, and the aggregate metric will not show it.
 
-`02_ENHANCEMENT_PLAN.md` §7 lists this under Analyses, tied to SCAGE's activity-cliff claim.
+the study plan §7 lists this under Analyses, tied to SCAGE's activity-cliff claim.
 
 HOW A CLIFF IS DEFINED HERE
 ---------------------------

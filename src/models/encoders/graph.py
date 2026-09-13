@@ -161,7 +161,7 @@ class AttentiveFPEncoder(nn.Module):
     """
     AttentiveFP (Xiong et al. 2020) as an external baseline, via PyTorch Geometric.
 
-    This is the second of the two standard external baselines `02_ENHANCEMENT_PLAN.md` §7
+    This is the second of the two standard external baselines the study plan §7
     asks for. It is wrapped as an *encoder* rather than run as a standalone model on
     purpose: it then trains through the same loop, the same splits, the same 256-d
     projection and the same head as every other view in this project. A baseline trained by

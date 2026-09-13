@@ -20,5 +20,6 @@
   ],
   "language": "eng",
   "version": "1.0.0",
-  "access_right": "open"
+  "access_right": "open",
+  "license": "MIT"
 }

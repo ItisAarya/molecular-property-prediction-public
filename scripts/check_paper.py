@@ -463,7 +463,7 @@ def main():
         print(f"{len(bad)} of {len(rows)} paper claims FAILED:\n")
         print("\n".join(bad))
         print("\nEither the draft is stale (update it) or a result moved (say so in "
-              "PROGRESS.md). Do not adjust the tolerance to make this pass.")
+              "the project log). Do not adjust the tolerance to make this pass.")
         sys.exit(1)
 
     # The draft's own appendix quotes the assertion count. Assert that too, so the one

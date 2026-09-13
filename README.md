@@ -4,18 +4,21 @@ Eight MoleculeNet datasets, five molecular representations, five ways of fusing 
 and distribution-free uncertainty on top — all measured under one protocol, across six
 scaffold splits, with the negative results reported.
 
-The headline is not an architecture. It is that **most of the things this pipeline was
-supposed to demonstrate do not replicate**, and the evaluation harness is what shows that.
+The headline is not an architecture. It is a protocol strict enough to separate a real gain
+from a favourable split — and four results it returned: a **71x smaller fusion block that
+performs identically**, a **free diagnostic** for which models abandon their minority class,
+a proof that one standard calibration step cannot help, and a reproducibility requirement
+that costs one extra column.
 
 ---
 
 ## What this is
 
-An inherited MoleculeNet pipeline, rebuilt to answer one question properly: *does combining
-molecular representations actually help?* Answering it required first fixing an evaluation
-that could not have detected the answer either way.
+An earlier MoleculeNet pipeline of our own, rebuilt to answer one question properly: *does
+combining molecular representations actually help?* Answering it required first fixing an
+evaluation that could not have detected the answer either way.
 
-**What the evaluation found in the inherited code** (all real, all changed numbers):
+**What the evaluation found in that earlier code** (all real, all changed numbers):
 
 - Tox21's missing-label mask was dropped, so **24% of canonical test labels were fabricated
   as negatives**.
@@ -34,18 +37,18 @@ uncorrected analysis would have reported.
 
 | Question | Answer |
 |---|---|
-| Does an edge-aware graph encoder beat the inherited 2-layer GIN? | No — **0** of 8 (1 uncorrected), at 5× the parameters |
+| Does an edge-aware graph encoder beat the baseline 2-layer GIN? | No — **0** of 8 (1 uncorrected), at 5× the parameters |
 | Does LoRA fine-tuning beat a frozen transformer? | Only on **ESOL** — 1 of 8 (2 uncorrected), and both raw wins were regression, where the frozen encoder was weak |
 | Does concatenating views beat the best single view? | No — 0 of 8 |
 | Does the proposed cross-attention + bilinear fusion beat a 16.5k-parameter gate? | No — **0** of 8 (1 uncorrected: BACE at p=0.017 → 0.135), for 71× the parameters |
 | Does end-to-end adaptation beat cached frozen embeddings? | No — 0 of 8, for ~11 GPU-hours |
 | Is the graph view needed at all? | No — 0 of 8 either way; dropping it runs 13× faster on 59% of the parameters |
-| Does the fusion model beat the inherited GIN *across datasets*? | **Yes** — favoured on 8/8, p=0.0078 on all three across-dataset statistics |
+| Does the fusion model beat the baseline GIN *across datasets*? | **Yes** — favoured on 8/8, p=0.0078 on all three across-dataset statistics |
 | Does it beat the best single view (`desc`) across datasets? | No — 4/8, p=0.46 |
 | Does a 90% conformal guarantee cover 90% of actives? | No — 72–78%, and 9.8% in the worst case |
 
 The last three rows are the point. The fusion model **is** better than the baseline it
-inherited, and that survives every test. It is **not** better than a descriptor MLP, and no
+started from, and that survives every test. It is **not** better than a descriptor MLP, and no
 amount of architecture in between changed that.
 
 ---
@@ -101,7 +104,7 @@ all come from one fit.
 embeddings from a raw string; if any of them drifts from what the pool was built with, the
 model does not fail, it returns confident nonsense.
 
-`app/streamlit_app.py` is the inherited Phase 0 app (five datasets, the baseline pipeline).
+`app/streamlit_app.py` is the earlier Phase 0 app (five datasets, the baseline pipeline).
 It is kept as the before side of the comparison, not superseded.
 
 ### Rebuilding the explainer PDFs
@@ -169,7 +172,7 @@ src/
   eval/         metrics, paired stats, conformal, calibration, similarity, gate analysis
   baselines/    Chemprop (subprocess) and AttentiveFP (via the encoder interface)
   deploy/       featurize.py (SMILES -> the three views), predict.py (checkpoint -> answer)
-app/            predict_app.py serves the enhanced models; streamlit_app.py the inherited ones
+app/            predict_app.py serves the enhanced models; streamlit_app.py the baseline ones
 notebooks/      Colab notebooks for the GPU runs
 paper/          draft.md, plus two plain-English PDFs explaining the project and the design
 results/        runs/<variant>/{metrics,preds} is the authoritative archive
@@ -195,9 +198,34 @@ already z-scored target, and using it silently puts RMSE in no physical unit.
 `python -m scripts.merge_colab_results <zip> --dry-run`; unzipping by hand nests the
 directories in a way that reads as a mass deletion.
 
-## Licence and provenance
+## Licence
 
-The inherited pipeline is prior work and is not claimed as original here. It is preserved
-runnable (`src/train/train_ml.py`, `train_gnn.py`, `train_transformer.py`, `train_hybrid.py`,
-`train_ensemble.py`) so that "we fixed the evaluation" is a checkable statement rather than
-an assertion.
+MIT — see [`LICENSE`](LICENSE).
+
+## Provenance
+
+The baseline pipeline is our own earlier work, preserved runnable
+(`src/train/train_ml.py`, `train_gnn.py`, `train_transformer.py`, `train_hybrid.py`,
+`train_ensemble.py`) so that "we fixed the evaluation" is a checkable statement rather than an
+assertion. Every comparison against it in the paper is reproducible from the archived
+predictions in `results/runs/`.
+
+## Citing this work
+
+If you use this code or its evaluation protocol, please cite it. `CITATION.cff` carries the
+machine-readable metadata, and GitHub renders a "Cite this repository" box from it.
+
+*(A Zenodo DOI will be added here on the first tagged release.)*
+
+## Verifying the claims
+
+Every headline number in `paper/draft.md` is asserted against the archives:
+
+```bash
+python -m scripts.check_configs      # the config matches the trainers
+python -m scripts.check_paper        # the prose matches the archives
+python -m scripts.check_deploy       # the live featuriser matches the training features
+python -m scripts.check_mechanisms   # each fusion rung computes what its name claims
+```
+
+All four exit non-zero on any mismatch.

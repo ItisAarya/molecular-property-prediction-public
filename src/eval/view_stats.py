@@ -39,7 +39,7 @@ because the uncorrected one is what earlier sessions reported and the change has
 visible.
 
 **The across-dataset test.** "Does A beat B in general?" is one hypothesis over eight paired
-observations, not eight hypotheses -- and it is the criterion `02_ENHANCEMENT_PLAN.md` §7
+observations, not eight hypotheses -- and it is the criterion the study plan §7
 actually names, the reason eight datasets were staged rather than five. It is reported three
 ways (sign test, Wilcoxon on standardised differences, Wilcoxon on raw differences) because
 the raw version silently assumes an AUC point and a logS point are comparable quantities.
@@ -115,7 +115,7 @@ def across_datasets(diffs, dzs):
     the per-dataset table above. That table asks, eight times, "is the difference on *this*
     dataset larger than its own noise?" This asks once, over eight paired observations,
     whether the differences are centred on zero -- which is what "improves over the best
-    single view, Wilcoxon p < 0.05" in `02_ENHANCEMENT_PLAN.md` §7 means, and the reason
+    single view, Wilcoxon p < 0.05" in the study plan §7 means, and the reason
     eight datasets were staged rather than five (the signed-rank floor falls from p=0.0625
     to p=0.0078).
 
@@ -285,7 +285,7 @@ def main():
 
     print()
     print(f"ACROSS-DATASET  (n={ad['n_datasets']} datasets, the criterion in "
-          f"02_ENHANCEMENT_PLAN.md section 7)")
+          f"the study plan section 7)")
     print(f"  {args.a} favoured on {ad['wins']}/{ad['n_datasets']} datasets by mean; "
           f"median difference {ad['median_diff']:+.4f}")
     print(f"  sign test        p={ad['p_sign']:.4f}   (unit-free, weakest, floor p=0.0078)")

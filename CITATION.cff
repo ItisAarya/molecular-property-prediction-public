@@ -15,7 +15,7 @@ type: software
 # ---------------------------------------------------------------------------------------
 # BEFORE RELEASING: replace the placeholder below with your real name, and add your ORCID
 # if you have one. A DOI minted against "PLACEHOLDER" is permanent and cannot be edited
-# away. See RELEASING.md, which lists this as a blocking step.
+# away. See the release checklist, which lists this as a blocking step.
 # ---------------------------------------------------------------------------------------
 authors:
   - name: "PLACEHOLDER - set your name before minting a DOI"

@@ -1,7 +1,7 @@
 """
 src/tune/study.py
 
-The Optuna study named in `02_ENHANCEMENT_PLAN.md` section 4.3.
+The Optuna study named in the study plan section 4.3.
 
     python -m src.tune.study --mode gated --datasets bbbp --trials 30
 

@@ -9,7 +9,7 @@ WHY THIS EXISTS
 ---------------
 Every result in this project is a comparison between models trained under one fixed
 hyper-parameter setting. That is the whole basis for calling the comparisons fair, and it
-is stated in the plan, in PROGRESS.md and (eventually) in the paper's limitations section.
+is stated in the plan, in the project log and (eventually) in the paper's limitations section.
 
 A config file that merely *records* those values would rot: someone changes a default in a
 trainer, the config keeps saying the old number, and the paper's fairness claim quietly
@@ -138,7 +138,7 @@ def main():
               f"describes the code:\n")
         print("\n".join(bad))
         print("\nEither the change was intended (update the config, and say so in "
-              "PROGRESS.md, because it means models trained before and after are no "
+              "the project log, because it means models trained before and after are no "
               "longer comparable) or it was not (revert it).")
         sys.exit(1)
 

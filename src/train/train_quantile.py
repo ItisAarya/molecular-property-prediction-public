@@ -8,7 +8,7 @@ measured rather than described.
 
 WHY THIS EXISTS AS A SEPARATE TRAINER
 -------------------------------------
-`02_ENHANCEMENT_PLAN.md` §8 names CQR as a Phase 3 deliverable. CQR is not a scoring rule
+the study plan §8 names CQR as a Phase 3 deliverable. CQR is not a scoring rule
 that can be applied to an existing model's output: it needs a model that predicts an
 *interval* -- a low and a high conditional quantile -- and every model in this project
 predicts a single conditional mean. Nothing already archived can supply one.

@@ -11,7 +11,7 @@ WHY GENERATE THEM RATHER THAN WRITE THEM
 Every number in a results table is a number that can be transcribed wrongly, and a table
 copied by hand into a manuscript is a table that stops matching the archives the moment
 anything is re-run. This project has already been bitten by the softer version of that:
-summary paragraphs in PROGRESS.md quoting a `gine` result from before the head-width fix,
+summary paragraphs in the project log quoting a `gine` result from before the head-width fix,
 sitting next to the corrected one, reading as a contradiction.
 
 So the tables are a build product. `results/runs/<variant>/metrics/` is the source of truth,
@@ -74,7 +74,7 @@ TAGS = [
 # in the repository is a byte-identical copy of one old run, the same in all six split
 # archives, and it disagrees with the report on all 30 cells (tox21 seed0, for instance,
 # says 0.7585 where the run actually scored 0.8356). No published number came from those
-# files -- PROGRESS.md's baseline table reads the report -- but a table generator that
+# files -- the project log's baseline table reads the report -- but a table generator that
 # preferred them would silently introduce one, which is how the wrong number gets into a
 # paper. So for these tags the report wins, and the per-tag file is never consulted.
 PIPELINE_TAGS = ("rf", "gnn", "trf", "hybrid", "ens")

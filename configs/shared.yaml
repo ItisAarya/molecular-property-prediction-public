@@ -16,7 +16,7 @@
 # fails and the discrepancy is caught before it reaches a results table. Committing to a
 # config the code merely *might* read would be weaker: nothing would notice the drift.
 #
-# Optuna (02_ENHANCEMENT_PLAN.md section 4.3) has never been run. See src/tune/ for the
+# Optuna (the study plan section 4.3) has never been run. See src/tune/ for the
 # study that would do it and why it has not been.
 
 training:
