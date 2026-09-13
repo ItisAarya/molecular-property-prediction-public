@@ -1,4 +1,4 @@
-# Multi-view molecular property prediction, evaluated honestly
+# Graph Neural Network and Transformer Fusion for Molecular Property Prediction: What a Strict Evaluation Protocol Finds
 
 Eight MoleculeNet datasets, five molecular representations, five ways of fusing them,
 and distribution-free uncertainty on top — all measured under one protocol, across six

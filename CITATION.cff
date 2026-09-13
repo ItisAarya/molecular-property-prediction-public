@@ -1,6 +1,6 @@
 cff-version: 1.2.0
 message: "If you use this software or its evaluation protocol, please cite it as below."
-title: "Multi-view molecular property prediction, evaluated honestly"
+title: "Graph Neural Network and Transformer Fusion for Molecular Property Prediction: What a Strict Evaluation Protocol Finds"
 abstract: >-
   An evaluation protocol for multi-view molecular property prediction, and a fusion
   architecture measured under it. Eight MoleculeNet datasets, six scaffold splits, paired
