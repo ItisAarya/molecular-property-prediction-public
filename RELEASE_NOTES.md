@@ -27,9 +27,11 @@ and an honest label saying whether the molecule was in that dataset's training d
 
 ## Findings
 
-- The architecture beats the pipeline it replaced on **8 of 8 datasets** (p = 0.0078 on three
-  across-dataset statistics) — and **does not** beat a fingerprint-plus-descriptor MLP
-  (4 of 8, p = 0.55).
+- The architecture beats the **baseline graph encoder** on **8 of 8 datasets** (p = 0.0078 on
+  three across-dataset statistics) — and **does not** beat a fingerprint-plus-descriptor MLP
+  (4 of 8, p = 0.55). Against the earlier pipeline's *best* configuration, the stacking
+  meta-learner, it improves on **1 of 5** datasets after correction with no across-dataset
+  difference.
 - A **16,513-parameter** gate matches the **1,169,793-parameter** fusion block.
 - Roughly **eleven GPU-hours** of LoRA adaptation buy nothing over a cached frozen embedding.
 - Neither published external baseline is distinguishable from the inherited two-layer GIN.

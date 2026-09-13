@@ -336,6 +336,35 @@ def checks(draft):
         ):
             claim(label, pat, abs(seeded - dc), 5e-3)
 
+    # Section 5.3's pipeline comparison. This table exists because `gin_ref` is one encoder
+    # and the draft previously read as though beating it meant beating the whole earlier
+    # system. Every row is asserted, and the `hybrid` row especially -- it is the one that
+    # makes the claim honest, so it is the one nobody should be able to drop quietly.
+    for b, label in (("rf", "rf"), ("gnn", "gnn"), ("trf", "trf"), ("hybrid", "hybrid")):
+        d = compare("fuse_proposed", b)
+        if d is None:
+            continue
+        bold = r"\*\*" if b == "hybrid" else ""
+        pat = (rf"\| {bold}`proposed` vs `{b}`{bold} \| \*\*(\d)\+ / 0−\*\* \| (\d)/5 \| "
+               rf"([\d.]+) \| ([\d.]+) \| ([\d.]+) \|")
+        m = re.search(pat, draft)
+        if m is None:
+            out.append((f"5.3 pipeline row: {label}", None, 0.0, 0, "ROW MISSING FROM DRAFT"))
+            continue
+        # Counted from the per-dataset Holm verdicts, not read from a summary column --
+        # there isn't one, and asserting the draft's own number against itself would be a
+        # check that can never fail.
+        out.append((f"5.3 {label}: improves after Holm", float(m.group(1)),
+                    float((d.verdict_holm == "improves").sum()), 0, None))
+        out.append((f"5.3 {label}: favoured", float(m.group(2)),
+                    float(d.across_wins.iloc[0]), 0, None))
+        out.append((f"5.3 {label}: sign p", float(m.group(3)),
+                    float(d.across_p_sign.iloc[0]), 5e-4, None))
+        out.append((f"5.3 {label}: dz p", float(m.group(4)),
+                    float(d.across_p_wilcoxon_dz.iloc[0]), 5e-4, None))
+        out.append((f"5.3 {label}: raw p", float(m.group(5)),
+                    float(d.across_p_wilcoxon_raw.iloc[0]), 5e-4, None))
+
     # Section 6.6's distance table, now a fifteen-model average rather than one model's.
     # Every cell is asserted: it is a five-row table of prose numbers, which is exactly the
     # shape that has gone stale three times in this project already.
