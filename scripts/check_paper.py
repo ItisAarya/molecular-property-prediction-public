@@ -307,6 +307,35 @@ def checks(draft):
         else:
             out.append((label, float(m.group(1).replace(",", "")), float(n), 0, None))
 
+    # The canonical-vs-seeded split gap. Quoted in three places (abstract, 3.2, 5.6) and
+    # already drifted once -- 5.6 said 0.18 while 3.2 said 0.22 -- so all three are pinned
+    # to the archive that produces them rather than to each other.
+    def _bbbp_gap():
+        runs = os.path.join("results", "runs")
+        dc_path = os.path.join(runs, "deepchem", "metrics", "bbbp_gnn_test.csv")
+        if not os.path.exists(dc_path):
+            return None
+        dc = float(pd.read_csv(dc_path).iloc[0]["auc"])
+        seeds = []
+        for s in (f"seed{i}" for i in range(5)):
+            q = os.path.join(runs, s, "metrics", "bbbp_gnn_test.csv")
+            if os.path.exists(q):
+                seeds.append(float(pd.read_csv(q).iloc[0]["auc"]))
+        return (dc, float(np.mean(seeds))) if len(seeds) == 5 else None
+
+    gap = _bbbp_gap()
+    if gap is not None:
+        dc, seeded = gap
+        claim("split gap: canonical BBBP graph AUC", r"BBBP, graph baseline: ([\d.]+) canonical",
+              dc, 5e-5)
+        claim("split gap: seeded BBBP graph AUC",
+              r"BBBP, graph baseline: [\d.]+ canonical against ([\d.]+)", seeded, 5e-5)
+        for pat, label in (
+            (r"differ by \*\*up to ([\d.]+) AUC on the same model", "3.2 split gap"),
+            (r"a single scaffold split producing a ([\d.]+) AUC swing", "5.6 split gap"),
+        ):
+            claim(label, pat, abs(seeded - dc), 5e-3)
+
     # Derived quantities the draft asserts about the protocol itself.
     claim("family-wise error rate for 8 tests at 0.05",
           r"produce at least one false positive (\d+)% of the time",
