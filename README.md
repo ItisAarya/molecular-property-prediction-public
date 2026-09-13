@@ -79,6 +79,7 @@ trainers' actual defaults. Run it before trusting a comparison.
 ```bash
 python -m scripts.train_deploy     # ~35 min CPU: one proposed-fusion model per dataset
 python -m scripts.check_deploy     # proves the live featuriser matches the training features
+python -m scripts.check_mechanisms # proves each fusion rung computes what its name claims
 python -m streamlit run app/predict_app.py
 ```
 

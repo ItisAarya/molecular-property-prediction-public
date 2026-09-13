@@ -218,7 +218,7 @@ when it is statistically clear.
 Every model is trained under a single fixed hyper-parameter setting, recorded in
 `configs/shared.yaml` and asserted against the trainers' actual defaults by a check that
 fails when they drift. This makes the comparisons fair and leaves absolute numbers untuned;
-we consider that the right trade and state it as a limitation (§8). No architecture in this
+we consider that the right trade and state it as a limitation (§10). No architecture in this
 paper has been tuned, including ours.
 
 ---
@@ -300,11 +300,25 @@ Five fusion strategies behind one interface, each removing one mechanism:
 | `bilinear` | low-rank pairwise second-order term | 99,072 |
 | `proposed` | xattn → bilinear → gate | **1,169,793** |
 
-**Both mechanisms were verified to compute what they claim** before their results were
-interpreted. Perturbing one view and measuring the interaction term
-`f(a,b,c) − f(a′,b,c) − f(a,b′,c) + f(a′,b′,c)` gives **exactly 0.000000** for `concat`,
-confirming it is provably additive, and a large non-zero value for `bilinear`. The negative
-result below is not a broken implementation.
+**Every rung was verified to compute the kind of function it claims** before any of its
+results were interpreted. For a function of three views, the second-order interaction between
+two of them is the mixed difference
+*D* = *f*(a,b,c) − *f*(a′,b,c) − *f*(a,b′,c) + *f*(a′,b′,c). If *f* is additive in its views
+this cancels exactly, whatever the per-view functions are; a non-zero *D* is proof the module
+mixes views multiplicatively rather than merely stacking them.
+
+| rung | max \|*D*\| | |
+|---|---|---|
+| `concat` | 2.4 × 10⁻⁷ | additive to float32 cancellation |
+| `gated` | 4.5 × 10⁻¹ | interacting |
+| `xattn` | 1.1 × 10⁰ | interacting |
+| `bilinear` | 1.1 × 10¹ | interacting |
+| `proposed` | 1.3 × 10¹ | interacting |
+
+Seven orders of magnitude separate the additive control from the cheapest interacting rung, so
+`concat` is a genuine additive floor and the ladder's logic holds. **The negative results below
+are not a broken implementation.** Reproduce with `python -m scripts.check_mechanisms`, which
+exits non-zero if any rung stops behaving as its name claims.
 
 ### 5.3 Results
 
@@ -321,8 +335,9 @@ Across datasets (n = 8; sign / Wilcoxon-*dz* / Wilcoxon-raw):
 
 Four readings, in decreasing order of confidence:
 
-1. **The fusion model beats the pipeline it replaced, decisively and on every dataset.**
-   This is a real result and it is the one a conventional paper would report alone.
+1. **The fusion model beats the baseline graph encoder decisively and on every dataset.**
+   This is a real result and it is the one a conventional paper would report alone. It is
+   also narrower than it looks, and the next table is why.
 2. **It does not beat the strongest single view.** A descriptor MLP over fingerprints and
    computed properties is statistically indistinguishable from a 1.17M-parameter fusion
    block over three representations.
@@ -336,6 +351,25 @@ Four readings, in decreasing order of confidence:
    that does not survive multiplicity. Read the other way round: **the 16,513-parameter gate
    delivers the 1,169,793-parameter block's accuracy at 1/71st of the fusion capacity**, and a
    practitioner who adopts it loses nothing this protocol can detect.
+
+**Against the full earlier pipeline, not just its graph encoder.** `gin_ref` is a deliberately
+simple ablation reference — the 2-layer GIN — and beating it is not the same as beating the
+system it sat inside. The pipeline's five models cover five of our eight datasets, so the
+comparison is run there (n = 5, where the sign test cannot go below p = 0.0625):
+
+| comparison | per-dataset after Holm | favoured | sign | *dz* | raw |
+|---|---|---|---|---|---|
+| `proposed` vs `rf` | **4+ / 0−** | 5/5 | 0.0625 | 0.0625 | 0.0625 |
+| `proposed` vs `gnn` | **4+ / 0−** | 5/5 | 0.0625 | 0.0625 | 0.0625 |
+| `proposed` vs `trf` | **4+ / 0−** | 4/5 | 0.3750 | 0.1250 | 0.1250 |
+| **`proposed` vs `hybrid`** | **1+ / 0−** | 4/5 | 0.3750 | 0.1875 | 0.1875 |
+
+The fusion model clears the pipeline's individual base models on 4 of 5 datasets after
+correction. **Against the pipeline's best configuration — the stacking meta-learner — it
+improves on 1 of 5 and shows no across-dataset difference.** So the honest version of reading 1
+is that the architecture beats the components of the earlier system and roughly matches the
+system's own best combination of them. A paper reporting only `proposed` against `gin_ref`
+would have claimed the stronger result, and that is the claim this table exists to prevent.
 
 ![Fusion parameters against accuracy](figures/fig3_params_vs_accuracy.pdf)
 
@@ -869,6 +903,12 @@ chase it.
   manufactured, and we did not do it.
 - **Eight datasets, five seeds.** The across-dataset sign test cannot go below p = 0.0078,
   so a 7–1 split cannot reach significance on that statistic however large the effect.
+- **The comparison against the earlier pipeline runs on five datasets, not eight** (§5.3),
+  because that is where the pipeline's models exist. At n = 5 the sign test floors at
+  p = 0.0625, so *no* comparison in that table can reach p < 0.05 on that statistic, however
+  large the effect. The per-dataset Holm column carries the weight there, and the conclusion
+  we draw from it — that the architecture clears the pipeline's base models but not its
+  stacking meta-learner — is correspondingly weaker evidence than the eight-dataset results.
 - **Our own headline mechanism result is not stable to a hyper-parameter** (§5.6). The
   bilinear term separates from concatenation at every rank we tried, but only at r = 64 does
   it reach across-dataset significance, and the ranks are mutually indistinguishable. The
@@ -900,7 +940,7 @@ transcribed. The fixed hyper-parameter setting is machine-checked against the tr
 named in the plan were deliberately not run and are not reported: two of the three
 leave-one-view-out arms (the third, and the only one a claim rests on, is in §5.4), and a motif
 view that was never built. An Optuna study is implemented in the repository and has never been
-run; §8 says why.
+run; §10 says why.
 
 ---
 
@@ -1062,8 +1102,9 @@ as they stand. `paper/references_gap.md` records which claim each reference supp
 
 ```bash
 python -m scripts.check_configs     # 27 assertions: the config matches the trainers
-python -m scripts.check_paper       # 87 assertions: the prose matches the archives
+python -m scripts.check_paper       # 107 assertions: the prose matches the archives
 python -m scripts.check_deploy      # the live featuriser matches the training features
+python -m scripts.check_mechanisms  # each fusion rung computes what its name claims
 python -m scripts.make_tables       # regenerates Tables 1-3
 python -m scripts.make_figures      # regenerates every figure
 python -m scripts.audit_duplicates  # regenerates the section 9 table
