@@ -60,10 +60,10 @@ def checks(draft):
     d = compare("fuse_proposed", "gin_ref")
     if d is not None:
         claim("proposed vs gin_ref: datasets favoured",
-              r"\*\*`proposed` vs inherited `gin_ref`\*\* \| \*\*(\d)/8\*\*",
+              r"\*\*`proposed` vs baseline `gin_ref`\*\* \| \*\*(\d)/8\*\*",
               float(d.across_wins.iloc[0]), 0)
         claim("proposed vs gin_ref: sign p",
-              r"\*\*`proposed` vs inherited `gin_ref`\*\* \| \*\*\d/8\*\* \| \*\*([\d.]+)\*\*",
+              r"\*\*`proposed` vs baseline `gin_ref`\*\* \| \*\*\d/8\*\* \| \*\*([\d.]+)\*\*",
               float(d.across_p_sign.iloc[0]), 1e-3)
 
     d = compare("fuse_proposed", "desc")
@@ -116,7 +116,7 @@ def checks(draft):
         # The total, quoted as a word in both places. Searched in the flattened text: the
         # draft is hard-wrapped and the abstract breaks this very phrase across a line.
         WORDS = {"thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16}
-        for pat, label in ((r"extend it across (\w+) models", "abstract model count"),
+        for pat, label in ((r"from three model types to (\w+)", "abstract model count"),
                            (r"one mechanism: (\w+) models including", "6.2 model count")):
             m = re.search(pat, flat)
             if m is None:
@@ -142,8 +142,8 @@ def checks(draft):
 
     d = compare("attentivefp", "gin_ref_gpu")
     if d is not None:
-        claim("AttentiveFP vs inherited GIN: datasets favoured",
-              r"\| AttentiveFP vs `gin_ref` \(inherited\)\* \| (\d)/8",
+        claim("AttentiveFP vs baseline GIN: datasets favoured",
+              r"\| AttentiveFP vs `gin_ref` \(baseline\)\* \| (\d)/8",
               float(d.across_wins.iloc[0]), 0)
     d = compare("fuse_proposed_gpu", "attentivefp")
     if d is not None:
@@ -336,6 +336,47 @@ def checks(draft):
         ):
             claim(label, pat, abs(seeded - dc), 5e-3)
 
+    # Section 3.2's asymmetry claim: the canonical split is systematically harder. Recomputed
+    # from the archives rather than trusted, because it is a new claim and the three numbers
+    # in it (33 of 37, median, 30 beyond the MDE) move together if any archive changes.
+    def _canonical_vs_seeded():
+        from src.data.materialize import dataset_names
+        from src.eval.metrics import is_classification as _is_cls
+        runs = os.path.join("results", "runs")
+        tags = ["rf", "gnn", "trf", "hybrid", "gin_ref", "desc", "gine", "fuse_gated",
+                "fuse_proposed"]
+        dc, sd = [], []
+        for tag in tags:
+            for ds in dataset_names():
+                if not _is_cls(ds):
+                    continue
+                p = os.path.join(runs, "deepchem", "metrics", f"{ds}_{tag}_test.csv")
+                if not os.path.exists(p):
+                    continue
+                vals = []
+                for s in (f"seed{i}" for i in range(5)):
+                    q = os.path.join(runs, s, "metrics", f"{ds}_{tag}_test.csv")
+                    if os.path.exists(q):
+                        vals.append(float(pd.read_csv(q).iloc[0]["auc"]))
+                if len(vals) == 5:
+                    dc.append(float(pd.read_csv(p).iloc[0]["auc"]))
+                    sd.append(float(np.mean(vals)))
+        return np.asarray(dc), np.asarray(sd)
+
+    dc_a, sd_a = _canonical_vs_seeded()
+    if dc_a.size:
+        diff = sd_a - dc_a
+        claim("3.2 asymmetry: n pairs", r"the\s+\*\*(\d+)\*\* \(model, dataset\) pairs",
+              float(dc_a.size), 0)
+        claim("3.2 asymmetry: seeded higher",
+              r"the seeded mean is higher than the canonical split on \*\*(\d+)\*\*",
+              float((diff > 0).sum()), 0)
+        claim("3.2 asymmetry: median difference",
+              r"median difference of\s+\*\*\+([\d.]+) AUC\*\*", float(np.median(diff)), 5e-4)
+        claim("3.2 asymmetry: beyond MDE",
+              r"\*\*(\d+)\*\* of 37 pairs separated by more than our minimum detectable",
+              float((np.abs(diff) > 0.02).sum()), 0)
+
     # Derived quantities the draft asserts about the protocol itself.
     claim("family-wise error rate for 8 tests at 0.05",
           r"produce at least one false positive (\d+)% of the time",
@@ -371,6 +412,14 @@ def main():
         print("\n".join(bad))
         print("\nEither the draft is stale (update it) or a result moved (say so in "
               "PROGRESS.md). Do not adjust the tolerance to make this pass.")
+        sys.exit(1)
+
+    # The draft's own appendix quotes the assertion count. Assert that too, so the one
+    # number describing this checker cannot drift away from what it actually checks.
+    m = re.search(r"check_paper\s+# (\d+) assertions", draft)
+    if m and int(m.group(1)) != len(rows):
+        print(f"Appendix A says {m.group(1)} assertions; this run has {len(rows)}.")
+        print("Update the appendix.")
         sys.exit(1)
 
     print(f"All {len(rows)} headline claims in {DRAFT} match the archives.")
