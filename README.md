@@ -45,7 +45,8 @@ uncorrected analysis would have reported.
 | Is the graph view needed at all? | No — 0 of 8 either way; dropping it runs 13× faster on 59% of the parameters |
 | Does the fusion model beat the baseline GIN *across datasets*? | **Yes** — favoured on 8/8, p=0.0078 on all three across-dataset statistics |
 | Does it beat the best single view (`desc`) across datasets? | No — 4/8, p=0.46 |
-| Does a 90% conformal guarantee cover 90% of actives? | No — 72–78%, and 9.8% in the worst case |
+| Does a 90% conformal guarantee cover 90% of actives? | No — 71–80%, and 9.7% in the worst case |
+| Would a motif (BRICS / Murcko) view have added anything? | No — 0 of 8, and no test molecule anywhere shares a training scaffold |
 
 The last three rows are the point. The fusion model **is** better than the baseline it
 started from, and that survives every test. It is **not** better than a descriptor MLP, and no
@@ -76,6 +77,14 @@ python -m src.eval.view_stats --a fuse_gated --b desc --datasets tox21 bbbp clin
 
 `python -m scripts.check_configs` asserts that `configs/shared.yaml` still describes the
 trainers' actual defaults. Run it before trusting a comparison.
+
+`python -m scripts.probe_motifs` answers the question the views table invites — *why is there
+no motif view?* — with a measurement rather than a schedule. Three feature sets under one
+linear readout across all six splits: fragments alone lose on 8 of 8 datasets, and added to
+ECFP-plus-descriptors they change nothing that clears the minimum detectable effect. The
+coverage half is the sharper half: across all 48 dataset-split pairs, **no test molecule
+shares a Murcko scaffold with any training molecule**, because that is what a scaffold split
+is for. A scaffold-level feature is the one feature the protocol guarantees cannot transfer.
 
 ### Predicting a molecule you type in
 
@@ -159,7 +168,7 @@ tuning one arm of a comparison would destroy the finding rather than test it.
 
 ```
 configs/        shared.yaml — the one hyper-parameter setting, checked against the code
-scripts/        data prep, split generation, the multi-seed runner, Colab bundling
+scripts/        data prep, split generation, the multi-seed runner, probes, Colab bundling
 src/
   data/         split protocol, materialisation, length bucketing
   models/

@@ -62,7 +62,7 @@ confound.
 
 ```bash
 python -m scripts.check_configs   # 27 assertions: the config matches the trainers
-python -m scripts.check_paper     # 64 assertions: the draft matches the archives
+python -m scripts.check_paper     # 165 assertions: the draft matches the archives
 python -m scripts.check_deploy    # the live featuriser matches the training features
 ```
 
@@ -70,5 +70,12 @@ All three pass on this tag.
 
 ## Not included
 
-Hyper-parameter tuning (deliberately — see `src/tune/study.py`), two of the three
-leave-one-view-out arms, and a motif view that was never built.
+Hyper-parameter tuning (deliberately — see `src/tune/study.py`) and two of the three
+leave-one-view-out arms.
+
+The motif view was not built either, but it is no longer merely absent:
+`python -m scripts.probe_motifs` measures what BRICS fragments and Murcko scaffolds add to
+the views that are in the ladder, and §5.7 of the draft reports the answer. Fragments lose to
+an ECFP-plus-descriptor baseline on 8 of 8 datasets and add nothing measurable on top of it,
+and across all 48 dataset-split pairs no test molecule shares a Murcko scaffold with any
+training molecule — which is what a scaffold split is for.

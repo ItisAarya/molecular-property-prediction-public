@@ -32,6 +32,7 @@ import numpy as np
 import pandas as pd
 
 DRAFT = os.path.join("paper", "draft.md")
+NOTES = "RELEASE_NOTES.md"
 MET = os.path.join("results", "metrics")
 
 
@@ -429,6 +430,129 @@ def checks(draft):
               r"\*\*(\d+)\*\* of 37 pairs separated by more than our minimum detectable",
               float((np.abs(diff) > 0.02).sum()), 0)
 
+    # ---- Section 5.7: the motif probe --------------------------------------------------
+    # The whole point of 5.7 is that "we did not build a motif view" was replaced by a
+    # measurement. A measurement nobody re-checks decays back into an assertion, so every
+    # number in that section -- the table, the two across-dataset tests and the coverage
+    # extremes -- is restated here against what `scripts.probe_motifs` archived.
+    probe_path = os.path.join(MET, "motif_probe.csv")
+    cov_path = os.path.join(MET, "motif_coverage.csv")
+    if os.path.exists(probe_path) and os.path.exists(cov_path):
+        probe = pd.read_csv(probe_path)
+        cov = pd.read_csv(cov_path)
+        seeded = [v for v in probe.variant.unique() if str(v).startswith("seed")]
+        p_seed = probe[probe.variant.isin(seeded)]
+        c_seed = cov[cov.variant.isin(seeded)]
+
+        LABELS = [("tox21", "Tox21"), ("bbbp", "BBBP"), ("clintox", "ClinTox"),
+                  ("bace", "BACE"), ("sider", "SIDER"), ("esol", "ESOL"),
+                  ("lipophilicity", "Lipophilicity"), ("freesolv", "FreeSolv")]
+
+        # The table prints three decimals, so one unit in the last place is the tolerance.
+        TOL3 = 1e-3
+        for ds, label in LABELS:
+            sub = p_seed[p_seed.dataset == ds]
+            higher = sub.metric.iloc[0] == "auc"
+            means = {a: float(sub[sub.arm == a].value.mean())
+                     for a in ("desc", "motif", "desc+motif")}
+            va = np.array(sub[sub.arm == "desc+motif"].sort_values("variant").value)
+            vb = np.array(sub[sub.arm == "desc"].sort_values("variant").value)
+            delta = float((va - vb).mean() if higher else (vb - va).mean())
+            brics = 100 * float(c_seed[c_seed.dataset == ds].test_brics_fragment_seen.mean())
+
+            pat = (rf"\| {label} \| (?:AUC|RMSE) \| ([\d.]+) \| ([\d.]+) \| ([\d.]+) \| "
+                   rf"([+−-][\d.]+) . [\d.]+ \| (\d+)% \|")
+            m = re.search(pat, draft)
+            if m is None:
+                out.append((f"motif table: {label}", None, 0.0, 0, "ROW MISSING FROM DRAFT"))
+                continue
+            for i, (col, actual) in enumerate((
+                    ("desc", means["desc"]), ("motif", means["motif"]),
+                    ("desc+motif", means["desc+motif"]))):
+                out.append((f"motif {label}: {col}", float(m.group(i + 1)), actual, TOL3, None))
+            # U+2212 MINUS SIGN is what the draft uses; float() does not read it.
+            out.append((f"motif {label}: change",
+                        float(m.group(4).replace("−", "-")), delta, TOL3, None))
+            out.append((f"motif {label}: BRICS seen %", float(m.group(5)), brics, 0.5, None))
+
+        def motif_compare(name):
+            p = os.path.join(MET, f"motif_compare_{name}.csv")
+            return pd.read_csv(p) if os.path.exists(p) else None
+
+        a = motif_compare("desc_motif_vs_desc")
+        if a is not None:
+            claim("motif: adding motifs, datasets favoured",
+                  r"the combination is favoured on (\d) of 8 at sign-test",
+                  float(a.across_wins.iloc[0]), 0)
+            claim("motif: adding motifs, sign p",
+                  r"favoured on \d of 8 at sign-test p = (\d+\.\d+)",
+                  float(a.across_p_sign.iloc[0]), 5e-3)
+            lipo = a[a.dataset == "lipophilicity"]
+            if len(lipo):
+                claim("motif: Lipophilicity loss",
+                      r"a \*loss\*: (\d+\.\d+) logD on Lipophilicity",
+                      abs(float(lipo.mean_diff.iloc[0])), TOL3)
+                claim("motif: Lipophilicity p uncorrected",
+                      r"logD on Lipophilicity, at p = (\d+\.\d+) uncorrected",
+                      float(lipo.p_ttest.iloc[0]), 5e-4)
+                claim("motif: Lipophilicity p Holm",
+                      r"uncorrected,\s+(\d+\.\d+) after Holm",
+                      float(lipo.p_holm.iloc[0]), 5e-4)
+            # "No dataset survives correction in either direction" is a claim about zero,
+            # which no regex can catch going stale. Asserted as the number it means.
+            out.append(("motif: adding motifs, Holm survivors", 0.0,
+                        float((a.p_holm < 0.05).sum()), 0, None))
+
+        b = motif_compare("motif_vs_desc")
+        if b is not None:
+            claim("motif alone: datasets lost",
+                  r"arm on (\d) of 8 datasets . sign test p = \d+\.\d+",
+                  float(len(b) - int(b.across_wins.iloc[0])), 0)
+            claim("motif alone: sign p",
+                  r"of 8 datasets . sign test p = (\d+\.\d+)",
+                  float(b.across_p_sign.iloc[0]), 5e-5)
+            claim("motif alone: Wilcoxon p",
+                  r"Wilcoxon p = (\d+\.\d+) on both raw and standardised",
+                  float(b.across_p_wilcoxon_raw.iloc[0]), 5e-5)
+            # Both Wilcoxon variants are quoted by one number; check the other one too.
+            out.append(("motif alone: Wilcoxon raw == dz",
+                        float(b.across_p_wilcoxon_raw.iloc[0]),
+                        float(b.across_p_wilcoxon_dz.iloc[0]), 5e-5, None))
+            out.append(("motif alone: gaps clearing the MDE", float(len(b)),
+                        float(b.clears_mde.sum()), 0, None))
+            WORDS = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
+            m = re.search(r"with (\w+) surviving Holm correction individually", draft)
+            if m is None:
+                out.append(("motif alone: Holm survivors", None,
+                            float((b.p_holm < 0.05).sum()), 0, "CLAIM MISSING FROM DRAFT"))
+            else:
+                stated = WORDS.get(m.group(1).lower())
+                out.append(("motif alone: Holm survivors",
+                            None if stated is None else float(stated),
+                            float((b.p_holm < 0.05).sum()), 0,
+                            None if stated is not None
+                            else f"could not read '{m.group(1)}' as a number"))
+
+        # The coverage claims -- the half of 5.7 that holds for any motif encoder, not only
+        # for the linear readout, and therefore the half most worth pinning.
+        claim("motif coverage: dataset-split pairs",
+              r"Across all (\d+)\s*\ndataset-split pairs", float(len(cov)), 0)
+        out.append(("motif coverage: scaffold transfer is zero", 0.0,
+                    float(cov.test_murcko_scaffold_seen.max()), 0, None))
+        claim("motif coverage: best BRICS split",
+              r"from (\d+)% of a test\nmolecule's fragments",
+              100 * float(cov.test_brics_fragment_seen.max()), 0.5)
+        claim("motif coverage: worst BRICS split",
+              r"BACE split down to (\d+)% on the least",
+              100 * float(cov.test_brics_fragment_seen.min()), 0.5)
+        fs = cov[cov.dataset == "freesolv"]
+        claim("motif coverage: FreeSolv no-hit min",
+              r"where between (\d+)% and \d+% of test molecules share no vocabulary",
+              100 * float(fs.test_no_vocab_hit.min()), 0.5)
+        claim("motif coverage: FreeSolv no-hit max",
+              r"where between \d+% and (\d+)% of test molecules share no vocabulary",
+              100 * float(fs.test_no_vocab_hit.max()), 0.5)
+
     # Derived quantities the draft asserts about the protocol itself.
     claim("family-wise error rate for 8 tests at 0.05",
           r"produce at least one false positive (\d+)% of the time",
@@ -468,11 +592,20 @@ def main():
 
     # The draft's own appendix quotes the assertion count. Assert that too, so the one
     # number describing this checker cannot drift away from what it actually checks.
-    m = re.search(r"check_paper\s+# (\d+) assertions", draft)
-    if m and int(m.group(1)) != len(rows):
-        print(f"Appendix A says {m.group(1)} assertions; this run has {len(rows)}.")
-        print("Update the appendix.")
-        sys.exit(1)
+    #
+    # RELEASE_NOTES.md quotes it as well, and that copy HAD drifted -- it said 64 while the
+    # appendix said 107 -- because only the appendix was being checked. One file being
+    # verified and another repeating the same number from memory is the whole failure mode
+    # this script exists to prevent, so both are checked now.
+    for path, where in ((DRAFT, "Appendix A"), (NOTES, "RELEASE_NOTES.md")):
+        if not os.path.exists(path):
+            continue
+        text = open(path, encoding="utf-8").read()
+        m = re.search(r"check_paper\s+# (\d+) assertions", text)
+        if m and int(m.group(1)) != len(rows):
+            print(f"{where} says {m.group(1)} assertions; this run has {len(rows)}.")
+            print(f"Update {path}.")
+            sys.exit(1)
 
     print(f"All {len(rows)} headline claims in {DRAFT} match the archives.")
 

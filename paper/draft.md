@@ -122,7 +122,7 @@ removes an 18% error rate nobody was accounting for.
 | Kronecker / bilinear fusion for second-order interactions | Low-rank bilinear block between every view pair, rank 64 | `bilinear` rung; `proposed` |
 | Dual cross-attention over SMILES / graph / fingerprint | Views as tokens, 2 cross-attention layers, 4 heads | `xattn` rung; `proposed` |
 | Per-molecule gating for interpretable view attribution | Softmax gate over views | `gated` rung; `proposed`; §5.4 |
-| Atom + motif level interaction | Bond features in message passing (GINE) | `gine` view |
+| Atom + motif level interaction | Bond features in message passing (GINE); an explicit fragment view, probed rather than built | `gine` view; §5.7 |
 | Conformation-aware models and activity cliffs | Cliff-stratified error analysis | §6.5 |
 | Calibration and distribution-free UQ | Out-of-fold calibration; split conformal | §6 |
 
@@ -579,6 +579,77 @@ not the expensive one, and the mechanism that is expensive does not work.**
 
 ---
 
+### 5.7 The view we did not build
+
+The plan for this work named a sixth view that was never built: a motif view, embedding BRICS
+fragments and Murcko scaffolds and pooling them, taken from the atom-and-motif idea §2 credits.
+Leaving that as a scheduling note would make the omission unfalsifiable, so we measured it
+instead.
+
+What follows is a probe, not the view. Three feature sets are scored by one linear readout --
+logistic regression for classification, ridge for regression, one fixed setting, no tuning --
+across the same six splits under the same paired statistics as everything above. The motif
+vocabulary is built from **training molecules only**, per split, for the reason §3.3 gives about
+every other fitted object here. `python -m scripts.probe_motifs` reproduces the table.
+
+| dataset | metric | `desc` | `motif` | `desc+motif` | change from adding motifs | BRICS fragments seen |
+|---|---|---|---|---|---|---|
+| Tox21 | AUC | 0.759 | 0.653 | 0.760 | +0.001 ± 0.002 | 58% |
+| BBBP | AUC | 0.880 | 0.776 | 0.880 | −0.000 ± 0.004 | 61% |
+| ClinTox | AUC | 0.850 | 0.738 | 0.855 | +0.005 ± 0.006 | 62% |
+| BACE | AUC | 0.849 | 0.819 | 0.846 | −0.003 ± 0.011 | 92% |
+| SIDER | AUC | 0.611 | 0.590 | 0.614 | +0.003 ± 0.004 | 61% |
+| ESOL | RMSE | 0.903 | 2.383 | 0.901 | +0.002 ± 0.023 | 31% |
+| Lipophilicity | RMSE | 0.858 | 1.006 | 0.877 | −0.020 ± 0.014 | 84% |
+| FreeSolv | RMSE | 1.036 | 3.438 | 1.000 | +0.037 ± 0.077 | 24% |
+
+Means over the five seeded splits; the change column is the paired difference with its own 95%
+interval, signed so that positive favours adding motifs.
+
+**Fragments carry real signal, and strictly less of it.** The motif arm loses to the descriptor
+arm on 8 of 8 datasets — sign test p = 0.0078, Wilcoxon p = 0.0078 on both raw and standardised
+differences — and every one of the eight gaps exceeds the minimum detectable effect of §3.5,
+with five surviving Holm correction individually. It is not noise, though. Fragments alone reach
+0.819 AUC on BACE against the descriptor view's 0.849, and 0.590 on SIDER against 0.611. A
+molecule's fragment inventory does predict these endpoints; it predicts them worse than a
+fingerprint and a descriptor block already do.
+
+**Added to those, they change nothing.** No dataset survives correction in either direction, and
+across datasets the combination is favoured on 5 of 8 at sign-test p = 0.73. The single decisive
+per-dataset difference is a *loss*: 0.020 logD on Lipophilicity, at p = 0.0195 uncorrected,
+0.156 after Holm, and below the ±0.10 practical threshold in any case.
+
+**The coverage table says why, and it is not a fact about fragments.** Across all 48
+dataset-split pairs — eight datasets, six splits — **not one test molecule shares a Murcko
+scaffold with any training molecule.** Zero, in every cell, on both split conventions. That is
+not a property of these benchmarks; it is the definition of the split. A scaffold-level feature
+is exactly the feature a scaffold split guarantees will never be seen twice, so the scaffold
+half of a motif view is structurally dead on arrival under the protocol the field already agrees
+to use.
+
+BRICS fragments sit below the scaffold and do transfer, but unevenly: from 95% of a test
+molecule's fragments already seen on the most favourable BACE split down to 16% on the least
+favourable FreeSolv one, where between 52% and 77% of test molecules share no vocabulary entry
+with the training split at all. The gradient runs the wrong way. Coverage is highest on BACE,
+which is close to a single congeneric series, and on Lipophilicity; it is lowest on FreeSolv and
+ESOL — the two datasets where §5.1 already found the descriptor view winning because the
+descriptors encode the target's own physics. Fragments are least available exactly where they
+would have to be most useful.
+
+This is the same phenomenon §6.6 measures on the uncertainty side, in different units: what a
+model has seen decays with structural distance, and a scaffold split maximises that distance
+deliberately.
+
+**What this establishes and what it does not.** It does not prove that no motif view can help. A
+linear readout over indicator features is a lower bound on what a trained fragment encoder could
+extract, and §10 records that. What it does replace is the sentence "we ran out of time", with
+two measurements: the information is largely redundant with a fingerprint, and its scaffold
+component cannot transfer under this split protocol at all. A reader is entitled to ask why a
+paper citing atom-and-motif work does not test a motif view. This is the answer, and it cost
+minutes of CPU rather than building and training a sixth encoder.
+
+---
+
 ## 6. Calibration and conformal uncertainty
 
 ### 6.1 Post-hoc calibration mostly does not transfer
@@ -829,35 +900,40 @@ immediately.
 3. **Fix one hyper-parameter setting across every arm.** Tuning one side of a comparison
    against fixed-setting baselines measures search budget, not architecture. We state the
    setting in a machine-checked configuration file (§3.6).
+4. **Before building a view, check that its features survive your split.** A motif view was
+   on our plan until we measured what a scaffold split leaves it: across all 48 dataset-split
+   pairs, no test molecule shares a Murcko scaffold with any training molecule, and on FreeSolv
+   between 52% and 77% of test molecules share no training fragment either (§5.7). The check is
+   a vocabulary intersection and costs minutes; the encoder would have cost weeks.
 
 **For anyone reporting on these benchmarks.**
 
-4. **Report both split conventions, or say which one you used.** Two procedures both called
+5. **Report both split conventions, or say which one you used.** Two procedures both called
    "scaffold split" differ by up to 0.22 AUC on the same model and the same code (§3.2).
-5. **Average over several splits, and record the accelerator.** Identical code, seed and
+6. **Average over several splits, and record the accelerator.** Identical code, seed and
    splits on a different GPU moved 18% of single-split numbers by more than the effect size
    the field reports differences at; the five-split mean absorbed it entirely (§7). Recording
    the device costs one column.
-6. **State a minimum detectable effect before reading the results.** Ours is ±0.02 AUC and
+7. **State a minimum detectable effect before reading the results.** Ours is ±0.02 AUC and
    ±0.10 RMSE (§3.5). Differences below it should not be described as improvements.
-7. **Correct for testing eight datasets at once, and report the across-dataset test
+8. **Correct for testing eight datasets at once, and report the across-dataset test
    separately.** Eight independent tests at α = 0.05 produce at least one false positive 34%
    of the time (§3.4).
-8. **Sweep the constants you chose without thinking.** Our own mechanism claim reaches
+9. **Sweep the constants you chose without thinking.** Our own mechanism claim reaches
    significance at one bilinear rank and at none of the other three, though the ranks are
    mutually indistinguishable (§5.6). We would not have known without the sweep.
 
 **For anyone deploying with uncertainty estimates.**
 
-9. **Check mean prediction-set size before you check anything else.** It separated the three
+10. **Check mean prediction-set size before you check anything else.** It separated the three
    models whose minority coverage collapses from the twelve whose does not, with no overlap
    and no labels required (§6.2). It is the cheapest deployment check in this paper.
-10. **Use class-conditional conformal on imbalanced endpoints.** Marginal conformal met its
+11. **Use class-conditional conformal on imbalanced endpoints.** Marginal conformal met its
     90% target while covering 9.7–14.1% of actives; the class-conditional variant restored
     87–91% at a visible and reportable cost in set size (§6.2).
-11. **Do not temperature-scale before conformalizing a binary task.** It cannot change the
+12. **Do not temperature-scale before conformalizing a binary task.** It cannot change the
     prediction set — we prove it (§6.3) — and the empirical check agrees to the last molecule.
-12. **Do not reach for APS or RAPS at two classes.** Both degenerate there (§6.4). For
+13. **Do not reach for APS or RAPS at two classes.** Both degenerate there (§6.4). For
     regression intervals that vary informatively per molecule, use conformalized quantile
     regression (§6.5).
 
@@ -927,6 +1003,12 @@ chase it.
   test evaluation.
 - **Single architecture family.** We tested the mechanisms two specific proposals advocate,
   not those proposals' full published systems.
+- **The motif result is a lower bound, not an impossibility proof** (§5.7). A linear readout
+  over fragment indicators bounds what a *trained* fragment encoder could extract from below,
+  and we did not build that encoder. The coverage half of the finding is stronger than the
+  predictive half: zero scaffold transfer across all 48 dataset-split pairs is a property of
+  the split protocol and holds for any motif encoder, whereas "adds nothing measurable" is
+  established only for the readout we used.
 
 ---
 
@@ -938,8 +1020,9 @@ transcribed. The fixed hyper-parameter setting is machine-checked against the tr
 
 **Pending compute:** none. Every experiment this paper reports is complete. Two ablations
 named in the plan were deliberately not run and are not reported: two of the three
-leave-one-view-out arms (the third, and the only one a claim rests on, is in §5.4), and a motif
-view that was never built. An Optuna study is implemented in the repository and has never been
+leave-one-view-out arms (the third, and the only one a claim rests on, is in §5.4), and the
+motif view, which was not built — §5.7 reports the probe that was run in its place and what it
+found. An Optuna study is implemented in the repository and has never been
 run; §10 says why.
 
 ---
@@ -1112,12 +1195,13 @@ underneath a result nobody had reason to question.
 
 ```bash
 python -m scripts.check_configs     # 27 assertions: the config matches the trainers
-python -m scripts.check_paper       # 107 assertions: the prose matches the archives
+python -m scripts.check_paper       # 165 assertions: the prose matches the archives
 python -m scripts.check_deploy      # the live featuriser matches the training features
 python -m scripts.check_mechanisms  # each fusion rung computes what its name claims
 python -m scripts.make_tables       # regenerates Tables 1-3
 python -m scripts.make_figures      # regenerates every figure
 python -m scripts.audit_duplicates  # regenerates the section 9 table
+python -m scripts.probe_motifs      # regenerates the section 5.7 table
 ```
 
 Every table and figure is generated from `results/runs/<split>/{metrics,preds}`, which holds
