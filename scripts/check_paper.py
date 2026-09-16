@@ -169,6 +169,24 @@ def checks(draft):
         out.append((label, float(n) if quoted else None, float(n), 0,
                     None if quoted else f"{n:,} not quoted anywhere in the draft"))
 
+    # The abstract's "the model shrinks 2.4x" when the graph view is dropped. It was correct
+    # but unchecked -- and the README's restatement of the same fact said "59% of the
+    # parameters", which is the share REMOVED, for as long as nothing looked at it. Rebuilt
+    # from the real constructors on FreeSolv, the dataset the original measurement used; the
+    # ratio is 2.39-2.42x on all eight, so one dataset stands for them.
+    from src.models.multiview import MultiViewModel
+    from src.train.train_fusion import SPLITS, build_encoders, load_split
+
+    def gated_params(views):
+        parts = {s: load_split("freesolv", s, "cached", views) for s in SPLITS}
+        enc = build_encoders(parts, "cached", "gine", 256, 0.3, views)
+        return MultiViewModel(enc, mode="gated", n_tasks=parts["train"]["y"].shape[1],
+                              d=256, rank=64, n_layers=2,
+                              n_heads=4).trainable_parameter_count()
+
+    shrink = gated_params(("graph", "desc", "seq")) / gated_params(("desc", "seq"))
+    claim("no-graph model shrink factor", r"the model shrinks (\d+\.\d+)×", shrink, 0.05)
+
     # Section 5.6 mechanism attribution. All three settings of the headline row are checked,
     # so a single re-run cannot quietly flip one, and the end-to-end column is pinned by
     # position so the three-column table cannot be silently reordered.
@@ -433,8 +451,15 @@ def checks(draft):
     # ---- Section 5.7: the motif probe --------------------------------------------------
     # The whole point of 5.7 is that "we did not build a motif view" was replaced by a
     # measurement. A measurement nobody re-checks decays back into an assertion, so every
-    # number in that section -- the table, the two across-dataset tests and the coverage
-    # extremes -- is restated here against what `scripts.probe_motifs` archived.
+    # number in that section -- both tables, the two across-dataset tests, the canonical
+    # split and the coverage extremes -- is restated here against what `scripts.probe_motifs`
+    # archived.
+    #
+    # Matched against the FLATTENED draft throughout. The draft is hard-wrapped at ~95
+    # characters, so a claim like "p = 0.0195 uncorrected" routinely straddles a line break;
+    # four of these patterns silently stopped matching the first time 5.7 was reflowed, which
+    # this checker reports as CLAIM MISSING rather than passing, but only because the claim
+    # was named. The same trap is documented on the section 6.2 block above.
     probe_path = os.path.join(MET, "motif_probe.csv")
     cov_path = os.path.join(MET, "motif_coverage.csv")
     if os.path.exists(probe_path) and os.path.exists(cov_path):
@@ -443,6 +468,15 @@ def checks(draft):
         seeded = [v for v in probe.variant.unique() if str(v).startswith("seed")]
         p_seed = probe[probe.variant.isin(seeded)]
         c_seed = cov[cov.variant.isin(seeded)]
+        flat57 = " ".join(draft.split())
+
+        def mclaim(label, pattern, actual, tol=5e-4, scale=1.0):
+            """`claim`, but against the flattened draft -- see the note above."""
+            m = re.search(pattern, flat57)
+            if m is None:
+                out.append((label, None, actual, tol, "CLAIM MISSING FROM DRAFT"))
+            else:
+                out.append((label, float(m.group(1)) * scale, actual, tol, None))
 
         LABELS = [("tox21", "Tox21"), ("bbbp", "BBBP"), ("clintox", "ClinTox"),
                   ("bace", "BACE"), ("sider", "SIDER"), ("esol", "ESOL"),
@@ -462,13 +496,13 @@ def checks(draft):
 
             pat = (rf"\| {label} \| (?:AUC|RMSE) \| ([\d.]+) \| ([\d.]+) \| ([\d.]+) \| "
                    rf"([+−-][\d.]+) . [\d.]+ \| (\d+)% \|")
-            m = re.search(pat, draft)
+            m = re.search(pat, flat57)
             if m is None:
                 out.append((f"motif table: {label}", None, 0.0, 0, "ROW MISSING FROM DRAFT"))
                 continue
             for i, (col, actual) in enumerate((
-                    ("desc", means["desc"]), ("motif", means["motif"]),
-                    ("desc+motif", means["desc+motif"]))):
+                    ("ECFP+desc", means["desc"]), ("motif", means["motif"]),
+                    ("both", means["desc+motif"]))):
                 out.append((f"motif {label}: {col}", float(m.group(i + 1)), actual, TOL3, None))
             # U+2212 MINUS SIGN is what the draft uses; float() does not read it.
             out.append((f"motif {label}: change",
@@ -481,23 +515,23 @@ def checks(draft):
 
         a = motif_compare("desc_motif_vs_desc")
         if a is not None:
-            claim("motif: adding motifs, datasets favoured",
-                  r"the combination is favoured on (\d) of 8 at sign-test",
-                  float(a.across_wins.iloc[0]), 0)
-            claim("motif: adding motifs, sign p",
-                  r"favoured on \d of 8 at sign-test p = (\d+\.\d+)",
-                  float(a.across_p_sign.iloc[0]), 5e-3)
+            mclaim("motif: adding motifs, datasets favoured",
+                   r"the combination is favoured on (\d) of 8 at sign-test",
+                   float(a.across_wins.iloc[0]), 0)
+            mclaim("motif: adding motifs, sign p",
+                   r"favoured on \d of 8 at sign-test p = (\d+\.\d+)",
+                   float(a.across_p_sign.iloc[0]), 5e-3)
             lipo = a[a.dataset == "lipophilicity"]
             if len(lipo):
-                claim("motif: Lipophilicity loss",
-                      r"a \*loss\*: (\d+\.\d+) logD on Lipophilicity",
-                      abs(float(lipo.mean_diff.iloc[0])), TOL3)
-                claim("motif: Lipophilicity p uncorrected",
-                      r"logD on Lipophilicity, at p = (\d+\.\d+) uncorrected",
-                      float(lipo.p_ttest.iloc[0]), 5e-4)
-                claim("motif: Lipophilicity p Holm",
-                      r"uncorrected,\s+(\d+\.\d+) after Holm",
-                      float(lipo.p_holm.iloc[0]), 5e-4)
+                mclaim("motif: Lipophilicity loss",
+                       r"a \*loss\*: (\d+\.\d+) logD on Lipophilicity",
+                       abs(float(lipo.mean_diff.iloc[0])), TOL3)
+                mclaim("motif: Lipophilicity p uncorrected",
+                       r"logD on Lipophilicity, at p = (\d+\.\d+)",
+                       float(lipo.p_ttest.iloc[0]), 5e-4)
+                mclaim("motif: Lipophilicity p Holm",
+                       r"uncorrected,\s+(\d+\.\d+) after Holm",
+                       float(lipo.p_holm.iloc[0]), 5e-4)
             # "No dataset survives correction in either direction" is a claim about zero,
             # which no regex can catch going stale. Asserted as the number it means.
             out.append(("motif: adding motifs, Holm survivors", 0.0,
@@ -505,15 +539,15 @@ def checks(draft):
 
         b = motif_compare("motif_vs_desc")
         if b is not None:
-            claim("motif alone: datasets lost",
-                  r"arm on (\d) of 8 datasets . sign test p = \d+\.\d+",
-                  float(len(b) - int(b.across_wins.iloc[0])), 0)
-            claim("motif alone: sign p",
-                  r"of 8 datasets . sign test p = (\d+\.\d+)",
-                  float(b.across_p_sign.iloc[0]), 5e-5)
-            claim("motif alone: Wilcoxon p",
-                  r"Wilcoxon p = (\d+\.\d+) on both raw and standardised",
-                  float(b.across_p_wilcoxon_raw.iloc[0]), 5e-5)
+            mclaim("motif alone: datasets lost",
+                   r"arm loses to the `ECFP\+desc` arm on (\d) of 8 datasets",
+                   float(len(b) - int(b.across_wins.iloc[0])), 0)
+            mclaim("motif alone: sign p",
+                   r"of 8 datasets . sign test p = (\d+\.\d+)",
+                   float(b.across_p_sign.iloc[0]), 5e-5)
+            mclaim("motif alone: Wilcoxon p",
+                   r"Wilcoxon p = (\d+\.\d+) on both raw and standardised",
+                   float(b.across_p_wilcoxon_raw.iloc[0]), 5e-5)
             # Both Wilcoxon variants are quoted by one number; check the other one too.
             out.append(("motif alone: Wilcoxon raw == dz",
                         float(b.across_p_wilcoxon_raw.iloc[0]),
@@ -521,7 +555,7 @@ def checks(draft):
             out.append(("motif alone: gaps clearing the MDE", float(len(b)),
                         float(b.clears_mde.sum()), 0, None))
             WORDS = {"three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8}
-            m = re.search(r"with (\w+) surviving Holm correction individually", draft)
+            m = re.search(r"with (\w+) surviving Holm correction individually", flat57)
             if m is None:
                 out.append(("motif alone: Holm survivors", None,
                             float((b.p_holm < 0.05).sum()), 0, "CLAIM MISSING FROM DRAFT"))
@@ -533,25 +567,106 @@ def checks(draft):
                             None if stated is not None
                             else f"could not read '{m.group(1)}' as a number"))
 
+        # The canonical split. This was missing from the first version of 5.7, which reported
+        # only the seeded means -- and the canonical split is where the motif arm wins twice.
+        # Quoting one convention is what section 3.2 exists to forbid, so both are asserted.
+        canon_path = os.path.join(MET, "motif_canonical.csv")
+        if os.path.exists(canon_path):
+            canon = pd.read_csv(canon_path)
+            mclaim("motif canonical: motif wins",
+                   r"beats `ECFP\+desc` \| . \| \*\*(\d) of 8\*\*",
+                   float(canon.motif_beats_desc.sum()), 0)
+            mclaim("motif canonical: both wins",
+                   r"beats `ECFP\+desc` \| . \| \*\*\d of 8\*\* \| \*\*(\d) of 8\*\*",
+                   float(canon.both_beats_desc.sum()), 0)
+            for ds, label in (("bace", "BACE"), ("sider", "SIDER")):
+                row = canon[canon.dataset == ds]
+                if not len(row):
+                    continue
+                m = re.search(
+                    rf"\| {label} \(AUC\) \| ([\d.]+) \| \*\*([\d.]+)\*\* \| ([\d.]+) \|",
+                    flat57)
+                if m is None:
+                    out.append((f"motif canonical: {label}", None, 0.0, 0,
+                                "ROW MISSING FROM DRAFT"))
+                    continue
+                for i, col in enumerate(("desc", "motif", "desc_motif")):
+                    out.append((f"motif canonical {label}: {col}", float(m.group(i + 1)),
+                                float(row[col].iloc[0]), 5e-5, None))
+
+        # 5.7 warns the reader not to read its arms against the views of section 5.1, and
+        # quotes two gaps as evidence. Both are recomputed so the warning cannot go stale --
+        # the first draft of 5.7 called the probe's own baseline "the descriptor view", which
+        # is a different model and, on Tox21, 0.069 AUC better.
+        from src.eval.view_stats import load_tag
+        for ds, label, pat in (
+            ("tox21", "Tox21", r"stand-in by (\d+\.\d+) AUC on Tox21"),
+            ("lipophilicity", "Lipophilicity",
+             r"AUC on Tox21 and (\d+\.\d+) RMSE on Lipophilicity"),
+        ):
+            view = [load_tag(v, ds, "desc") for v in seeded]
+            view = [x for x in view if x is not None]
+            arm = p_seed[(p_seed.dataset == ds) & (p_seed.arm == "desc")].value
+            if view and len(arm):
+                gap = abs(float(np.mean(view)) - float(arm.mean()))
+                mclaim(f"probe vs view gap: {label}", pat, gap, TOL3)
+
         # The coverage claims -- the half of 5.7 that holds for any motif encoder, not only
         # for the linear readout, and therefore the half most worth pinning.
-        claim("motif coverage: dataset-split pairs",
-              r"Across all (\d+)\s*\ndataset-split pairs", float(len(cov)), 0)
+        mclaim("motif coverage: dataset-split pairs",
+               r"Across all (\d+) dataset-split pairs", float(len(cov)), 0)
         out.append(("motif coverage: scaffold transfer is zero", 0.0,
                     float(cov.test_murcko_scaffold_seen.max()), 0, None))
-        claim("motif coverage: best BRICS split",
-              r"from (\d+)% of a test\nmolecule's fragments",
-              100 * float(cov.test_brics_fragment_seen.max()), 0.5)
-        claim("motif coverage: worst BRICS split",
-              r"BACE split down to (\d+)% on the least",
-              100 * float(cov.test_brics_fragment_seen.min()), 0.5)
+        mclaim("motif coverage: best BRICS split",
+               r"from (\d+)% of a test molecule's fragments",
+               100 * float(cov.test_brics_fragment_seen.max()), 0.5)
+        mclaim("motif coverage: worst BRICS split",
+               r"BACE split down to (\d+)% on the least",
+               100 * float(cov.test_brics_fragment_seen.min()), 0.5)
         fs = cov[cov.dataset == "freesolv"]
-        claim("motif coverage: FreeSolv no-hit min",
-              r"where between (\d+)% and \d+% of test molecules share no vocabulary",
-              100 * float(fs.test_no_vocab_hit.min()), 0.5)
-        claim("motif coverage: FreeSolv no-hit max",
-              r"where between \d+% and (\d+)% of test molecules share no vocabulary",
-              100 * float(fs.test_no_vocab_hit.max()), 0.5)
+        mclaim("motif coverage: FreeSolv no-hit min",
+               r"On FreeSolv, between (\d+)% and \d+% of test molecules",
+               100 * float(fs.test_no_vocab_hit.min()), 0.5)
+        mclaim("motif coverage: FreeSolv no-hit max",
+               r"On FreeSolv, between \d+% and (\d+)% of test molecules",
+               100 * float(fs.test_no_vocab_hit.max()), 0.5)
+        # The r that replaced an unbacked claim about BACE being a congeneric series.
+        mclaim("motif coverage: fragments-per-molecule correlation",
+               r"fragment\s*coverage at \*\*r = (\d+\.\d+)\*\*",
+               float(np.corrcoef(cov.mean_brics_per_molecule,
+                                 cov.test_brics_fragment_seen)[0, 1]), 5e-3)
+
+        # The four ranges that carry the correlation's explanation. Typed, so asserted:
+        # the congeneric-series claim they replaced was typed too, and was wrong.
+        hi = cov[cov.dataset.isin(["bace", "lipophilicity"])]
+        lo = cov[cov.dataset.isin(["freesolv", "esol"])]
+        for label, pat, actual, tol in (
+            ("high-coverage frags/molecule min",
+             r"molecules yield (\d+) to \d+ BRICS fragments",
+             float(hi.mean_brics_per_molecule.min()), 0.5),
+            ("high-coverage frags/molecule max",
+             r"molecules yield \d+ to (\d+) BRICS fragments",
+             float(hi.mean_brics_per_molecule.max()), 0.5),
+            ("high-coverage recovery min",
+             r"BRICS fragments each and recover (\d+)",
+             100 * float(hi.test_brics_fragment_seen.min()), 0.5),
+            ("high-coverage recovery max",
+             r"BRICS fragments each and recover \d+.(\d+)%",
+             100 * float(hi.test_brics_fragment_seen.max()), 0.5),
+            ("low-coverage frags/molecule min",
+             r"ESOL molecules yield (\d+\.\d+) to",
+             float(lo.mean_brics_per_molecule.min()), 0.05),
+            ("low-coverage frags/molecule max",
+             r"ESOL molecules yield \d+\.\d+ to (\d+\.\d+)",
+             float(lo.mean_brics_per_molecule.max()), 0.05),
+            ("low-coverage recovery min",
+             r"to \d+\.\d+ and recover (\d+)",
+             100 * float(lo.test_brics_fragment_seen.min()), 0.5),
+            ("low-coverage recovery max",
+             r"to \d+\.\d+ and recover \d+.(\d+)%",
+             100 * float(lo.test_brics_fragment_seen.max()), 0.5),
+        ):
+            mclaim(f"motif coverage: {label}", pat, actual, tol)
 
     # Derived quantities the draft asserts about the protocol itself.
     claim("family-wise error rate for 8 tests at 0.05",

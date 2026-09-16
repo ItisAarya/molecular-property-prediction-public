@@ -6,7 +6,9 @@ Would a motif view have been worth building?
     python -m scripts.probe_motifs
     python -m scripts.probe_motifs --datasets bace --variants deepchem
 
-Writes `results/metrics/motif_probe.csv` and `results/metrics/motif_coverage.csv`.
+Writes five archives under `results/metrics/`: `motif_probe.csv` (every arm, every split),
+`motif_coverage.csv`, `motif_compare_desc_motif_vs_desc.csv`, `motif_compare_motif_vs_desc.csv`
+and `motif_canonical.csv`. A run narrowed by `--datasets` or `--variants` writes none of them.
 
 WHY THIS EXISTS
 ---------------
@@ -23,8 +25,8 @@ arms, so the only thing that differs between them is the feature set.
 
 THREE ARMS, ONE READOUT
 -----------------------
-`desc`        1024-bit ECFP + the 217 RDKit 2-D descriptors: the descriptor view's own input,
-              and the strongest single view in the paper (§5.1).
+`desc`        1024-bit ECFP + the 217 RDKit 2-D descriptors: the same *features* the
+              descriptor view of §5.1 is built on.
 `motif`       Motif indicators alone. Reported because "adds nothing" and "contains nothing"
               are different findings and the first is only interesting given the second.
 `desc+motif`  Both. The arm the plan's motif view would have had to beat.
@@ -35,6 +37,14 @@ exactly reproducible. It also bounds the claim: this measures what motifs add *t
 readout*, which is a lower bound on what a trained motif encoder could extract. The bound is
 worth having anyway, because of what the coverage table below says about why the answer comes
 out the way it does.
+
+THE `desc` ARM IS NOT THE DESCRIPTOR VIEW, AND MUST NOT BE QUOTED AS IT
+-----------------------------------------------------------------------
+It shares the view's features and not its model. The trained MLP beats this linear stand-in by
+0.069 AUC on Tox21 and 0.181 RMSE on Lipophilicity; on BACE the two land within 0.0004 of each
+other, which is coincidence and not reassurance. Every comparison this script reports is
+*within* the table, where all three arms share the readout and only the feature set moves.
+Comparing a number here against a number in §5.1 compares two different models.
 
 THE VOCABULARY IS FITTED ON TRAINING MOLECULES ONLY
 ---------------------------------------------------
@@ -60,6 +70,7 @@ if the probe standardised descriptors differently from the view it is standing i
 """
 
 import argparse
+import json
 import os
 import time
 
@@ -119,12 +130,13 @@ def fragments(smiles):
     WHY BreakBRICSBonds AND NOT BRICSDecompose
     ------------------------------------------
     `BRICSDecompose` returns every fragment at every level of a *recursive* decomposition,
-    so its cost grows combinatorially in the number of breakable bonds. SIDER contains
-    476-atom molecules with 128 of them, and the first version of this script ran for
-    thirty-five minutes of CPU on one of them without returning. Breaking every BRICS bond
-    once and taking the connected components is linear, finishes those same molecules in
-    0.05 s, and yields the leaf fragments -- which is what a fragment-embedding view would
-    have consumed anyway, not the hierarchy above them.
+    so its cost grows combinatorially in the number of breakable bonds. SIDER's largest
+    molecules run to 476 and 484 atoms with 108 and 132 BRICS bonds, and the first version of
+    this script spent roughly twenty-five minutes on SIDER without finishing it -- which
+    molecule it was stuck on was never established, only that the dataset did not complete.
+    Breaking every BRICS bond once and taking the connected components is linear, does those
+    same molecules in 0.05 s, and yields the leaf fragments -- which is what a
+    fragment-embedding view would have consumed anyway, not the hierarchy above them.
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -300,7 +312,6 @@ def run_split(ds, variant, sets, min_count):
     desc_raw = np.asarray(desc_z["X"], dtype=np.float32)
     y = np.asarray(ecfp_z["y"], dtype=np.float64)
 
-    import json
     with open(os.path.join(SPLIT_DIR, f"{ds}_{variant}.json")) as f:
         splits = json.load(f)
     train = np.asarray(splits["train"], dtype=int)
@@ -386,6 +397,43 @@ def compare(df, a, b, variants):
     return out, across_datasets(out.mean_diff.values, out.cohens_dz.values)
 
 
+def canonical(df, archive=True):
+    """
+    The same three arms on the DeepChem canonical split, which §3.2 requires reporting.
+
+    A single split carries no interval, so this can only count wins by mean -- and that is
+    the point of reporting it beside the seeded table rather than instead of it. It is also
+    where the two conventions disagree: the motif arm loses every seeded dataset and wins two
+    canonical ones. Leaving it out would be choosing the convention that agreed with us,
+    which is the specific failure §3.2 exists to name.
+    """
+    rows = []
+    sub = df[df.variant == "deepchem"]
+    for ds in df.dataset.unique():
+        d = sub[sub.dataset == ds]
+        if d.empty:
+            continue
+        vals = {a: float(d[d.arm == a].value.iloc[0]) for a in ARMS if len(d[d.arm == a])}
+        if len(vals) != len(ARMS):
+            continue
+        higher = d.metric.iloc[0] == "auc"
+
+        def wins(a, b):
+            return bool(vals[a] > vals[b]) if higher else bool(vals[a] < vals[b])
+
+        rows.append({
+            "dataset": ds, "metric": d.metric.iloc[0],
+            "desc": vals["desc"], "motif": vals["motif"], "desc_motif": vals["desc+motif"],
+            "motif_beats_desc": wins("motif", "desc"),
+            "both_beats_desc": wins("desc+motif", "desc"),
+        })
+    out = pd.DataFrame(rows)
+    if archive and not out.empty:
+        os.makedirs(MET_DIR, exist_ok=True)
+        out.to_csv(os.path.join(MET_DIR, "motif_canonical.csv"), index=False)
+    return out
+
+
 def report(df, variants, archive=True):
     """
     Print the two comparisons the reviewer question actually asks about, and archive them.
@@ -422,6 +470,19 @@ def report(df, variants, archive=True):
               f"Wilcoxon(dz) p={ad['p_wilcoxon_dz']:.4f}, "
               f"Wilcoxon(raw) p={ad['p_wilcoxon_raw']:.4f}")
 
+    # Section 3.2: report both conventions, never one.
+    canon = canonical(df, archive=archive)
+    if not canon.empty:
+        print(f"\n{'=' * 86}")
+        print("CANONICAL DeepChem split (one split, so wins by mean only -- no interval)")
+        print(f"{'=' * 86}")
+        print(canon.to_string(index=False, float_format=lambda v: f"{v:.4f}"))
+        print(f"\n  motif beats ECFP+desc on {int(canon.motif_beats_desc.sum())} of {len(canon)}"
+              f"   |   adding motifs beats it on {int(canon.both_beats_desc.sum())} of "
+              f"{len(canon)}")
+        print("  The seeded table above disagrees with both counts. That disagreement is a "
+              "result,\n  not a reason to quote whichever convention is kinder.")
+
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[2])
@@ -432,8 +493,10 @@ def main():
     ap.add_argument("--refresh-cache", action="store_true",
                     help="re-fragment every molecule instead of reading data/pool/*_motifs.npz")
     ap.add_argument("--out", default=OUT,
-                    help="where to write. Defaults to the full-set archive, which a run "
-                         "narrowed by --datasets or --variants refuses to touch.")
+                    help="where to write. Defaults to the full-set archive (five "
+                         "results/metrics/motif_*.csv files), none of which a run narrowed by "
+                         "--datasets or --variants will touch; a narrowed run with --out writes "
+                         "the subset and its coverage beside that path instead.")
     args = ap.parse_args()
 
     everything = dataset_names()
@@ -463,13 +526,30 @@ def main():
     # A narrowed run does NOT overwrite the archive -- the same guard scripts/audit_duplicates.py
     # carries, and for the same reason: a partial re-run once replaced a full result file and
     # the paper disagreed with it until someone noticed.
+    #
+    # "The archive" is FIVE files, not one: the probe CSV, the coverage CSV, both comparison
+    # CSVs and the canonical-split CSV. The first version of this guard protected only the
+    # probe CSV. A `--datasets freesolv --out elsewhere.csv` run wrote the subset where it was
+    # asked to -- and also cut the other four archives down to FreeSolv alone, which is the
+    # exact failure the guard's own comment says it prevents. So a partial run now writes
+    # nothing to results/metrics/ at all, whether or not --out is given.
     partial = set(datasets) != set(everything) or set(args.variants) != set(VARIANTS)
-    if partial and args.out == OUT:
+    if partial:
         report(df, args.variants, archive=False)
-        print(f"\nNOT written: this run covers {len(datasets)} of {len(everything)} datasets "
-              f"and {len(args.variants)} of {len(VARIANTS)} splits, and {OUT} is the "
-              f"full-set archive that scripts/check_paper.py asserts against.\nRe-run "
-              f"without --datasets/--variants to refresh it, or pass --out for a subset.")
+        if args.out == OUT:
+            print(f"\nNOT written: this run covers {len(datasets)} of {len(everything)} "
+                  f"datasets and {len(args.variants)} of {len(VARIANTS)} splits, and "
+                  f"{MET_DIR}/motif_*.csv is the full-set archive that scripts/check_paper.py "
+                  f"asserts against.\nRe-run without --datasets/--variants to refresh it, or "
+                  f"pass --out to write this subset somewhere else.")
+            return
+        stem, ext = os.path.splitext(args.out)
+        cov_out = f"{stem}_coverage{ext or '.csv'}"
+        os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+        df.to_csv(args.out, index=False)
+        cov_df.to_csv(cov_out, index=False)
+        print(f"\nWrote the subset to {args.out} and {cov_out}.\n"
+              f"Nothing under {MET_DIR}/ was touched.")
         return
 
     report(df, args.variants)

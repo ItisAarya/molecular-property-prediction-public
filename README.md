@@ -42,11 +42,11 @@ uncorrected analysis would have reported.
 | Does concatenating views beat the best single view? | No — 0 of 8 |
 | Does the proposed cross-attention + bilinear fusion beat a 16.5k-parameter gate? | No — **0** of 8 (1 uncorrected: BACE at p=0.017 → 0.135), for 71× the parameters |
 | Does end-to-end adaptation beat cached frozen embeddings? | No — 0 of 8, for ~11 GPU-hours |
-| Is the graph view needed at all? | No — 0 of 8 either way; dropping it runs 13× faster on 59% of the parameters |
+| Is the graph view needed at all? | No — 0 of 8 either way; dropping it runs 13× faster on 42% of the parameters |
+| Would a motif (BRICS / Murcko) view have added anything? | Not measurably — 0 of 8 in a linear probe, though the canonical split disagrees |
 | Does the fusion model beat the baseline GIN *across datasets*? | **Yes** — favoured on 8/8, p=0.0078 on all three across-dataset statistics |
-| Does it beat the best single view (`desc`) across datasets? | No — 4/8, p=0.46 |
+| Does it beat the best single view (`desc`) across datasets? | No — 4/8, p=0.55 |
 | Does a 90% conformal guarantee cover 90% of actives? | No — 71–80%, and 9.7% in the worst case |
-| Would a motif (BRICS / Murcko) view have added anything? | No — 0 of 8, and no test molecule anywhere shares a training scaffold |
 
 The last three rows are the point. The fusion model **is** better than the baseline it
 started from, and that survives every test. It is **not** better than a descriptor MLP, and no
@@ -80,11 +80,18 @@ trainers' actual defaults. Run it before trusting a comparison.
 
 `python -m scripts.probe_motifs` answers the question the views table invites — *why is there
 no motif view?* — with a measurement rather than a schedule. Three feature sets under one
-linear readout across all six splits: fragments alone lose on 8 of 8 datasets, and added to
-ECFP-plus-descriptors they change nothing that clears the minimum detectable effect. The
-coverage half is the sharper half: across all 48 dataset-split pairs, **no test molecule
-shares a Murcko scaffold with any training molecule**, because that is what a scaffold split
-is for. A scaffold-level feature is the one feature the protocol guarantees cannot transfer.
+linear readout across all six splits. Over the five seeded splits, fragments alone lose on 8
+of 8 datasets and add nothing that clears the minimum detectable effect; on the canonical
+split they win 2 of 8 and adding them improves 7 of 8 numbers, with no interval to say whether
+that means anything. Both are reported (§3.2), and the conclusion is drawn from the convention
+that has error bars.
+
+The coverage half is the sharper half, because it holds for any motif encoder rather than only
+a linear one: across all 48 dataset-split pairs, **no ring-bearing test molecule shares a
+Murcko scaffold with any training molecule**, because that is what a scaffold split is for. A
+scaffold-level feature is the one feature the protocol guarantees cannot transfer. Note that
+the probe's `ECFP+desc` arm shares the descriptor view's features but not its model, and is
+weaker — its numbers are not comparable with the view's.
 
 ### Predicting a molecule you type in
 

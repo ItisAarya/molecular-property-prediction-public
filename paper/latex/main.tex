@@ -434,13 +434,15 @@ The honest statement of \S5.6 is therefore: the bilinear term is the mechanism t
 
 The plan for this work named a sixth view that was never built: a motif view, embedding BRICS fragments and Murcko scaffolds and pooling them, taken from the atom-and-motif idea \S2 credits. Leaving that as a scheduling note would make the omission unfalsifiable, so we measured it instead.
 
-What follows is a probe, not the view. Three feature sets are scored by one linear readout -- logistic regression for classification, ridge for regression, one fixed setting, no tuning -- across the same six splits under the same paired statistics as everything above. The motif vocabulary is built from \textbf{training molecules only}, per split, for the reason \S3.3 gives about every other fitted object here. \code{python -m scripts.probe\_motifs} reproduces the table.
+What follows is a probe, not the view. Three feature sets are scored by one linear readout -- logistic regression for classification, ridge for regression, one fixed setting, no tuning -- across the same six splits under the same paired statistics as everything above. The motif vocabulary is built from \textbf{training molecules only}, per split, for the reason \S3.3 gives about every other fitted object here. \code{python -m scripts.probe\_motifs} reproduces both tables.
+
+\textbf{These are not the views of \S5.1, and must not be read against them.} The \code{ECFP+desc} arm shares the descriptor view's features and not its model: the trained MLP beats this linear stand-in by 0.069 AUC on Tox21 and 0.181 RMSE on Lipophilicity. Every comparison below is \emph{within} a table, where all three arms share the readout and only the feature set moves.
 
 \begin{center}
 \small
 \begin{tabular}{lllllll}
 \toprule
-dataset & metric & \code{desc} & \code{motif} & \code{desc+motif} & change from adding motifs & BRICS fragments seen \\
+dataset & metric & \code{ECFP+desc} & \code{motif} & both & change from adding motifs & BRICS fragments seen \\
 \midrule
 Tox21 & AUC & 0.759 & 0.653 & 0.760 & +0.001 $\pm$ 0.002 & 58\% \\
 BBBP & AUC & 0.880 & 0.776 & 0.880 & $-$0.000 $\pm$ 0.004 & 61\% \\
@@ -456,17 +458,34 @@ FreeSolv & RMSE & 1.036 & 3.438 & 1.000 & +0.037 $\pm$ 0.077 & 24\% \\
 
 Means over the five seeded splits; the change column is the paired difference with its own 95\% interval, signed so that positive favours adding motifs.
 
-\textbf{Fragments carry real signal, and strictly less of it.} The motif arm loses to the descriptor arm on 8 of 8 datasets --- sign test p = 0.0078, Wilcoxon p = 0.0078 on both raw and standardised differences --- and every one of the eight gaps exceeds the minimum detectable effect of \S3.5, with five surviving Holm correction individually. It is not noise, though. Fragments alone reach 0.819 AUC on BACE against the descriptor view's 0.849, and 0.590 on SIDER against 0.611. A molecule's fragment inventory does predict these endpoints; it predicts them worse than a fingerprint and a descriptor block already do.
+\textbf{Fragments carry real signal, and strictly less of it.} Over the seeded splits the motif arm loses to the \code{ECFP+desc} arm on 8 of 8 datasets --- sign test p = 0.0078, Wilcoxon p = 0.0078 on both raw and standardised differences --- and every one of the eight gaps exceeds the minimum detectable effect of \S3.5, with five surviving Holm correction individually. It is not noise, though. Fragments alone reach 0.819 AUC on BACE against that arm's 0.849, and 0.590 on SIDER against 0.611. A molecule's fragment inventory does predict these endpoints; it predicts them worse than a fingerprint and a descriptor block already do.
 
-\textbf{Added to those, they change nothing.} No dataset survives correction in either direction, and across datasets the combination is favoured on 5 of 8 at sign-test p = 0.73. The single decisive per-dataset difference is a \emph{loss}: 0.020 logD on Lipophilicity, at p = 0.0195 uncorrected, 0.156 after Holm, and below the $\pm$0.10 practical threshold in any case.
+\textbf{Added to those, they change nothing.} No dataset survives correction in either direction, and across the seeded splits the combination is favoured on 5 of 8 at sign-test p = 0.73. The single decisive per-dataset difference is a \emph{loss}: 0.020 logD on Lipophilicity, at p = 0.0195 uncorrected, 0.156 after Holm, and below the $\pm$0.10 practical threshold in any case.
 
-\textbf{The coverage table says why, and it is not a fact about fragments.} Across all 48 dataset-split pairs --- eight datasets, six splits --- \textbf{not one test molecule shares a Murcko scaffold with any training molecule.} Zero, in every cell, on both split conventions. That is not a property of these benchmarks; it is the definition of the split. A scaffold-level feature is exactly the feature a scaffold split guarantees will never be seen twice, so the scaffold half of a motif view is structurally dead on arrival under the protocol the field already agrees to use.
+\textbf{And the canonical split disagrees with all of that.} \S3.2 requires both conventions, and this is a case where reporting one would have been reporting a choice:
 
-BRICS fragments sit below the scaffold and do transfer, but unevenly: from 95\% of a test molecule's fragments already seen on the most favourable BACE split down to 16\% on the least favourable FreeSolv one, where between 52\% and 77\% of test molecules share no vocabulary entry with the training split at all. The gradient runs the wrong way. Coverage is highest on BACE, which is close to a single congeneric series, and on Lipophilicity; it is lowest on FreeSolv and ESOL --- the two datasets where \S5.1 already found the descriptor view winning because the descriptors encode the target's own physics. Fragments are least available exactly where they would have to be most useful.
+\begin{center}
+\small
+\begin{tabular}{llll}
+\toprule
+DeepChem canonical split & \code{ECFP+desc} & \code{motif} & both \\
+\midrule
+BACE (AUC) & 0.7529 & \textbf{0.7667} & 0.7576 \\
+SIDER (AUC) & 0.5783 & \textbf{0.5826} & 0.5784 \\
+datasets where the arm beats \code{ECFP+desc} & --- & \textbf{2 of 8} & \textbf{7 of 8} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+On one split there is no interval, so these are wins by mean and nothing more --- which is exactly \S3.2's point, not a hedge against an inconvenient result. But the direction reverses twice. Motifs alone, which lose every seeded dataset, beat the baseline on canonical BACE and SIDER; adding motifs, which is indistinguishable from nothing over five seeded splits, improves 7 of 8 canonical numbers. We report the disagreement because a paper that spends \S3.2 establishing that the two conventions are not interchangeable cannot then quote whichever one agrees with it. What survives both is the weaker and better-supported claim: \textbf{nothing here clears the minimum detectable effect on the convention that has error bars.}
+
+\textbf{The coverage table says why, and it is not a fact about fragments.} Across all 48 dataset-split pairs --- eight datasets, six splits --- \textbf{not one ring-bearing test molecule shares a Murcko scaffold with any training molecule.} Zero, in every cell, on both split conventions. That is not a property of these benchmarks; it is the definition of the split. A scaffold-level feature is exactly the feature a scaffold split guarantees will never be seen twice, so the scaffold half of a motif view is structurally dead on arrival under the protocol the field already agrees to use.
+
+BRICS fragments sit below the scaffold and do transfer, but unevenly: from 95\% of a test molecule's fragments already seen on the most favourable BACE split down to 16\% on the least favourable FreeSolv one. On FreeSolv, between 52\% and 77\% of test molecules share no vocabulary entry with the training split at all. What predicts coverage is simply how many fragments a molecule breaks into: across the 48 pairs, mean fragments per molecule correlates with fragment coverage at \textbf{r = 0.93}. BACE and Lipophilicity molecules yield 5 to 8 BRICS fragments each and recover 80--95\% of them; FreeSolv and ESOL molecules yield 1.3 to 2.5 and recover 16--39\%. Those two are also the smallest datasets, and two of the three where \S5.1 found the descriptor view leading because the descriptors encode the target's own physics. Fragments are least available exactly where they would have to be most useful.
 
 This is the same phenomenon \S6.6 measures on the uncertainty side, in different units: what a model has seen decays with structural distance, and a scaffold split maximises that distance deliberately.
 
-\textbf{What this establishes and what it does not.} It does not prove that no motif view can help. A linear readout over indicator features is a lower bound on what a trained fragment encoder could extract, and \S10 records that. What it does replace is the sentence ``we ran out of time'', with two measurements: the information is largely redundant with a fingerprint, and its scaffold component cannot transfer under this split protocol at all. A reader is entitled to ask why a paper citing atom-and-motif work does not test a motif view. This is the answer, and it cost minutes of CPU rather than building and training a sixth encoder.
+\textbf{What this establishes and what it does not.} It does not prove that no motif view can help. A linear readout over indicator features is a lower bound on what a trained fragment encoder could extract, and \S10 records that alongside the canonical-split disagreement. What it does replace is the sentence ``we ran out of time'', with two measurements: on the convention that carries error bars the information is redundant with a fingerprint, and its scaffold component cannot transfer under this split protocol at all. A reader is entitled to ask why a paper citing atom-and-motif work does not test a motif view. This is the answer, and it cost minutes of CPU rather than building and training a sixth encoder.
 
 
 \section{Calibration and conformal uncertainty}
@@ -672,7 +691,7 @@ Everything below follows from a measurement in this paper, and each is cheap eno
 \item \textbf{Try the cheap configuration first, and make it prove it is worse.} A 16,513-parameter gate matched a 1,169,793-parameter fusion block on all eight datasets (\S5.3), and dropping the graph view left accuracy unmoved while cutting training from 17 to 1.3 minutes per split and removing the graph-library dependency entirely (\S5.4). Neither saving was available to us until we built the comparison that could detect its absence.
 \item \textbf{Include a descriptor baseline.} An ECFP-plus-descriptor MLP was favoured over our fusion model on 4 of 8 datasets (p = 0.55) and over a published external baseline on one dataset after correction (\S5.5). It trains in minutes. A multi-view result that is not compared against it is not yet a result.
 \item \textbf{Fix one hyper-parameter setting across every arm.} Tuning one side of a comparison against fixed-setting baselines measures search budget, not architecture. We state the setting in a machine-checked configuration file (\S3.6).
-\item \textbf{Before building a view, check that its features survive your split.} A motif view was on our plan until we measured what a scaffold split leaves it: across all 48 dataset-split pairs, no test molecule shares a Murcko scaffold with any training molecule, and on FreeSolv between 52\% and 77\% of test molecules share no training fragment either (\S5.7). The check is a vocabulary intersection and costs minutes; the encoder would have cost weeks.
+\item \textbf{Before building a view, check that its features survive your split.} A motif view was on our plan until we measured what a scaffold split leaves it: across all 48 dataset-split pairs, no ring-bearing test molecule shares a Murcko scaffold with any training molecule, and on FreeSolv between 52\% and 77\% of test molecules share no training fragment either (\S5.7). The check is a vocabulary intersection over the training split and costs minutes, which is worth spending before committing to an encoder whatever that encoder would cost.
 \end{enumerate}
 
 \textbf{For anyone reporting on these benchmarks.}
@@ -730,7 +749,7 @@ The other five datasets have no duplicates at all. Aspirin is one of the BBBP ca
 \item \textbf{Cliff sets are small} (10--34 molecules), and the fingerprint-similarity definition over-counts relative to a proper matched-molecular-pair analysis.
 \item \textbf{Conformal calibration uses the validation split} for the models without out-of-fold predictions, which is also the early-stopping split; this biases the fitted map, not the test evaluation.
 \item \textbf{Single architecture family.} We tested the mechanisms two specific proposals advocate, not those proposals' full published systems.
-\item \textbf{The motif result is a lower bound, not an impossibility proof} (\S5.7). A linear readout over fragment indicators bounds what a \emph{trained} fragment encoder could extract from below, and we did not build that encoder. The coverage half of the finding is stronger than the predictive half: zero scaffold transfer across all 48 dataset-split pairs is a property of the split protocol and holds for any motif encoder, whereas ``adds nothing measurable'' is established only for the readout we used.
+\item \textbf{The motif result is a lower bound, not an impossibility proof} (\S5.7). A linear readout over fragment indicators bounds what a \emph{trained} fragment encoder could extract from below, and we did not build that encoder. The predictive half is also the half the two split conventions disagree about: motifs lose all eight seeded datasets and win two canonical ones, and adding them improves 7 of 8 canonical numbers while being indistinguishable from nothing over the seeded splits. Only the seeded convention carries intervals, so that is the one we draw the conclusion from --- but the disagreement is real and we report it rather than the convention that suits us. The coverage half is stronger than either: zero scaffold transfer across all 48 dataset-split pairs is a property of the split protocol and holds for any motif encoder.
 \end{itemize}
 
 
@@ -826,7 +845,7 @@ The transferable claim is not about any architecture. It is that an evaluation s
 \begin{quote}
 \ttfamily\small\noindent
 python -m scripts.check\_configs     \# 27 assertions: the config matches the trainers \\
-python -m scripts.check\_paper       \# 165 assertions: the prose matches the archives \\
+python -m scripts.check\_paper       \# 185 assertions: the prose matches the archives \\
 python -m scripts.check\_deploy      \# the live featuriser matches the training features \\
 python -m scripts.check\_mechanisms  \# each fusion rung computes what its name claims \\
 python -m scripts.make\_tables       \# regenerates Tables 1-3 \\
