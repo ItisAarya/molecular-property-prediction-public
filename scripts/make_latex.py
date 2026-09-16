@@ -1,4 +1,4 @@
-"""
+r"""
 scripts/make_latex.py
 
 Convert `paper/draft.md` into an Overleaf-ready LaTeX project.
@@ -24,16 +24,18 @@ WHAT SHIPS AND WHAT IS LEFT
 The output is a complete `article`-class project: title, author block, every section, four
 figures and `references.bib`. It should compile under pdflatex in Overleaf with no edits.
 
-The reference list is emitted twice on purpose. In the body it is a plain `enumerate`, so the
-document compiles standalone with no bibliography pass. `references.bib` sits beside it with
-the same 29 entries, all publisher-checked, for whenever a venue wants BibTeX -- replace the
-enumerate with `\bibliographystyle{unsrt}` and `\bibliography{references}`.
+Citations are real. `[7]` and `[6, 7]` in the draft become `\cite{...}` here, and the
+reference list is typeset by BibTeX from `references.bib` under `unsrt`, which numbers entries
+by order of first citation. `load_citations()` refuses to build unless the draft's own
+numbering agrees with what `unsrt` will produce, so the numbers a reader sees in the Markdown
+and in the PDF cannot drift apart. Overleaf runs the BibTeX pass automatically.
 
 Left deliberately: the venue's own class file. The preamble is venue-neutral because
 `\affiliation` and `\orcid` are defined by publisher classes rather than by `article`, so the
 author block uses plain line breaks that any class will accept.
 """
 
+import io
 import os
 import re
 import shutil
@@ -119,6 +121,109 @@ def superscripts(s):
         lambda m: r"\textsuperscript{" + "".join(SUPERSCRIPTS[c] for c in m.group(0)) + "}", s)
 
 
+
+# Number -> BibTeX key, read from the draft's reference list at build time. Populated by
+# load_citations(); esc() turns "[7]" and "[6, 7]" into \cite{...} against it.
+CITEKEYS = []
+CITE_RE = re.compile(r"\[(\d+(?:,\s*\d+)*)\]")
+KEYS_COMMENT = re.compile(r"<!-- citation-keys \(list order\): ([^>]+?) -->")
+
+
+def bib_keys(path):
+    """The keys defined in references.bib, in file order."""
+    return re.findall(r"^@\w+\{([^,]+),", io.open(path, encoding="utf-8").read(), flags=re.M)
+
+
+def _fold(text):
+    r"""
+    Accent-insensitive ASCII form, so `Dem{\v{s}}ar` in the bib matches `Demšar` in the draft.
+    LaTeX commands and braces are dropped first, then Unicode accents are decomposed away.
+    """
+    text = re.sub(r"\\[a-zA-Z]+|\\.|[{}]", "", text)
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode()
+
+
+def load_citations(md, bib_path):
+    r"""
+    Validate the draft's citations and return (body_without_references, ordered_keys).
+
+    WHY THIS IS CHECKED RATHER THAN TRUSTED
+    ---------------------------------------
+    The draft numbers its references by hand and `unsrt` numbers them by order of first
+    \cite. Those two agree only while the reference list is in first-citation order, so the
+    numbers a reader sees in draft.md would silently drift from the numbers in the PDF the
+    first time a citation is inserted out of order. Every condition that keeps them equal is
+    asserted here, and a violation stops the build instead of producing two different
+    numberings of the same paper.
+    """
+    keys = KEYS_COMMENT.search(md)
+    if keys is None:
+        raise SystemExit(f"{SRC}: no '<!-- citation-keys (list order): ... -->' comment found "
+                         f"in the References section.")
+    ordered = [k.strip() for k in keys.group(1).split(",") if k.strip()]
+
+    declared = bib_keys(bib_path)
+    if sorted(ordered) != sorted(declared):
+        only_draft = sorted(set(ordered) - set(declared))
+        only_bib = sorted(set(declared) - set(ordered))
+        raise SystemExit(f"citation keys disagree with {bib_path}.\n"
+                         f"  only in the draft: {only_draft}\n  only in the bib: {only_bib}")
+    if len(set(ordered)) != len(ordered):
+        raise SystemExit("duplicate citation keys in the draft's list order.")
+
+    # Split the body from the reference list; the list is replaced by \bibliography.
+    start = md.index("## References")
+    end = md.index("## Appendix A")
+    body, refs, appendix = md[:start], md[start:end], md[end:]
+
+    # Each list entry must sit at the position its key claims. Checked against the first
+    # author's surname from the bib, so a reordered list cannot pass.
+    bib_text = io.open(bib_path, encoding="utf-8").read()
+    for i, key in enumerate(ordered, 1):
+        m = re.search(r"@\w+\{" + re.escape(key) + r",(.*?)\n\}", bib_text, flags=re.S)
+        author = re.search(r"author\s*=\s*\{(.*?)(?:,| and )", m.group(1), flags=re.S)
+        surname = author.group(1).strip().lstrip("{").split()[-1] if author else None
+        entry = re.search(rf"^{i}\. (.*?)(?=^\d+\. |\Z)", refs, flags=re.S | re.M)
+        if entry is None:
+            raise SystemExit(f"reference list has no entry numbered {i}.")
+        if surname and _fold(surname) not in _fold(entry.group(1)):
+            raise SystemExit(f"reference {i} should be {key} (first author {surname!r}) but "
+                             f"the entry reads: {entry.group(1)[:70]!r}")
+
+    # Body citations: in range, all used, and first appearances in ascending order.
+    first, seen = [], set()
+    for m in CITE_RE.finditer(body):
+        nums = [int(n) for n in m.group(1).split(",")]
+        if nums != sorted(nums):
+            raise SystemExit(f"citation {m.group(0)} is not in ascending order.")
+        for n in nums:
+            if not 1 <= n <= len(ordered):
+                raise SystemExit(f"citation {m.group(0)} is outside 1-{len(ordered)}. If this "
+                                 f"is not a citation, rewrite it so it is not [digits].")
+            if n not in seen:
+                seen.add(n)
+                first.append(n)
+    if first != list(range(1, len(ordered) + 1)):
+        expected = [n for n in range(1, len(ordered) + 1) if n not in seen]
+        if expected:
+            raise SystemExit(f"references never cited in the body: {expected}")
+        raise SystemExit(f"the reference list is not in order of first citation, so the draft's "
+                         f"numbers and the PDF's would differ. First-citation order is "
+                         f"{first[:12]}...")
+    return body, appendix, ordered
+
+
+def cite(s):
+    r"""Rewrite [n] and [n, m] as \cite{key} against CITEKEYS."""
+    if not CITEKEYS:
+        return s
+    # A preceding space becomes a tie (~) so the citation cannot be pushed alone onto the next
+    # line, which is the convention for \cite in running text.
+    s = re.sub(r" (?=" + CITE_RE.pattern + ")", "~", s)
+    return CITE_RE.sub(
+        lambda m: "\\cite{" + ",".join(
+            CITEKEYS[int(n) - 1] for n in m.group(1).split(",")) + "}", s)
+
 def esc(text):
     """Escape LaTeX specials outside of inline code, then map the unicode this draft uses."""
     out = []
@@ -146,7 +251,8 @@ def esc(text):
     # Bare markdown links.
     s = re.sub(r"<(https?://[^>]+)>", r"\\url{\1}", s)
     s = re.sub(r"\[([^\]]+)\]\((https?://[^)]+)\)", r"\\href{\2}{\1}", s)
-    return s
+    # Last: citations introduce backslashes and braces that the escaping above would eat.
+    return cite(s)
 
 
 def table(rows):
@@ -330,6 +436,10 @@ def main():
 
     title = md.split("\n", 1)[0].lstrip("# ").strip()
     body = md.split("\n", 1)[1]
+
+    bib = os.path.join("paper", "references.bib")
+    body, appendix, ordered = load_citations(body, bib)
+    CITEKEYS.extend(ordered)
     # Drop the draft-status banner; it is a working note, not part of the paper.
     body = re.sub(r"\*\*Draft — Phase 5.*?make_figures`\.\n", "", body, flags=re.S)
 
@@ -337,7 +447,11 @@ def main():
     # Explicit replacement rather than %-formatting: the preamble is full of LaTeX comments
     # and escaped percent signs, and %-formatting chokes on every one of them.
     head = PREAMBLE.replace("@@TITLE@@", esc(title))
-    tex = head + "\n" + convert(body) + "\n\n\\end{document}\n"
+    # The reference list is BibTeX's to typeset: `unsrt` numbers entries by order of first
+    # \cite, which load_citations() has just proved equals the draft's own numbering.
+    bibliography = ("\\bibliographystyle{unsrt}\n\\bibliography{references}\n")
+    tex = (head + "\n" + convert(body) + "\n" + bibliography + "\n"
+           + convert(appendix) + "\n\n\\end{document}\n")
 
     path = os.path.join(OUT_DIR, "main.tex")
     with open(path, "w", encoding="utf-8") as f:
@@ -366,7 +480,10 @@ def main():
     # minus signs, five superscript minuses, four primes and an element-of before this check
     # existed. Add the character to UNICODE or SUPERSCRIPTS rather than deleting it from the
     # draft: the draft is the source of truth and reads better with real typography.
-    stray = sorted({c for c in tex if ord(c) > 0x017F})
+    # references.bib reaches LaTeX through the .bbl BibTeX writes, so it is subject to the
+    # same restriction as the body and is checked with it.
+    bib_text = io.open(bib, encoding="utf-8").read() if os.path.exists(bib) else ""
+    stray = sorted({c for c in tex + bib_text if ord(c) > 0x017F})
     if stray:
         names = ", ".join(f"U+{ord(c):04X} ({unicodedata.name(c, '?')})" for c in stray)
         raise SystemExit(
@@ -387,8 +504,8 @@ def main():
     print(f"Wrote {ZIP_OUT} ({os.path.getsize(ZIP_OUT) / 1024:.0f} KB) -- upload this.")
     print("\nFor Overleaf: New Project -> Upload Project -> paper/overleaf_project.zip.")
     print("It should compile under pdflatex as-is -- title, author block, figures and all.")
-    print("references.bib ships alongside for whenever a venue wants BibTeX; the body's")
-    print("enumerate list means the document also compiles without a bibliography pass.")
+    print(f"{len(ordered)} references cited; the list is typeset by BibTeX (unsrt) from")
+    print("references.bib, which ships in the bundle. Overleaf runs bibtex for you.")
     print("Left for the venue: its own class file, if it has one.")
 
 

@@ -4,11 +4,13 @@
 % title, authors, venue, volume, pages and DOI where one exists. Nothing is guessed. The same
 % list appears in human-readable form at the end of paper/draft.md; if you edit one, edit both.
 %
-% Copied into paper/latex/ by scripts/make_latex.py. To use it in Overleaf, replace the
-% enumerated reference list at the end of main.tex with:
-%     \bibliographystyle{unsrt}
-%     \bibliography{references}
-% and cite with \cite{moleculenet2018} and so on.
+% main.tex cites these with \cite{...} and typesets them with \bibliographystyle{unsrt}, so
+% entries are numbered by order of first citation. scripts/make_latex.py refuses to build if
+% the draft's own numbering disagrees with that order.
+%
+% Keep `note` fields bibliographic. BibTeX prints them in the reference list, so a reminder
+% left in one ("cite the corrected version") appears in the published paper. Reminders about
+% an entry belong in a % comment beside it.
 
 % ------------------------------------------------------------------ benchmark, data, software
 @article{moleculenet2018,
@@ -45,18 +47,20 @@
   doi     = {10.1021/ci100050t}
 }
 
+% The version is the one pinned in environment.yml and installed for every result.
 @misc{rdkit,
-  author = {Landrum, Greg},
-  title  = {{RDKit}: open-source cheminformatics},
-  note   = {\url{https://www.rdkit.org}. Cite the version pinned in environment.yml}
+  author       = {Landrum, Greg},
+  title        = {{RDKit}: open-source cheminformatics, version 2025.03.5},
+  howpublished = {\url{https://www.rdkit.org}},
+  year         = {2025}
 }
 
+% DeepChem has no software paper and asks users to cite this book.
 @book{deepchem2019,
   author    = {Ramsundar, Bharath and Eastman, Peter and Walters, Patrick and Pande, Vijay and
                Leswing, Karl and Wu, Zhenqin},
   title     = {Deep Learning for the Life Sciences},
-  publisher = {O'Reilly Media}, year = {2019},
-  note      = {The citation the DeepChem project asks for; it has no software paper}
+  publisher = {O'Reilly Media}, year = {2019}
 }
 
 % ------------------------------------------------------------------------ architectures
@@ -94,9 +98,9 @@
   title   = {Analyzing learned molecular representations for property prediction},
   journal = {Journal of Chemical Information and Modeling},
   volume  = {59}, number = {8}, pages = {3370--3388}, year = {2019},
-  doi     = {10.1021/acs.jcim.9b00237},
-  note    = {A correction was published in 2019; cite the corrected version}
+  doi     = {10.1021/acs.jcim.9b00237}
 }
+% A correction to yang2019chemprop was published in 2019.
 
 @article{heid2024chemprop,
   author  = {Heid, Esther and Greenman, Kevin P. and Chung, Yunsie and Li, Shih-Cheng and
@@ -171,10 +175,10 @@
 @book{vovk2022alrw,
   author    = {Vovk, Vladimir and Gammerman, Alexander and Shafer, Glenn},
   title     = {Algorithmic Learning in a Random World},
-  edition   = {2}, publisher = {Springer}, year = {2022},
-  doi       = {10.1007/978-3-031-06649-8},
-  note      = {First edition: Springer, 2005}
+  edition   = {Second}, publisher = {Springer}, year = {2022},
+  doi       = {10.1007/978-3-031-06649-8}
 }
+% First edition: Springer, 2005. Both contain the results used; the current one is cited.
 
 @article{angelopoulos2023gentle,
   author  = {Angelopoulos, Anastasios N. and Bates, Stephen},
@@ -203,7 +207,7 @@
                Malik, Jitendra},
   title     = {Uncertainty sets for image classifiers using conformal prediction},
   booktitle = {International Conference on Learning Representations (ICLR)},
-  year      = {2021}, note = {Spotlight. arXiv:2009.14193}
+  year      = {2021}, note = {arXiv:2009.14193}
 }
 
 @inproceedings{romano2019cqr,
@@ -224,9 +228,9 @@
   author  = {Tursunbadalov, Muhammadjon and Tursunbadalov, Mustafojon},
   title   = {A quiet failure in calibrated virtual screening: marginal conformal prediction
              under-covers the minority class, and a class-conditional fix recovers it},
-  journal = {arXiv preprint arXiv:2607.06605}, year = {2026},
-  note    = {Submitted 7 July 2026. Independently reports the failure Section 6.2 measures}
+  journal = {arXiv preprint arXiv:2607.06605}, year = {2026}
 }
+% Submitted 7 July 2026. Independently reports the failure section 6.2 measures.
 
 % ------------------------------------------------------- activity cliffs, distribution shift
 @article{vantilborg2022cliffs,
@@ -234,10 +238,10 @@
   title   = {Exposing the limitations of molecular machine learning with activity cliffs},
   journal = {Journal of Chemical Information and Modeling},
   volume  = {62}, number = {23}, pages = {5938--5951}, year = {2022},
-  doi     = {10.1021/acs.jcim.2c01073},
-  note    = {Two corrections were published: March 2023, and October 2023
-             (JCIM 63(7), 2266) on a train/test splitting bug. Cite the corrected version}
+  doi     = {10.1021/acs.jcim.2c01073}
 }
+% Two corrections were published for vantilborg2022cliffs: March 2023, and October 2023
+% (JCIM 63(7), 2266) on a train/test splitting bug, with unchanged conclusions.
 
 % ------------------------------------------------------- reproducibility and nondeterminism
 @inproceedings{summers2021nondeterminism,
@@ -248,7 +252,7 @@
 }
 
 @article{eryilmaz2024randomness,
-  author  = {Eryılmaz, Bahadır and Kora{\c{s}}, Osman Alperen and Schl{\"o}tterer, J{\"o}rg and
+  author  = {Ery{\i}lmaz, Bahad{\i}r and Kora{\c{s}}, Osman Alperen and Schl{\"o}tterer, J{\"o}rg and
              Seifert, Christin},
   title   = {Investigating the impact of randomness on reproducibility in computer vision:
              a study on applications in civil engineering and medicine},
