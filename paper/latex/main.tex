@@ -491,7 +491,7 @@ This is the same phenomenon \S6.6 measures on the uncertainty side, in different
 
 \subsection{Post-hoc calibration mostly does not transfer}
 
-Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature~\cite{guo2017calibration} or Platt~\cite{platt1999} map and evaluating test ECE: calibration \textbf{decisively helps on 20, hurts on 1, and is inside its own interval on 44}. Where it helps it helps the worst-calibrated models and never rescues one that was already well calibrated. A map fitted on one partition largely does not transfer to a scaffold-shifted test set by more than that partition's own noise --- and on one pair (Chemprop on SIDER, 0.106 to 0.113) it transfers in the wrong direction.
+Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature~\cite{guo2017calibration} or Platt~\cite{platt2000probabilities} map and evaluating test ECE: calibration \textbf{decisively helps on 20, hurts on 1, and is inside its own interval on 44}. Where it helps it helps the worst-calibrated models and never rescues one that was already well calibrated. A map fitted on one partition largely does not transfer to a scaffold-shifted test set by more than that partition's own noise --- and on one pair (Chemprop on SIDER, 0.106 to 0.113) it transfers in the wrong direction.
 
 \subsection{The guarantee is met by covering the wrong molecules}
 

@@ -2,12 +2,13 @@
 %
 % The original 29 entries were checked against the publisher or the canonical preprint on
 % 2026-09-13: title, authors, venue, volume, pages and DOI where one exists. Seven more were
-% added on 2026-09-16 from the author's local PDF collection, and each says how it was
-% verified. Three (MolVisGNN, AMCT, SCAGE) were read from the papers' own title pages. Four
-% (Bemis-Murcko, BRICS, Platt, Optuna) are not in the collection as PDFs; their details come
-% from the reference lists of papers that are, and they have not been checked against the
-% publisher. Nothing is guessed. The same list appears in human-readable form at the end of
-% paper/draft.md; if you edit one, edit both.
+% added on 2026-09-16 and checked the same day against the publisher's own record, the
+% metadata each publisher deposits with Crossref when it registers the DOI: MolVisGNN (Wiley),
+% AMCT (ACM), SCAGE (Springer Nature), Bemis-Murcko (ACS), BRICS (Wiley), Platt (MIT Press)
+% and Optuna (ACM). That check corrected one entry, Platt, whose title and year as commonly
+% cited do not match the published chapter; see the note beside it. Nothing is guessed. The
+% same list appears in human-readable form at the end of paper/draft.md; if you edit one,
+% edit both.
 %
 % main.tex cites these with \cite{...} and typesets them with \bibliographystyle{unsrt}, so
 % entries are numbered by order of first citation. scripts/make_latex.py refuses to build if
@@ -68,10 +69,7 @@
   publisher = {O'Reilly Media}, year = {2019}
 }
 
-% Bibliographic details from the reference lists of five papers in the local collection
-% (MoleculeNet, Hu et al. 2020, MoleculeACE, Scaffold Splits Overestimate..., Local-Global
-% Multimodal...), which agree on every field each of them gives; MoleculeNet omits the title
-% and issue, and the DOI is from two of the five. The original PDF is not in the collection.
+% Matches the ACS record for doi:10.1021/jm9602928 on every field.
 @article{bemis1996frameworks,
   author  = {Bemis, Guy W. and Murcko, Mark A.},
   title   = {The properties of known drugs. 1. {Molecular} frameworks},
@@ -80,26 +78,27 @@
   doi     = {10.1021/jm9602928}
 }
 
-% BRICS. From the reference lists of two papers in the local collection, which agree on
-% authors, journal, volume, issue, year and first page; the end page 1507 is from one of them.
-% Neither gives a DOI, so none is recorded here.
+% BRICS. Matches the Wiley record on every field; the DOI comes from that record, since
+% neither citing paper in the local collection gave one.
 @article{degen2008brics,
   author  = {Degen, J{\"o}rg and Wegscheid-Gerlach, Christof and Zaliani, Andrea and
              Rarey, Matthias},
   title   = {On the art of compiling and using `drug-like' chemical fragment spaces},
   journal = {ChemMedChem},
-  volume  = {3}, number = {10}, pages = {1503--1507}, year = {2008}
+  volume  = {3}, number = {10}, pages = {1503--1507}, year = {2008},
+  doi     = {10.1002/cmdc.200800178}
 }
 
-% From the reference lists of three papers in the local collection, which agree on the page
-% range.
+% Matches the ACM record, which stores "Optuna" as the title and the rest as a subtitle. The
+% DOI comes from that record.
 @inproceedings{akiba2019optuna,
   author    = {Akiba, Takuya and Sano, Shotaro and Yanase, Toshihiko and Ohta, Takeru and
                Koyama, Masanori},
   title     = {Optuna: a next-generation hyperparameter optimization framework},
   booktitle = {Proceedings of the 25th ACM SIGKDD International Conference on Knowledge
                Discovery \& Data Mining},
-  pages     = {2623--2631}, year = {2019}
+  pages     = {2623--2631}, year = {2019},
+  doi       = {10.1145/3292500.3330701}
 }
 
 % ------------------------------------------------------------------------ architectures
@@ -187,14 +186,16 @@
 }
 
 % ------------------------------------------- other source ideas the section 2 table credits
-% All three read from the papers' own title pages in the local collection.
+% All three read from the papers' own title pages in the local collection, then confirmed
+% against the publisher records (Wiley, ACM, Springer Nature).
+% MolVisGNN was published online on 15 October 2025 in the January 2026 issue (13, no. 2).
 @article{zhang2026molvisgnn,
   author  = {Zhang, Zimai and Zhou, Xi and Qi, Yujie and Zhu, Xiaobo and Deng, Xun and Tan, Feng
              and Huang, Yuan and Hu, Lun and You, Zhuhong and Hu, Pengwei},
   title   = {Leveraging {3D} molecular spatial visual information and multi-perspective
              representations for drug discovery},
   journal = {Advanced Science},
-  volume  = {13}, pages = {e12453}, year = {2026},
+  volume  = {13}, number = {2}, pages = {e12453}, year = {2026},
   doi     = {10.1002/advs.202512453}
 }
 % MolVisGNN is evaluated on drug-target, drug-drug and drug-microRNA interaction prediction,
@@ -297,18 +298,25 @@
   series    = {PMLR}, volume = {70}, pages = {1321--1330}, year = {2017}
 }
 
-% Platt scaling. Author, title, collection, pages and year from the reference lists of three
-% papers in the local collection (Guo et al. 2017, Romano et al. 2020, Angelopoulos et al.
-% 2021), which agree. All three also print a volume "10(3)"; the collection is an edited MIT
-% Press book with no volume or issue, so that field is a copied metadata error and is left
-% out. The publisher is the one detail not taken from the local PDFs.
-@incollection{platt1999,
+% Platt scaling. CORRECTED against the MIT Press record (doi:10.7551/mitpress/1113.003.0008,
+% and the edited-book record doi:10.7551/mitpress/1113.001.0001): the chapter on pages 61-74
+% is titled "Probabilities for SV Machines" and the book was published on 29 September 2000.
+%
+% It is widely cited under a different title and year -- "Probabilistic outputs for support
+% vector machines and comparisons to regularized likelihood methods", 1999 -- including by
+% Guo et al. 2017, Romano et al. 2020 and Angelopoulos et al. 2021, all of which also print
+% a volume "10(3)" for a book that has none. Lin, Lin & Weng (Machine Learning, 2007) use the
+% long title with year 2000 and the editors. The publisher's title and year are used here;
+% "Platt scaling" in the text is the same method either way.
+@incollection{platt2000probabilities,
   author    = {Platt, John C.},
-  title     = {Probabilistic outputs for support vector machines and comparisons to
-               regularized likelihood methods},
-  booktitle = {Advances in Large Margin Classifiers},
+  title     = {Probabilities for {SV} machines},
+  editor    = {Smola, Alexander J. and Bartlett, Peter and Sch{\"o}lkopf, Bernhard and
+               Schuurmans, Dale},
+  booktitle = {Advances in Large-Margin Classifiers},
   publisher = {MIT Press},
-  pages     = {61--74}, year = {1999}
+  pages     = {61--74}, year = {2000},
+  doi       = {10.7551/mitpress/1113.003.0008}
 }
 
 @article{tursunbadalov2026quiet,

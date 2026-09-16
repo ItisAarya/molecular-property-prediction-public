@@ -1105,7 +1105,7 @@ underneath a result nobody had reason to question.
 
 ## References
 
-<!-- citation-keys (list order): zhang2024mvmrl, jang2026krovex, zhang2026molvisgnn, moleculenet2018, yu2026amct, qiao2025scage, vantilborg2022cliffs, guo2017calibration, vovk2022alrw, angelopoulos2023gentle, chithrananda2020chemberta, delaney2004esol, mobley2014freesolv, deepchem2019, holm1979, demsar2006, xu2019gin, hu2020pretrain, hu2022lora, rogers2010ecfp, rdkit, xiong2020attentivefp, yang2019chemprop, heid2024chemprop, gelman2006difference, degen2008brics, bemis1996frameworks, platt1999, tursunbadalov2026quiet, sadinle2019lac, romano2020aps, angelopoulos2021raps, romano2019cqr, summers2021nondeterminism, eryilmaz2024randomness, akiba2019optuna -->
+<!-- citation-keys (list order): zhang2024mvmrl, jang2026krovex, zhang2026molvisgnn, moleculenet2018, yu2026amct, qiao2025scage, vantilborg2022cliffs, guo2017calibration, vovk2022alrw, angelopoulos2023gentle, chithrananda2020chemberta, delaney2004esol, mobley2014freesolv, deepchem2019, holm1979, demsar2006, xu2019gin, hu2020pretrain, hu2022lora, rogers2010ecfp, rdkit, xiong2020attentivefp, yang2019chemprop, heid2024chemprop, gelman2006difference, degen2008brics, bemis1996frameworks, platt2000probabilities, tursunbadalov2026quiet, sadinle2019lac, romano2020aps, angelopoulos2021raps, romano2019cqr, summers2021nondeterminism, eryilmaz2024randomness, akiba2019optuna -->
 
 1. Zhang, R., Lin, Y., Wu, Y., Deng, L., Zhang, H., Liao, M., & Peng, Y. (2024). MvMRL: a
    multi-view molecular representation learning method for molecular property prediction.
@@ -1115,7 +1115,7 @@ underneath a result nobody had reason to question.
    Cheminformatics*, 18, 18. DOI: 10.1186/s13321-025-01140-y.
 3. Zhang, Z., Zhou, X., Qi, Y., Zhu, X., Deng, X., Tan, F., Huang, Y., Hu, L., You, Z., & Hu,
    P. (2026). Leveraging 3D molecular spatial visual information and multi-perspective
-   representations for drug discovery. *Advanced Science*, 13, e12453. DOI:
+   representations for drug discovery. *Advanced Science*, 13(2), e12453. DOI:
    10.1002/advs.202512453.
 4. Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S., Leswing, K.,
    & Pande, V. (2018). MoleculeNet: a benchmark for molecular machine learning. *Chemical
@@ -1179,12 +1179,13 @@ underneath a result nobody had reason to question.
     is not itself statistically significant. *The American Statistician*, 60(4), 328–331. DOI:
     10.1198/000313006X152649.
 26. Degen, J., Wegscheid-Gerlach, C., Zaliani, A., & Rarey, M. (2008). On the art of compiling
-    and using 'drug-like' chemical fragment spaces. *ChemMedChem*, 3(10), 1503–1507.
+    and using 'drug-like' chemical fragment spaces. *ChemMedChem*, 3(10), 1503–1507. DOI:
+    10.1002/cmdc.200800178.
 27. Bemis, G. W., & Murcko, M. A. (1996). The properties of known drugs. 1. Molecular
     frameworks. *Journal of Medicinal Chemistry*, 39(15), 2887–2893. DOI: 10.1021/jm9602928.
-28. Platt, J. C. (1999). Probabilistic outputs for support vector machines and comparisons to
-    regularized likelihood methods. In *Advances in Large Margin Classifiers* (pp. 61–74). MIT
-    Press.
+28. Platt, J. C. (2000). Probabilities for SV machines. In A. J. Smola, P. Bartlett, B.
+    Schölkopf, & D. Schuurmans (Eds.), *Advances in Large-Margin Classifiers* (pp. 61–74). MIT
+    Press. DOI: 10.7551/mitpress/1113.003.0008.
 29. Tursunbadalov, M., & Tursunbadalov, M. (2026). A quiet failure in calibrated virtual
     screening: marginal conformal prediction under-covers the minority class, and a
     class-conditional fix recovers it. arXiv:2607.06605.
@@ -1206,7 +1207,7 @@ underneath a result nobody had reason to question.
     civil engineering and medicine. arXiv:2410.02806.
 36. Akiba, T., Sano, S., Yanase, T., Ohta, T., & Koyama, M. (2019). Optuna: a next-generation
     hyperparameter optimization framework. *Proceedings of the 25th ACM SIGKDD International
-    Conference on Knowledge Discovery & Data Mining*, 2623–2631.
+    Conference on Knowledge Discovery & Data Mining*, 2623–2631. DOI: 10.1145/3292500.3330701.
 
 ---
 
