@@ -1,8 +1,13 @@
 % paper/references.bib
 %
-% Every entry here was checked against the publisher or the canonical preprint on 2026-09-13:
-% title, authors, venue, volume, pages and DOI where one exists. Nothing is guessed. The same
-% list appears in human-readable form at the end of paper/draft.md; if you edit one, edit both.
+% The original 29 entries were checked against the publisher or the canonical preprint on
+% 2026-09-13: title, authors, venue, volume, pages and DOI where one exists. Seven more were
+% added on 2026-09-16 from the author's local PDF collection, and each says how it was
+% verified. Three (MolVisGNN, AMCT, SCAGE) were read from the papers' own title pages. Four
+% (Bemis-Murcko, BRICS, Platt, Optuna) are not in the collection as PDFs; their details come
+% from the reference lists of papers that are, and they have not been checked against the
+% publisher. Nothing is guessed. The same list appears in human-readable form at the end of
+% paper/draft.md; if you edit one, edit both.
 %
 % main.tex cites these with \cite{...} and typesets them with \bibliographystyle{unsrt}, so
 % entries are numbered by order of first citation. scripts/make_latex.py refuses to build if
@@ -61,6 +66,40 @@
                Leswing, Karl and Wu, Zhenqin},
   title     = {Deep Learning for the Life Sciences},
   publisher = {O'Reilly Media}, year = {2019}
+}
+
+% Bibliographic details from the reference lists of five papers in the local collection
+% (MoleculeNet, Hu et al. 2020, MoleculeACE, Scaffold Splits Overestimate..., Local-Global
+% Multimodal...), which agree on every field each of them gives; MoleculeNet omits the title
+% and issue, and the DOI is from two of the five. The original PDF is not in the collection.
+@article{bemis1996frameworks,
+  author  = {Bemis, Guy W. and Murcko, Mark A.},
+  title   = {The properties of known drugs. 1. {Molecular} frameworks},
+  journal = {Journal of Medicinal Chemistry},
+  volume  = {39}, number = {15}, pages = {2887--2893}, year = {1996},
+  doi     = {10.1021/jm9602928}
+}
+
+% BRICS. From the reference lists of two papers in the local collection, which agree on
+% authors, journal, volume, issue, year and first page; the end page 1507 is from one of them.
+% Neither gives a DOI, so none is recorded here.
+@article{degen2008brics,
+  author  = {Degen, J{\"o}rg and Wegscheid-Gerlach, Christof and Zaliani, Andrea and
+             Rarey, Matthias},
+  title   = {On the art of compiling and using `drug-like' chemical fragment spaces},
+  journal = {ChemMedChem},
+  volume  = {3}, number = {10}, pages = {1503--1507}, year = {2008}
+}
+
+% From the reference lists of three papers in the local collection, which agree on the page
+% range.
+@inproceedings{akiba2019optuna,
+  author    = {Akiba, Takuya and Sano, Shotaro and Yanase, Toshihiko and Ohta, Takeru and
+               Koyama, Masanori},
+  title     = {Optuna: a next-generation hyperparameter optimization framework},
+  booktitle = {Proceedings of the 25th ACM SIGKDD International Conference on Knowledge
+               Discovery \& Data Mining},
+  pages     = {2623--2631}, year = {2019}
 }
 
 % ------------------------------------------------------------------------ architectures
@@ -147,6 +186,40 @@
   doi     = {10.1186/s13321-025-01140-y}
 }
 
+% ------------------------------------------- other source ideas the section 2 table credits
+% All three read from the papers' own title pages in the local collection.
+@article{zhang2026molvisgnn,
+  author  = {Zhang, Zimai and Zhou, Xi and Qi, Yujie and Zhu, Xiaobo and Deng, Xun and Tan, Feng
+             and Huang, Yuan and Hu, Lun and You, Zhuhong and Hu, Pengwei},
+  title   = {Leveraging {3D} molecular spatial visual information and multi-perspective
+             representations for drug discovery},
+  journal = {Advanced Science},
+  volume  = {13}, pages = {e12453}, year = {2026},
+  doi     = {10.1002/advs.202512453}
+}
+% MolVisGNN is evaluated on drug-target, drug-drug and drug-microRNA interaction prediction,
+% not property prediction. It is cited for its per-molecule modality gate (SCRN).
+
+@article{yu2026amct,
+  author  = {Yu, Wentao and Chen, Shuo and Gong, Chen and Han, Bo and Niu, Gang and
+             Sugiyama, Masashi},
+  title   = {Atom-Motif Contrastive Transformer for molecular property prediction},
+  journal = {ACM Transactions on Intelligent Systems and Technology},
+  volume  = {17}, number = {2}, year = {2026}, note = {Article 35},
+  doi     = {10.1145/3787204}
+}
+
+@article{qiao2025scage,
+  author  = {Qiao, Jianbo and Jin, Junru and Wang, Ding and Teng, Saisai and Zhang, Junyu and
+             Yang, Xuetong and Liu, Yuhang and Wang, Yu and Cui, Lizhen and Zou, Quan and
+             Su, Ran and Wei, Leyi},
+  title   = {A self-conformation-aware pre-training framework for molecular property
+             prediction with substructure interpretability},
+  journal = {Nature Communications},
+  volume  = {16}, pages = {4382}, year = {2025},
+  doi     = {10.1038/s41467-025-59634-0}
+}
+
 % ------------------------------------------------------------------ evaluation methodology
 @article{demsar2006,
   author  = {Dem{\v{s}}ar, Janez},
@@ -222,6 +295,20 @@
   title     = {On calibration of modern neural networks},
   booktitle = {Proceedings of the 34th International Conference on Machine Learning (ICML)},
   series    = {PMLR}, volume = {70}, pages = {1321--1330}, year = {2017}
+}
+
+% Platt scaling. Author, title, collection, pages and year from the reference lists of three
+% papers in the local collection (Guo et al. 2017, Romano et al. 2020, Angelopoulos et al.
+% 2021), which agree. All three also print a volume "10(3)"; the collection is an edited MIT
+% Press book with no volume or issue, so that field is a copied metadata error and is left
+% out. The publisher is the one detail not taken from the local PDFs.
+@incollection{platt1999,
+  author    = {Platt, John C.},
+  title     = {Probabilistic outputs for support vector machines and comparisons to
+               regularized likelihood methods},
+  booktitle = {Advances in Large Margin Classifiers},
+  publisher = {MIT Press},
+  pages     = {61--74}, year = {1999}
 }
 
 @article{tursunbadalov2026quiet,

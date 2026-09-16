@@ -68,9 +68,9 @@ A molecule can be represented as a graph, as a string, or as a vector of compute
 physicochemical properties. Each representation is lossy in a different direction, which
 makes combining them an obvious idea and a recurring one: recent work proposes cross-
 attention to align views [1], Kronecker or bilinear products to model second-order interactions
-between them [2], and gating to attribute predictions back to views.
+between them [2], and gating to weight each view's contribution per molecule [3].
 
-These proposals are typically evaluated on a handful of MoleculeNet [3] datasets under a single
+These proposals are typically evaluated on a handful of MoleculeNet [4] datasets under a single
 scaffold split, against baselines drawn from other papers. That evaluation cannot distinguish
 a real improvement from three other things: a favourable split, a baseline that was not
 tuned as hard, or a difference smaller than the benchmark's own run-to-run variation. Our
@@ -121,14 +121,14 @@ removes an 18% error rate nobody was accounting for.
 |---|---|---|
 | Kronecker / bilinear fusion for second-order interactions [2] | Low-rank bilinear block between every view pair, rank 64 | `bilinear` rung; `proposed` |
 | Dual cross-attention over SMILES / graph / fingerprint [1] | Views as tokens, 2 cross-attention layers, 4 heads | `xattn` rung; `proposed` |
-| Per-molecule gating for interpretable view attribution | Softmax gate over views | `gated` rung; `proposed`; §5.4 |
-| Atom + motif level interaction | Bond features in message passing (GINE); an explicit fragment view, probed rather than built | `gine` view; §5.7 |
-| Conformation-aware models and activity cliffs [4] | Cliff-stratified error analysis | §6.7 |
-| Calibration [5] and distribution-free UQ [6, 7] | Out-of-fold calibration; split conformal | §6 |
+| Per-molecule gating for interpretable view attribution [3] | Softmax gate over views | `gated` rung; `proposed`; §5.4 |
+| Atom + motif level interaction [5] | Bond features in message passing (GINE); an explicit fragment view, probed rather than built | `gine` view; §5.7 |
+| Conformation-aware models [6] and activity cliffs [7] | Cliff-stratified error analysis | §6.7 |
+| Calibration [8] and distribution-free UQ [9, 10] | Out-of-fold calibration; split conformal | §6 |
 
 We deliberately do not attempt large-scale self-supervised pretraining, 3D-equivariant
 architectures, or quantum-chemical descriptor generation. We *use* a pretrained SMILES
-encoder [8]; we do not pretrain one.
+encoder [11]; we do not pretrain one.
 
 We note for transparency that this paper's framing followed its measurements rather than
 preceding them: the original plan named the fusion architecture as the primary contribution,
@@ -143,8 +143,8 @@ was not tuned until it agreed with us.
 
 ### 3.1 Datasets
 
-Eight MoleculeNet [3] datasets: Tox21 (12 tasks), BBBP (1), ClinTox (2), BACE (1) and SIDER (27)
-for classification; ESOL [9] (logS), Lipophilicity (logD) and FreeSolv [10] (kcal·mol⁻¹) for
+Eight MoleculeNet [4] datasets: Tox21 (12 tasks), BBBP (1), ClinTox (2), BACE (1) and SIDER (27)
+for classification; ESOL [12] (logS), Lipophilicity (logD) and FreeSolv [13] (kcal·mol⁻¹) for
 regression.
 
 We dropped HIV from the core protocol. Statistical power across datasets comes from their
@@ -157,7 +157,7 @@ an already z-scored target; using it silently reports RMSE in no physical unit.
 
 ### 3.2 Splits: report both, always
 
-We report **both** the canonical DeepChem [11] scaffold split and the mean ± 95% CI over five
+We report **both** the canonical DeepChem [14] scaffold split and the mean ± 95% CI over five
 seeded random scaffold splits. These differ by **up to 0.22 AUC on the same model and the
 same code** (BBBP, graph baseline: 0.6764 canonical against 0.8959 ± seeded; the largest gap
 among the pipeline models, with several others above 0.15). Reporting one is reporting a
@@ -195,12 +195,12 @@ is **paired within split**. We then report three things, because they answer dif
 questions and do not always agree:
 
 1. **Per-dataset**: is the mean paired difference larger than its own 95% interval?
-2. **Per-dataset, Holm–Bonferroni corrected** [12] across the eight datasets. Eight tests at
+2. **Per-dataset, Holm–Bonferroni corrected** [15] across the eight datasets. Eight tests at
    α = 0.05 produce at least one false positive 34% of the time, and several conclusions in
    this area rest on exactly one decisive dataset out of eight.
 3. **Across datasets**: one test over eight paired observations, reported as a sign test, a
    Wilcoxon signed-rank test on Cohen's *dz*, and a Wilcoxon on raw differences. The last of
-   these ranks an AUC point against a logS point, which is not a commensurable comparison [13];
+   these ranks an AUC point against a logS point, which is not a commensurable comparison [16];
    we report it because it is what is usually done, and we report the other two because it
    is not sufficient.
 
@@ -262,8 +262,8 @@ Phase 1 result was re-measured after the second fix.
 
 Five single-view baselines, each projected to a common 256-dimensional width before an
 identically sized head, so that comparisons differ in representation and nothing else:
-the 2-layer GIN [14] from our earlier pipeline (`gin_ref`); an edge-aware GINE encoder [15]; a frozen SMILES transformer [8]
-(CLS ⊕ mean pooling); the same transformer with LoRA adapters [16]; and an ECFP [17] ⊕ 217 RDKit [18]
+the 2-layer GIN [17] from our earlier pipeline (`gin_ref`); an edge-aware GINE encoder [18]; a frozen SMILES transformer [11]
+(CLS ⊕ mean pooling); the same transformer with LoRA adapters [19]; and an ECFP [20] ⊕ 217 RDKit [21]
 2-D descriptor MLP.
 
 **No single view replaces the baseline graph encoder.** After correction, `gine` improves on 0 of
@@ -280,7 +280,7 @@ Two findings survive:
   family-wise correction.
 - **Leading by mean is not winning.** The descriptor view leads 6 of 8 datasets by mean and is
   decisive on none. Three of those leads are datasets where the descriptors encode the target's
-  own physics: the classical ESOL solubility equation [9] is a linear function of four
+  own physics: the classical ESOL solubility equation [12] is a linear function of four
   descriptors, three of which — the octanol–water partition coefficient, molecular weight and
   rotatable-bond count — are in this set, and topological polar surface area alone correlates
   with hydration free energy at r = −0.736 (r² = 0.542) on FreeSolv.
@@ -413,7 +413,7 @@ attention or gate weights should be accompanied by the corresponding removal exp
 
 Every comparison so far is internal: our models against each other and against the pipeline
 we started from. That is the weakest kind of evidence, because it cannot rule out that the whole
-family is poor. We therefore ran **AttentiveFP** [19], a widely used attention-based graph
+family is poor. We therefore ran **AttentiveFP** [22], a widely used attention-based graph
 architecture, through the *identical* protocol — same splits, same 256-d projection, same
 head, same fixed hyper-parameters, same accelerator. What remains distinctively AttentiveFP
 is its message passing and its attention-based graph readout; what is held constant is
@@ -444,7 +444,7 @@ Wilcoxon variants, not on the sign test) at roughly twice the parameters — 1,9
 the published architecture is better than the one we built to represent it.
 
 **Neither external baseline beats the 2-layer GIN baseline.** AttentiveFP is favoured on 6 of
-8 and Chemprop [20, 21] on 4 of 8, with no across-dataset difference on any statistic and nothing
+8 and Chemprop [23, 24] on 4 of 8, with no across-dataset difference on any statistic and nothing
 surviving correction — AttentiveFP at nearly ten times the baseline encoder's parameters
 (1,986,304 against 207,360). The two published methods are also indistinguishable from *each
 other* (4/8, p = 1.00 on all three statistics).
@@ -556,7 +556,7 @@ happen to land.
 
 `bilinear`(r = 64) beats `concat` significantly. `bilinear`(r = 16) does not. And
 `bilinear`(r = 64) versus `bilinear`(r = 16) is *also* not significant, at p = 0.641. That is
-exactly the error Gelman and Stern [22] name: the difference between "significant" and "not
+exactly the error Gelman and Stern [25] name: the difference between "significant" and "not
 significant" is not itself significant.
 
 We report it because it is the same failure this paper spends its length documenting, one level
@@ -581,9 +581,10 @@ not the expensive one, and the mechanism that is expensive does not work.**
 ### 5.7 The view we did not build
 
 The plan for this work named a sixth view that was never built: a motif view, embedding BRICS
-fragments and Murcko scaffolds and pooling them, taken from the atom-and-motif idea listed in §2.
-Leaving that as a scheduling note would make the omission unfalsifiable, so we measured it
-instead.
+fragments [26] and Murcko scaffolds [27] and pooling them, taken from the atom-and-motif idea
+of AMCT [5], which argues that motif-level interactions matter for properties such as toxicity
+and solubility. Leaving that as a scheduling note would make the omission unfalsifiable, so we
+measured it instead.
 
 What follows is a probe, not the view. Three feature sets are scored by one linear readout —
 logistic regression for classification, ridge for regression, one fixed setting, no tuning —
@@ -669,8 +670,8 @@ linear readout over indicator features is a lower bound on what a trained fragme
 extract, and §10 records that alongside the canonical-split disagreement. What it does replace is
 the sentence "we ran out of time", with two measurements: on the convention that carries error
 bars the information is redundant with a fingerprint, and its scaffold component cannot transfer
-under this split protocol at all. A reader is entitled to ask why a paper that lists atom-and-motif
-interaction among its source ideas does not test a motif view. This is the answer, and it cost minutes of CPU rather than
+under this split protocol at all. A reader is entitled to ask why a paper that cites atom-and-motif
+work does not test a motif view. This is the answer, and it cost minutes of CPU rather than
 building and training a sixth encoder.
 
 ---
@@ -679,7 +680,7 @@ building and training a sixth encoder.
 
 ### 6.1 Post-hoc calibration mostly does not transfer
 
-Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature [5] or Platt map
+Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature [8] or Platt [28] map
 and evaluating test ECE: calibration **decisively helps on 20, hurts on 1, and is inside its
 own interval on 44**. Where it helps it helps the worst-calibrated models and never rescues
 one that was already well calibrated. A map fitted on one partition largely does not transfer
@@ -688,7 +689,7 @@ to a scaffold-shifted test set by more than that partition's own noise — and o
 
 ### 6.2 The guarantee is met by covering the wrong molecules
 
-Split conformal [6, 7] was validated to nominal on synthetic data (90.1 / 90.1 / 90.3% at a 90%
+Split conformal [9, 10] was validated to nominal on synthetic data (90.1 / 90.1 / 90.3% at a 90%
 target) before use, so gaps on real data are findings rather than bugs.
 
 On Tox21 at a nominal 90%, marginal coverage is met by every model — and the minority class
@@ -741,11 +742,11 @@ both external baselines — under-covers actives by 10–19 points, and the spre
 best and worst (71.1% to 79.8%) is **smaller than any of their gaps to nominal**. The
 under-coverage there is a property of the data and the method, not of the model.
 
-**Class-conditional (Mondrian) conformal repairs it** [6], fitting a separate quantile per class:
+**Class-conditional (Mondrian) conformal repairs it** [9], fitting a separate quantile per class:
 actives rise to 87–91% for every model, with the price openly visible in mean set size
 (0.98 → 1.52 for the random forest; ~1.2 → ~1.4 for the fusion ladder).
 
-**This result is not ours first.** Tursunbadalov & Tursunbadalov [23]
+**This result is not ours first.** Tursunbadalov & Tursunbadalov [29]
 report the same failure and the same fix, independently and four months before this draft: on
 four datasets marginal conformal meets its global 90% target while minority coverage falls to
 64.8% on BBBP, 38.9% on a Tox21 endpoint and 4.2% on ClinTox, it reproduces across a random
@@ -771,7 +772,7 @@ far as we can determine, not covered there.
 
 ### 6.3 Temperature scaling provably cannot change a binary conformal set
 
-The conformal score — that of the least ambiguous set-valued classifier, LAC [24] — is `1 − p` for an active and `p` for an inactive, and the temperature map
+The conformal score — that of the least ambiguous set-valued classifier, LAC [30] — is `1 − p` for an active and `p` for an inactive, and the temperature map
 `g` is symmetric about 0.5: `max |g(1−p) − (1 − g(p))| ≈ 2 × 10⁻¹⁶` across the probability
 range. Both classes therefore pass through the *same* strictly increasing map, the calibration
 quantile moves with them, and every `score ≤ q` comparison is preserved. Split conformal is
@@ -787,7 +788,7 @@ binary tasks with this score it is provably wasted effort.
 
 ### 6.4 Adaptive set scores degenerate at two classes
 
-APS [25] and RAPS [26] are the standard recommendations for set-valued classification. At two classes
+APS [31] and RAPS [32] are the standard recommendations for set-valued classification. At two classes
 they are unusable:
 
 | score | Tox21 coverage | mean set size (max 2) |
@@ -821,7 +822,7 @@ For regression, the choice of score determines whether the interval says anythin
 The constant-width score is correct and useless: every molecule receives the same interval,
 so it cannot indicate which predictions to distrust. Normalising by an ensemble-disagreement
 proxy makes width vary but buys that adaptivity by inflating every interval — three times the
-width. CQR [27], fitting explicit conditional quantiles with pinball loss, is the only score we
+width. CQR [33], fitting explicit conditional quantiles with pinball loss, is the only score we
 tested that varies width meaningfully at a usable mean width. It under-covers by 2–4 points,
 which is the same exchangeability failure documented next.
 
@@ -845,7 +846,7 @@ compounds a screen is run to find. (The actives column is *not* monotone at the 
 most-similar band sits at 65.5% on ~114 molecules with a low positive rate, which we read as
 sampling noise rather than a reversal, and report rather than smooth.)
 
-This is the exchangeability assumption [7] failing, measured rather than argued, and it is the
+This is the exchangeability assumption [10] failing, measured rather than argued, and it is the
 mechanism behind §6.2: the models that emit near-singleton sets are the ones that resolve this
 tension by abandoning the minority class everywhere rather than only at the far end.
 
@@ -872,7 +873,7 @@ On BACE every model is **at chance** on cliff molecules while scoring 0.82–0.8
 Fusion helps on BACE and ClinTox and hurts slightly on Tox21. Cliff sets are 10–34 molecules,
 so this is directional rather than decisive, and the ordering is stable at a 0.85 threshold.
 
-Van Tilborg et al. [4] report the same direction across many methods and targets, under a
+Van Tilborg et al. [7] report the same direction across many methods and targets, under a
 stricter definition: pairs of similar molecules with a large measured difference in potency, on
 curated bioactivity data. Ours is a label flip within ECFP Tanimoto 0.9 on binary MoleculeNet
 labels, which is looser and over-counts (§10).
@@ -909,9 +910,9 @@ GPU.**
 A practical consequence: benchmark tables should record the accelerator, and cross-hardware
 comparisons of single-split numbers should be treated as uncontrolled.
 
-Run-to-run instability of this kind is documented outside this field. Summers and Dinneen [28]
+Run-to-run instability of this kind is documented outside this field. Summers and Dinneen [34]
 trace run-to-run variation in neural-network training to nondeterminism amplified by
-instability in optimisation, and Eryılmaz et al. [29] report GPU-level randomness moving
+instability in optimisation, and Eryılmaz et al. [35] report GPU-level randomness moving
 performance scores by up to 4.77% in computer-vision benchmarks while arguing against
 single-run reporting. What §7 adds is the same measurement in this benchmark's own units,
 against a minimum detectable effect declared in advance.
@@ -969,7 +970,7 @@ immediately.
 11. **Use class-conditional conformal on imbalanced endpoints.** Marginal conformal met its
     90% target while covering 9.7–14.1% of actives; the class-conditional variant restored
     87–91% at a visible and reportable cost in set size (§6.2) — the same fix reported
-    independently by Tursunbadalov & Tursunbadalov [23].
+    independently by Tursunbadalov & Tursunbadalov [29].
 12. **Do not temperature-scale before conformalizing a binary task.** It cannot change the
     prediction set — we prove it (§6.3) — and the empirical check agrees to the last molecule.
 13. **Do not reach for APS or RAPS at two classes.** Both degenerate there (§6.4). For
@@ -995,7 +996,7 @@ twice and labelled both permeable and not.
 
 **This is not leakage, and the audit is what establishes that.** No duplicate group spans more
 than one split in any of the eight datasets, because identical molecules share a Bemis-Murcko
-scaffold and a scaffold split necessarily keeps them together. A random split would not have.
+scaffold [27] and a scaffold split necessarily keeps them together. A random split would not have.
 That is a concrete, checkable argument for the scaffold protocol rather than an asserted one,
 and it is the second time in this paper that a property we adopted for one reason turned out to
 be load-bearing for another.
@@ -1065,7 +1066,7 @@ transcribed. The fixed hyper-parameter setting is machine-checked against the tr
 named in the plan were deliberately not run and are not reported: two of the three
 leave-one-view-out arms (the third, and the only one a claim rests on, is in §5.4), and the
 motif view, which was not built — §5.7 reports the probe that was run in its place and what it
-found. An Optuna study is implemented in the repository and has never been
+found. An Optuna [36] study is implemented in the repository and has never been
 run; §10 says why.
 
 ---
@@ -1104,7 +1105,7 @@ underneath a result nobody had reason to question.
 
 ## References
 
-<!-- citation-keys (list order): zhang2024mvmrl, jang2026krovex, moleculenet2018, vantilborg2022cliffs, guo2017calibration, vovk2022alrw, angelopoulos2023gentle, chithrananda2020chemberta, delaney2004esol, mobley2014freesolv, deepchem2019, holm1979, demsar2006, xu2019gin, hu2020pretrain, hu2022lora, rogers2010ecfp, rdkit, xiong2020attentivefp, yang2019chemprop, heid2024chemprop, gelman2006difference, tursunbadalov2026quiet, sadinle2019lac, romano2020aps, angelopoulos2021raps, romano2019cqr, summers2021nondeterminism, eryilmaz2024randomness -->
+<!-- citation-keys (list order): zhang2024mvmrl, jang2026krovex, zhang2026molvisgnn, moleculenet2018, yu2026amct, qiao2025scage, vantilborg2022cliffs, guo2017calibration, vovk2022alrw, angelopoulos2023gentle, chithrananda2020chemberta, delaney2004esol, mobley2014freesolv, deepchem2019, holm1979, demsar2006, xu2019gin, hu2020pretrain, hu2022lora, rogers2010ecfp, rdkit, xiong2020attentivefp, yang2019chemprop, heid2024chemprop, gelman2006difference, degen2008brics, bemis1996frameworks, platt1999, tursunbadalov2026quiet, sadinle2019lac, romano2020aps, angelopoulos2021raps, romano2019cqr, summers2021nondeterminism, eryilmaz2024randomness, akiba2019optuna -->
 
 1. Zhang, R., Lin, Y., Wu, Y., Deng, L., Zhang, H., Liao, M., & Peng, Y. (2024). MvMRL: a
    multi-view molecular representation learning method for molecular property prediction.
@@ -1112,78 +1113,100 @@ underneath a result nobody had reason to question.
 2. Jang, Y., Lee, J., Jeong, K., & Kim, J. (2026). Multimodal graph fusion with statistically
    guided parsimonious descriptor selection for molecular property prediction. *Journal of
    Cheminformatics*, 18, 18. DOI: 10.1186/s13321-025-01140-y.
-3. Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S., Leswing, K.,
+3. Zhang, Z., Zhou, X., Qi, Y., Zhu, X., Deng, X., Tan, F., Huang, Y., Hu, L., You, Z., & Hu,
+   P. (2026). Leveraging 3D molecular spatial visual information and multi-perspective
+   representations for drug discovery. *Advanced Science*, 13, e12453. DOI:
+   10.1002/advs.202512453.
+4. Wu, Z., Ramsundar, B., Feinberg, E. N., Gomes, J., Geniesse, C., Pappu, A. S., Leswing, K.,
    & Pande, V. (2018). MoleculeNet: a benchmark for molecular machine learning. *Chemical
    Science*, 9(2), 513–530. DOI: 10.1039/c7sc02664a.
-4. van Tilborg, D., Alenicheva, A., & Grisoni, F. (2022). Exposing the limitations of
+5. Yu, W., Chen, S., Gong, C., Han, B., Niu, G., & Sugiyama, M. (2026). Atom-Motif Contrastive
+   Transformer for molecular property prediction. *ACM Transactions on Intelligent Systems and
+   Technology*, 17(2), Article 35. DOI: 10.1145/3787204.
+6. Qiao, J., Jin, J., Wang, D., Teng, S., Zhang, J., Yang, X., Liu, Y., Wang, Y., Cui, L.,
+   Zou, Q., Su, R., & Wei, L. (2025). A self-conformation-aware pre-training framework for
+   molecular property prediction with substructure interpretability. *Nature Communications*,
+   16, 4382. DOI: 10.1038/s41467-025-59634-0.
+7. van Tilborg, D., Alenicheva, A., & Grisoni, F. (2022). Exposing the limitations of
    molecular machine learning with activity cliffs. *Journal of Chemical Information and
    Modeling*, 62(23), 5938–5951. DOI: 10.1021/acs.jcim.2c01073.
-5. Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern neural
+8. Guo, C., Pleiss, G., Sun, Y., & Weinberger, K. Q. (2017). On calibration of modern neural
    networks. *Proceedings of the 34th International Conference on Machine Learning*, PMLR 70,
    1321–1330.
-6. Vovk, V., Gammerman, A., & Shafer, G. (2022). *Algorithmic Learning in a Random World*, 2nd
+9. Vovk, V., Gammerman, A., & Shafer, G. (2022). *Algorithmic Learning in a Random World*, 2nd
    edition. Springer. DOI: 10.1007/978-3-031-06649-8.
-7. Angelopoulos, A. N., & Bates, S. (2023). Conformal prediction: a gentle introduction.
-   *Foundations and Trends in Machine Learning*, 16(4), 494–591. DOI: 10.1561/2200000101.
-8. Chithrananda, S., Grand, G., & Ramsundar, B. (2020). ChemBERTa: large-scale self-supervised
-   pretraining for molecular property prediction. arXiv:2010.09885.
-9. Delaney, J. S. (2004). ESOL: estimating aqueous solubility directly from molecular
-   structure. *Journal of Chemical Information and Computer Sciences*, 44(3), 1000–1005. DOI:
-   10.1021/ci034243x.
-10. Mobley, D. L., & Guthrie, J. P. (2014). FreeSolv: a database of experimental and
+10. Angelopoulos, A. N., & Bates, S. (2023). Conformal prediction: a gentle introduction.
+    *Foundations and Trends in Machine Learning*, 16(4), 494–591. DOI: 10.1561/2200000101.
+11. Chithrananda, S., Grand, G., & Ramsundar, B. (2020). ChemBERTa: large-scale
+    self-supervised pretraining for molecular property prediction. arXiv:2010.09885.
+12. Delaney, J. S. (2004). ESOL: estimating aqueous solubility directly from molecular
+    structure. *Journal of Chemical Information and Computer Sciences*, 44(3), 1000–1005. DOI:
+    10.1021/ci034243x.
+13. Mobley, D. L., & Guthrie, J. P. (2014). FreeSolv: a database of experimental and
     calculated hydration free energies, with input files. *Journal of Computer-Aided Molecular
     Design*, 28(7), 711–720. DOI: 10.1007/s10822-014-9747-x.
-11. Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., & Wu, Z. (2019). *Deep
+14. Ramsundar, B., Eastman, P., Walters, P., Pande, V., Leswing, K., & Wu, Z. (2019). *Deep
     Learning for the Life Sciences*. O'Reilly.
-12. Holm, S. (1979). A simple sequentially rejective multiple test procedure. *Scandinavian
+15. Holm, S. (1979). A simple sequentially rejective multiple test procedure. *Scandinavian
     Journal of Statistics*, 6(2), 65–70.
-13. Demšar, J. (2006). Statistical comparisons of classifiers over multiple data sets.
+16. Demšar, J. (2006). Statistical comparisons of classifiers over multiple data sets.
     *Journal of Machine Learning Research*, 7, 1–30.
-14. Xu, K., Hu, W., Leskovec, J., & Jegelka, S. (2019). How powerful are graph neural
+17. Xu, K., Hu, W., Leskovec, J., & Jegelka, S. (2019). How powerful are graph neural
     networks? *International Conference on Learning Representations (ICLR)*. arXiv:1810.00826.
-15. Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., & Leskovec, J. (2020).
+18. Hu, W., Liu, B., Gomes, J., Zitnik, M., Liang, P., Pande, V., & Leskovec, J. (2020).
     Strategies for pre-training graph neural networks. *International Conference on Learning
     Representations (ICLR)*. arXiv:1905.12265.
-16. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W.
+19. Hu, E. J., Shen, Y., Wallis, P., Allen-Zhu, Z., Li, Y., Wang, S., Wang, L., & Chen, W.
     (2022). LoRA: low-rank adaptation of large language models. *International Conference on
     Learning Representations (ICLR)*. arXiv:2106.09685.
-17. Rogers, D., & Hahn, M. (2010). Extended-connectivity fingerprints. *Journal of Chemical
+20. Rogers, D., & Hahn, M. (2010). Extended-connectivity fingerprints. *Journal of Chemical
     Information and Modeling*, 50(5), 742–754. DOI: 10.1021/ci100050t.
-18. Landrum, G. (2025). RDKit: open-source cheminformatics, version 2025.03.5.
+21. Landrum, G. (2025). RDKit: open-source cheminformatics, version 2025.03.5.
     <https://www.rdkit.org>
-19. Xiong, Z., Wang, D., Liu, X., Zhong, F., Wan, X., Li, X., Li, Z., Luo, X., Chen, K.,
+22. Xiong, Z., Wang, D., Liu, X., Zhong, F., Wan, X., Li, X., Li, Z., Luo, X., Chen, K.,
     Jiang, H., & Zheng, M. (2020). Pushing the boundaries of molecular representation for drug
     discovery with the graph attention mechanism. *Journal of Medicinal Chemistry*, 63(16),
     8749–8760. DOI: 10.1021/acs.jmedchem.9b00959.
-20. Yang, K., Swanson, K., Jin, W., Coley, C., Eiden, P., Gao, H., Guzman-Perez, A., Hopper,
+23. Yang, K., Swanson, K., Jin, W., Coley, C., Eiden, P., Gao, H., Guzman-Perez, A., Hopper,
     T., Kelley, B., Mathea, M., Palmer, A., Settels, V., Jaakkola, T., Jensen, K., & Barzilay,
-    R. (2019). Analyzing learned molecular representations for property prediction. *Journal of
-    Chemical Information and Modeling*, 59(8), 3370–3388. DOI: 10.1021/acs.jcim.9b00237.
-21. Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H.,
+    R. (2019). Analyzing learned molecular representations for property prediction. *Journal
+    of Chemical Information and Modeling*, 59(8), 3370–3388. DOI: 10.1021/acs.jcim.9b00237.
+24. Heid, E., Greenman, K. P., Chung, Y., Li, S.-C., Graff, D. E., Vermeire, F. H., Wu, H.,
     Green, W. H., & McGill, C. J. (2024). Chemprop: a machine learning package for chemical
     property prediction. *Journal of Chemical Information and Modeling*, 64(1), 9–17. DOI:
     10.1021/acs.jcim.3c01250.
-22. Gelman, A., & Stern, H. (2006). The difference between "significant" and "not significant"
+25. Gelman, A., & Stern, H. (2006). The difference between "significant" and "not significant"
     is not itself statistically significant. *The American Statistician*, 60(4), 328–331. DOI:
     10.1198/000313006X152649.
-23. Tursunbadalov, M., & Tursunbadalov, M. (2026). A quiet failure in calibrated virtual
+26. Degen, J., Wegscheid-Gerlach, C., Zaliani, A., & Rarey, M. (2008). On the art of compiling
+    and using 'drug-like' chemical fragment spaces. *ChemMedChem*, 3(10), 1503–1507.
+27. Bemis, G. W., & Murcko, M. A. (1996). The properties of known drugs. 1. Molecular
+    frameworks. *Journal of Medicinal Chemistry*, 39(15), 2887–2893. DOI: 10.1021/jm9602928.
+28. Platt, J. C. (1999). Probabilistic outputs for support vector machines and comparisons to
+    regularized likelihood methods. In *Advances in Large Margin Classifiers* (pp. 61–74). MIT
+    Press.
+29. Tursunbadalov, M., & Tursunbadalov, M. (2026). A quiet failure in calibrated virtual
     screening: marginal conformal prediction under-covers the minority class, and a
     class-conditional fix recovers it. arXiv:2607.06605.
-24. Sadinle, M., Lei, J., & Wasserman, L. (2019). Least ambiguous set-valued classifiers with
-    bounded error levels. *Journal of the American Statistical Association*, 114(525), 223–234.
-25. Romano, Y., Sesia, M., & Candès, E. J. (2020). Classification with valid and adaptive
+30. Sadinle, M., Lei, J., & Wasserman, L. (2019). Least ambiguous set-valued classifiers with
+    bounded error levels. *Journal of the American Statistical Association*, 114(525),
+    223–234.
+31. Romano, Y., Sesia, M., & Candès, E. J. (2020). Classification with valid and adaptive
     coverage. *Advances in Neural Information Processing Systems* 33.
-26. Angelopoulos, A. N., Bates, S., Jordan, M. I., & Malik, J. (2021). Uncertainty sets for
+32. Angelopoulos, A. N., Bates, S., Jordan, M. I., & Malik, J. (2021). Uncertainty sets for
     image classifiers using conformal prediction. *International Conference on Learning
     Representations (ICLR)*. arXiv:2009.14193.
-27. Romano, Y., Patterson, E., & Candès, E. J. (2019). Conformalized quantile regression.
+33. Romano, Y., Patterson, E., & Candès, E. J. (2019). Conformalized quantile regression.
     *Advances in Neural Information Processing Systems* 32. arXiv:1905.03222.
-28. Summers, C., & Dinneen, M. J. (2021). Nondeterminism and instability in neural network
+34. Summers, C., & Dinneen, M. J. (2021). Nondeterminism and instability in neural network
     optimization. *Proceedings of the 38th International Conference on Machine Learning*, PMLR
     139, 9913–9922.
-29. Eryılmaz, B., Koraş, O. A., Schlötterer, J., & Seifert, C. (2024). Investigating the
+35. Eryılmaz, B., Koraş, O. A., Schlötterer, J., & Seifert, C. (2024). Investigating the
     impact of randomness on reproducibility in computer vision: a study on applications in
     civil engineering and medicine. arXiv:2410.02806.
+36. Akiba, T., Sano, S., Yanase, T., Ohta, T., & Koyama, M. (2019). Optuna: a next-generation
+    hyperparameter optimization framework. *Proceedings of the 25th ACM SIGKDD International
+    Conference on Knowledge Discovery & Data Mining*, 2623–2631.
 
 ---
 

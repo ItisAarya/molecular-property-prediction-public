@@ -61,7 +61,7 @@ All claims are reproducible from archived per-split predictions, and every headl
 
 \section{Introduction}
 
-A molecule can be represented as a graph, as a string, or as a vector of computed physicochemical properties. Each representation is lossy in a different direction, which makes combining them an obvious idea and a recurring one: recent work proposes cross- attention to align views~\cite{zhang2024mvmrl}, Kronecker or bilinear products to model second-order interactions between them~\cite{jang2026krovex}, and gating to attribute predictions back to views.
+A molecule can be represented as a graph, as a string, or as a vector of computed physicochemical properties. Each representation is lossy in a different direction, which makes combining them an obvious idea and a recurring one: recent work proposes cross- attention to align views~\cite{zhang2024mvmrl}, Kronecker or bilinear products to model second-order interactions between them~\cite{jang2026krovex}, and gating to weight each view's contribution per molecule~\cite{zhang2026molvisgnn}.
 
 These proposals are typically evaluated on a handful of MoleculeNet~\cite{moleculenet2018} datasets under a single scaffold split, against baselines drawn from other papers. That evaluation cannot distinguish a real improvement from three other things: a favourable split, a baseline that was not tuned as hard, or a difference smaller than the benchmark's own run-to-run variation. Our starting point is that the last of these is larger than most papers assume.
 
@@ -92,9 +92,9 @@ Source idea & What we implement & Where it lands \\
 \midrule
 Kronecker / bilinear fusion for second-order interactions~\cite{jang2026krovex} & Low-rank bilinear block between every view pair, rank 64 & \code{bilinear} rung; \code{proposed} \\
 Dual cross-attention over SMILES / graph / fingerprint~\cite{zhang2024mvmrl} & Views as tokens, 2 cross-attention layers, 4 heads & \code{xattn} rung; \code{proposed} \\
-Per-molecule gating for interpretable view attribution & Softmax gate over views & \code{gated} rung; \code{proposed}; \S5.4 \\
-Atom + motif level interaction & Bond features in message passing (GINE); an explicit fragment view, probed rather than built & \code{gine} view; \S5.7 \\
-Conformation-aware models and activity cliffs~\cite{vantilborg2022cliffs} & Cliff-stratified error analysis & \S6.7 \\
+Per-molecule gating for interpretable view attribution~\cite{zhang2026molvisgnn} & Softmax gate over views & \code{gated} rung; \code{proposed}; \S5.4 \\
+Atom + motif level interaction~\cite{yu2026amct} & Bond features in message passing (GINE); an explicit fragment view, probed rather than built & \code{gine} view; \S5.7 \\
+Conformation-aware models~\cite{qiao2025scage} and activity cliffs~\cite{vantilborg2022cliffs} & Cliff-stratified error analysis & \S6.7 \\
 Calibration~\cite{guo2017calibration} and distribution-free UQ~\cite{vovk2022alrw,angelopoulos2023gentle} & Out-of-fold calibration; split conformal & \S6 \\
 \bottomrule
 \end{tabular}
@@ -431,7 +431,7 @@ The honest statement of \S5.6 is therefore: the bilinear term is the mechanism t
 
 \subsection{The view we did not build}
 
-The plan for this work named a sixth view that was never built: a motif view, embedding BRICS fragments and Murcko scaffolds and pooling them, taken from the atom-and-motif idea listed in \S2. Leaving that as a scheduling note would make the omission unfalsifiable, so we measured it instead.
+The plan for this work named a sixth view that was never built: a motif view, embedding BRICS fragments~\cite{degen2008brics} and Murcko scaffolds~\cite{bemis1996frameworks} and pooling them, taken from the atom-and-motif idea of AMCT~\cite{yu2026amct}, which argues that motif-level interactions matter for properties such as toxicity and solubility. Leaving that as a scheduling note would make the omission unfalsifiable, so we measured it instead.
 
 What follows is a probe, not the view. Three feature sets are scored by one linear readout --- logistic regression for classification, ridge for regression, one fixed setting, no tuning --- across the same six splits under the same paired statistics as everything above. The motif vocabulary is built from \textbf{training molecules only}, per split, for the reason \S3.3 gives about every other fitted object here. \code{python -m scripts.probe\_motifs} reproduces both tables.
 
@@ -484,14 +484,14 @@ BRICS fragments sit below the scaffold and do transfer, but unevenly: from 95\% 
 
 This is the same phenomenon \S6.6 measures on the uncertainty side, in different units: what a model has seen decays with structural distance, and a scaffold split maximises that distance deliberately.
 
-\textbf{What this establishes and what it does not.} It does not prove that no motif view can help. A linear readout over indicator features is a lower bound on what a trained fragment encoder could extract, and \S10 records that alongside the canonical-split disagreement. What it does replace is the sentence ``we ran out of time'', with two measurements: on the convention that carries error bars the information is redundant with a fingerprint, and its scaffold component cannot transfer under this split protocol at all. A reader is entitled to ask why a paper that lists atom-and-motif interaction among its source ideas does not test a motif view. This is the answer, and it cost minutes of CPU rather than building and training a sixth encoder.
+\textbf{What this establishes and what it does not.} It does not prove that no motif view can help. A linear readout over indicator features is a lower bound on what a trained fragment encoder could extract, and \S10 records that alongside the canonical-split disagreement. What it does replace is the sentence ``we ran out of time'', with two measurements: on the convention that carries error bars the information is redundant with a fingerprint, and its scaffold component cannot transfer under this split protocol at all. A reader is entitled to ask why a paper that cites atom-and-motif work does not test a motif view. This is the answer, and it cost minutes of CPU rather than building and training a sixth encoder.
 
 
 \section{Calibration and conformal uncertainty}
 
 \subsection{Post-hoc calibration mostly does not transfer}
 
-Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature~\cite{guo2017calibration} or Platt map and evaluating test ECE: calibration \textbf{decisively helps on 20, hurts on 1, and is inside its own interval on 44}. Where it helps it helps the worst-calibrated models and never rescues one that was already well calibrated. A map fitted on one partition largely does not transfer to a scaffold-shifted test set by more than that partition's own noise --- and on one pair (Chemprop on SIDER, 0.106 to 0.113) it transfers in the wrong direction.
+Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature~\cite{guo2017calibration} or Platt~\cite{platt1999} map and evaluating test ECE: calibration \textbf{decisively helps on 20, hurts on 1, and is inside its own interval on 44}. Where it helps it helps the worst-calibrated models and never rescues one that was already well calibrated. A map fitted on one partition largely does not transfer to a scaffold-shifted test set by more than that partition's own noise --- and on one pair (Chemprop on SIDER, 0.106 to 0.113) it transfers in the wrong direction.
 
 \subsection{The guarantee is met by covering the wrong molecules}
 
@@ -736,7 +736,7 @@ ESOL & 1,128 & 1,117 & 11 & 6 \\
 
 The other five datasets have no duplicates at all. Aspirin is one of the BBBP cases, present twice and labelled both permeable and not.
 
-\textbf{This is not leakage, and the audit is what establishes that.} No duplicate group spans more than one split in any of the eight datasets, because identical molecules share a Bemis-Murcko scaffold and a scaffold split necessarily keeps them together. A random split would not have. That is a concrete, checkable argument for the scaffold protocol rather than an asserted one, and it is the second time in this paper that a property we adopted for one reason turned out to be load-bearing for another.
+\textbf{This is not leakage, and the audit is what establishes that.} No duplicate group spans more than one split in any of the eight datasets, because identical molecules share a Bemis-Murcko scaffold~\cite{bemis1996frameworks} and a scaffold split necessarily keeps them together. A random split would not have. That is a concrete, checkable argument for the scaffold protocol rather than an asserted one, and it is the second time in this paper that a property we adopted for one reason turned out to be load-bearing for another.
 
 \textbf{It does bound achievable accuracy.} No model can be right about both copies of a molecule the benchmark labels two ways, so a component of every reported ClinTox error --- 19 self-contradictory groups in 1,480 molecules --- belongs to the data rather than to the architecture. We are not aware of this being accounted for in the numbers this benchmark is usually compared against, and we report it so that future work can subtract it rather than chase it.
 
@@ -760,7 +760,7 @@ The other five datasets have no duplicates at all. Aspirin is one of the BBBP ca
 
 Every number is generated from archived per-split predictions and metrics by scripts in the repository; the tables in this draft are built by \code{python -m scripts.make\_tables} and are not transcribed. The fixed hyper-parameter setting is machine-checked against the training code.
 
-\textbf{Pending compute:} none. Every experiment this paper reports is complete. Two ablations named in the plan were deliberately not run and are not reported: two of the three leave-one-view-out arms (the third, and the only one a claim rests on, is in \S5.4), and the motif view, which was not built --- \S5.7 reports the probe that was run in its place and what it found. An Optuna study is implemented in the repository and has never been run; \S10 says why.
+\textbf{Pending compute:} none. Every experiment this paper reports is complete. Two ablations named in the plan were deliberately not run and are not reported: two of the three leave-one-view-out arms (the third, and the only one a claim rests on, is in \S5.4), and the motif view, which was not built --- \S5.7 reports the probe that was run in its place and what it found. An Optuna~\cite{akiba2019optuna} study is implemented in the repository and has never been run; \S10 says why.
 
 
 \section{Conclusion}
