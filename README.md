@@ -256,7 +256,8 @@ If you use this code or its evaluation protocol, please cite it:
 > https://doi.org/10.5281/zenodo.22734878
 
 The DOI above is the **concept DOI** — it always resolves to the latest release. To cite a
-specific version instead, use that release's own DOI (v1.0.0 is
+specific version instead, use that release's own DOI (v1.1.0 is
+[10.5281/zenodo.22922983](https://doi.org/10.5281/zenodo.22922983); v1.0.0 is
 [10.5281/zenodo.22734879](https://doi.org/10.5281/zenodo.22734879)).
 
 `CITATION.cff` carries the machine-readable metadata, and GitHub renders a "Cite this
