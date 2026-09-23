@@ -99,7 +99,8 @@ def predict(model, loader, cls, device, n_rows, unpack):
 
 def fit_and_score(model, loaders, y, ds, tag, cls, unpack, device,
                   epochs=100, patience=15, lr=1e-3, weight_decay=1e-4,
-                  train_sampler=None, seed=None, extra=None, verbose=True):
+                  train_sampler=None, seed=None, extra=None, verbose=True,
+                  class_weighting=True):
     """
     Train one model, restore its best epoch, and write predictions and metrics.
 
@@ -112,7 +113,11 @@ def fit_and_score(model, loaders, y, ds, tag, cls, unpack, device,
     model = model.to(device)
     trainable = [p for p in model.parameters() if p.requires_grad]
     opt = torch.optim.Adam(trainable, lr=lr, weight_decay=weight_decay)
-    pos_w = pos_weight_from_labels(y["train"]).to(device) if cls else None
+    # `class_weighting=False` trains with unweighted BCE. It exists for one control only:
+    # the paper's conformal section shows that turning it off moves a model from covering
+    # the minority class to abandoning it (`desc_nopw`). Every reported model keeps it on.
+    pos_w = (pos_weight_from_labels(y["train"]).to(device)
+             if cls and class_weighting else None)
 
     n_par = sum(p.numel() for p in model.parameters())
     n_trainable = sum(p.numel() for p in trainable)

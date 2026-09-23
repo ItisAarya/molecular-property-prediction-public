@@ -216,7 +216,8 @@ def build_view(encoder_name, ds, batch_size, enc_kwargs, seed=0):
 
 
 def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay,
-           enc_kwargs, device=None, embed_dim=EMBED_DIM, head_hidden=EMBED_DIM):
+           enc_kwargs, device=None, embed_dim=EMBED_DIM, head_hidden=EMBED_DIM,
+           class_weighting=True):
     """Build one view's model and fit it through the shared loop."""
     seed = set_seed()
     cls = is_classification(ds)
@@ -231,7 +232,7 @@ def run_ds(ds, encoder_name, tag, epochs, patience, batch_size, lr, weight_decay
     return fit_and_score(
         model, loaders, y, ds=ds, tag=tag, cls=cls, unpack=split_batch, device=device,
         epochs=epochs, patience=patience, lr=lr, weight_decay=weight_decay,
-        train_sampler=train_sampler, seed=seed,
+        train_sampler=train_sampler, seed=seed, class_weighting=class_weighting,
     )
 
 
@@ -272,6 +273,8 @@ def main():
                     help="common width every view is projected to before the head")
     ap.add_argument("--head-hidden", type=int, default=EMBED_DIM)
     ap.add_argument("--device", default="auto", choices=["auto", "cpu", "cuda"])
+    ap.add_argument("--no-pos-weight", action="store_true",
+                    help="control only: unweighted BCE (see src/train/loop.py)")
     args = ap.parse_args()
 
     tag = args.tag or args.encoder
@@ -298,7 +301,8 @@ def main():
     device = pick_device(args.device)
     rows = [run_ds(ds, args.encoder, tag, args.epochs, args.patience, args.batch_size,
                    args.lr, args.weight_decay, enc_kwargs, device,
-                   args.embed_dim, args.head_hidden) for ds in datasets]
+                   args.embed_dim, args.head_hidden, not args.no_pos_weight)
+            for ds in datasets]
     pd.DataFrame(rows).to_csv(os.path.join(MET_DIR, f"{tag}_summary.csv"), index=False)
     print(f"\nWrote results/metrics/{tag}_summary.csv")
 

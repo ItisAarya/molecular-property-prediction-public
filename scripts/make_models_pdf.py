@@ -350,7 +350,7 @@ s.append(P("And the ladder is only part of it. We also trained the three views o
            "not beating only ourselves), and the whole ladder a second time with the language model "
            "un-frozen. Each of those is another 48 models.", BODY))
 s.append(box(f"Total archived so far: <b>{N_TRAINED:,} trained models</b> across <b>{N_TAGS} "
-             f"designs</b>, every one of them tested on all {N_DS} datasets and all {N_SPLITS} "
+             f"designs</b>, almost all of them tested on all {N_DS} datasets and all {N_SPLITS} "
              f"splits. Roughly 30 hours of computing time, mostly on free cloud GPUs.",
              LIGHT, BORDER))
 
@@ -407,14 +407,17 @@ s.append(P("Alongside every prediction the app shows two things most demos hide:
 
 s.append(P("11. What we actually found \u2014 the honest version", H1))
 s.append(box(
-    "Our elaborate design (rung 5, over a million extra parts to learn) <b>did not reliably beat</b> "
-    "the simple volume-knob design (rung 2, about sixteen thousand). Neither reliably beat the "
-    "inherited model. Neither did the two published methods from other groups. On several datasets "
-    "the plain chemical fact sheet was as good as anything.<br/><br/>"
+    "First, a hidden clue: in two datasets (ClinTox and BBBP) the way a molecule is <i>written</i> "
+    "gives the answer away, and the language model was reading it. Once every molecule was "
+    "rewritten in one standard form, those scores fell sharply.<br/><br/>"
+    "With the clue removed, our elaborate design (rung 5, over a million extra parts to learn) "
+    "<b>did not reliably beat</b> the simple volume-knob design (rung 2, about sixteen thousand) "
+    "or the inherited graph model, and no rung of the ladder beat the plain chemical fact sheet. "
+    "The two published methods from other groups did not reliably beat the inherited model "
+    "either.<br/><br/>"
     "<b>This is a real result, not a failure.</b> The project was built to measure honestly, and "
-    "what it measured is that most of the improvements people report at this scale do not survive "
-    "being tested on six splits instead of one. We found that our own idea was one of them, and we "
-    "are reporting it. A measuring instrument that only ever confirms the person holding it is not "
+    "what it measured is that our own improvement did not survive being tested on six splits "
+    "instead of one. We are reporting it. A measuring instrument that only ever confirms the person holding it is not "
     "a measuring instrument.", GREEN, colors.HexColor("#9CC3A9")))
 
 s.append(P("12. Questions a reader usually asks next", H1))

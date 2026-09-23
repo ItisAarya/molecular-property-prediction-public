@@ -1,9 +1,3 @@
-dataset,tag,valid_auc,test_auc,params,trainable,best_epoch,mode,seq,views,gate_views,valid_rmse,test_rmse
-tox21,fuse_gated_nograph,0.8642367156493632,0.84905812823393,862605,862605,3,gated,cached,seq|desc,seq|desc,,
-bbbp,fuse_gated_nograph,0.972722237607311,0.9580777096114519,858754,858754,16,gated,cached,seq|desc,seq|desc,,
-clintox,fuse_gated_nograph,0.9705994237244238,0.9859733288444993,859011,859011,3,gated,cached,seq|desc,seq|desc,,
-esol,fuse_gated_nograph,,,854914,854914,30,gated,cached,seq|desc,seq|desc,0.7041320325010465,0.8661159456376271
-lipophilicity,fuse_gated_nograph,,,858242,858242,21,gated,cached,seq|desc,seq|desc,0.6890340982341471,0.67512295302665
-bace,fuse_gated_nograph,0.9506238859180036,0.7601731601731601,854402,854402,2,gated,cached,seq|desc,seq|desc,,
-sider,fuse_gated_nograph,0.6112351375001233,0.6172587138900412,865948,865948,4,gated,cached,seq|desc,seq|desc,,
-freesolv,fuse_gated_nograph,,,851330,851330,31,gated,cached,seq|desc,seq|desc,0.8308076315824368,0.8219743707470488
+dataset,tag,valid_auc,test_auc,params,trainable,best_epoch,mode,seq,views,gate_views
+clintox,fuse_gated_nograph,0.8432143955581455,0.637802996296712,859011,859011,17,gated,cached,seq|desc,seq|desc
+bbbp,fuse_gated_nograph,0.939767377457768,0.9447122407245107,858754,858754,2,gated,cached,seq|desc,seq|desc

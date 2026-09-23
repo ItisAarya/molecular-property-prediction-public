@@ -8,21 +8,20 @@
 \usepackage[margin=2.5cm]{geometry}
 \usepackage{graphicx}
 \usepackage{booktabs}
-\usepackage{longtable}
 \usepackage{array}
 \usepackage{amsmath,amssymb}
 \usepackage{enumitem}
 \usepackage{microtype}
+\usepackage{float}
+\usepackage[skip=6pt]{caption}
 \usepackage[hidelinks]{hyperref}
-\usepackage{xcolor}
 
-\definecolor{codebg}{HTML}{F4F6F8}
 \newcommand{\code}[1]{\texttt{\small #1}}
 
 \setlist{itemsep=2pt,parsep=0pt,topsep=4pt}
 \renewcommand{\arraystretch}{1.15}
 
-\title{Graph Neural Network and Transformer Fusion for Molecular Property Prediction: What a Strict Evaluation Protocol Finds}
+\title{Graph Neural Network and Transformer Fusion for Molecular Property Prediction under a Strict Evaluation Protocol: Notation Leakage, Descriptor Baselines and Conformal Coverage}
 
 % Single author. Venue-neutral on purpose: no \affiliation or \orcid macro is used, because
 % those are defined by publisher classes and not by `article`. Swap this block for the
@@ -34,765 +33,825 @@
   \normalsize \href{mailto:aarya007india@gmail.com}{aarya007india@gmail.com} \\
   \normalsize ORCID: \href{https://orcid.org/0009-0003-4765-9849}{0009-0003-4765-9849}%
 }
-\date{\today}
+\date{}
 
 \begin{document}
 \maketitle
 
+\begin{abstract}
 
+Multi-view models that fuse a molecular graph, a SMILES language model and computed descriptors are proposed faster than they are independently evaluated. We evaluated a five-rung fusion ladder, two external baselines and an earlier multi-model pipeline on eight MoleculeNet datasets under one protocol: a canonical and five seeded scaffold splits, paired comparisons, Holm correction, across-dataset sign and Wilcoxon tests, and one fixed hyper-parameter setting. The protocol surfaced a label leak: in ClinTox and BBBP the notation of the SMILES string (aromatic or Kekulé) predicts the label, with AUC 1.000 for ClinTox toxicity. Only sequence models can read it. Canonicalising the strings lowered a frozen ChemBERTa model from 0.988 to 0.795 AUC on ClinTox and our three-view fusion model from 0.968 to 0.851. With the leak removed, the fusion model's advantage over a two-layer graph network was no longer significant across datasets (favoured on 7 of 8, p $\geq$ 0.070), no fusion variant outperformed a fingerprint-plus-descriptor MLP, and the gated and bilinear variants were worse than it on 7 of 8 datasets (Wilcoxon p = 0.023). Under marginal split conformal prediction on Tox21, three of fifteen models covered only 10--14\% of active compounds; retraining the descriptor MLP without class weighting reproduced that failure (77.9\% to 16.3\%) at unchanged AUC. Deterministic APS and RAPS collapsed at two classes; their randomised forms did not. A change of accelerator, like a change of seed, moved about a quarter of single-split results by more than our practical threshold. All code and per-split metrics are public.
 
-
-\section{Abstract}
-
-Multi-view molecular property prediction --- combining a molecular graph, a SMILES language model and physicochemical descriptors --- is an active area in which new fusion architectures are proposed faster than they are independently checked. We contribute an evaluation protocol strong enough to separate a real gain from a favourable split, and four results obtained by applying it: a large parameter reduction that costs nothing, a free diagnostic for a known uncertainty failure, a proof that a standard calibration step is inert, and a reproducibility requirement that is cheap to adopt.
-
-\textbf{A 71$\times$ smaller fusion block performs identically.} Across eight MoleculeNet datasets and six scaffold splits, a \textbf{16,513-parameter} per-molecule gate matches a \textbf{1,169,793-parameter} cross-attention-plus-bilinear block on every dataset once multiplicity is accounted for. Removing the graph view entirely from the gated model leaves accuracy unmoved (0 improves, 0 degrades; sign test p = 1.00) while training drops from 17 to 1.3 minutes per split, the model shrinks 2.4$\times$, and the graph-library dependency disappears. For deployment this is the operative finding: the cheap configuration is not a compromise.
-
-\textbf{Mean prediction-set size predicts conformal failure, and costs nothing to compute.} A nominal 90\% conformal guarantee covers \textbf{9.7--14.1\% of active compounds} for the three of fifteen models that emit near-singleton sets, and \textbf{71.1--79.8\%} for the other twelve, with nothing in between. The split is visible in mean set size alone --- no labels, no minority statistics --- so a practitioner can tell before deployment which models will fail the class they care about. Class-conditional conformal repairs it at a visible cost in set size. We corroborate the underlying failure, independently reported, and extend it from three model types to fifteen including two published external baselines.
-
-\textbf{Two results that save wasted effort.} Temperature scaling \emph{provably} cannot alter a binary conformal prediction set, so calibrating before conformalizing is a no-op in the binary case; and the adaptive set-valued scores commonly recommended (APS, RAPS) degenerate at two classes. Conformalized quantile regression is the only score we tested whose interval widths carry per-molecule information.
-
-\textbf{Record the accelerator.} A fully seeded pipeline run on a different GPU is a \emph{different model}, moving 18\% of single-split numbers by more than the effect size the field reports differences at. Five-split averaging absorbs it entirely --- the fix is free, and this is the result we think generalises furthest.
-
-The protocol earns these by being harsh, and we report what it costs us as well as what it buys. Our own fusion architecture does not beat a fingerprint-plus-descriptor MLP (4 of 8 datasets, p = 0.55); neither do two published external baselines beat a two-layer graph network. Sweeping the bilinear rank --- a constant chosen once and never examined --- leaves the mechanism's effect unchanged in direction at every rank while its across-dataset significance appears at one rank and vanishes at three, though the ranks are mutually indistinguishable. A multi-split, family-wise-corrected, eight-dataset result can still rest on an arbitrary architectural choice. Applied to our own earlier pipeline, the protocol surfaced six defects that each changed reported numbers, including a missing-label mask that fabricated 24\% of one benchmark's canonical test labels as negatives and a \textbf{0.22 AUC} gap between two procedures both called ``scaffold split''.
-
-All claims are reproducible from archived per-split predictions, and every headline number in this paper is machine-checked against them.
-
-
+\end{abstract}
 \section{Introduction}
+\label{sec:1}
 
-A molecule can be represented as a graph, as a string, or as a vector of computed physicochemical properties. Each representation is lossy in a different direction, which makes combining them an obvious idea and a recurring one: recent work proposes cross- attention to align views~\cite{zhang2024mvmrl}, Kronecker or bilinear products to model second-order interactions between them~\cite{jang2026krovex}, and gating to weight each view's contribution per molecule~\cite{zhang2026molvisgnn}.
+A molecule can be represented as a graph, as a SMILES string or as a vector of computed properties, and each representation discards different information. Combining them is therefore a recurring idea in molecular property prediction: recent work fuses graph and language-model features~\cite{prakash2023synfusion,lu2024multimodal,wang2024multimodal,zhou2025mmfrl,liu2026localglobal,zhang2026sograph}, aligns views with cross-attention~\cite{zhang2024mvmrl}, models second-order interactions between views with Kronecker or bilinear products~\cite{jang2026krovex}, and weights views per molecule with a learned gate, as in the interaction-prediction model of~\cite{zhang2026molvisgnn}.
 
-These proposals are typically evaluated on a handful of MoleculeNet~\cite{moleculenet2018} datasets under a single scaffold split, against baselines drawn from other papers. That evaluation cannot distinguish a real improvement from three other things: a favourable split, a baseline that was not tuned as hard, or a difference smaller than the benchmark's own run-to-run variation. Our starting point is that the last of these is larger than most papers assume.
+Such proposals are usually evaluated on a few MoleculeNet datasets~\cite{moleculenet2018} under a single scaffold split, against baselines taken from other papers. That design cannot separate a real improvement from a favourable split, a less-tuned baseline, or a difference smaller than run-to-run variation, and systematic studies have shown that simple fixed representations are often competitive once evaluation is controlled~\cite{deng2023systematic}. We therefore fixed the evaluation protocol first and then used it to test a fusion architecture and its components.
 
-We therefore built the evaluation first and the architecture second. The protocol (\S3) fixes the leaks and reporting choices we could find, and is deliberately harsh: it uses six splits, pairs every comparison within split, corrects for testing eight datasets at once, and reports the across-dataset test that the per-dataset table cannot substitute for. We then built a five-rung fusion ladder (\S5) so that ``fusion helps'' could be decomposed into \emph{which mechanism} helps, with a provably additive control at the bottom of the ladder.
-
-An instrument this strict is only worth building if it returns something a weaker one would miss. It does, and the returns are practical rather than architectural: a configuration that is 71$\times$ smaller in its fusion block and 13$\times$ faster to train at identical accuracy, a zero-cost diagnostic for which models will fail their minority class, a proof that one standard calibration step cannot help, and a one-line change to how results are reported that removes an 18\% error rate nobody was accounting for.
-
-\textbf{Contributions.}
+This paper reports what that protocol found. Its contributions are:
 
 \begin{enumerate}
-\item \textbf{An evaluation protocol} for MoleculeNet property prediction that is leak-free, multi-seed, multiplicity-corrected, and reports both split conventions (\S3), with the minimum detectable effect it implies stated up front: $\pm$0.02 AUC and $\pm$0.10 RMSE.
-\item \textbf{A large, free efficiency gain.} A 16,513-parameter gate matches a 1,169,793-parameter fusion block on all eight datasets, and the graph view can be removed outright for a 13$\times$ training speed-up and no measurable accuracy cost (\S5.3, \S5.4).
-\item \textbf{Mean prediction-set size as a deployment-time diagnostic} for conformal minority failure, measured across fifteen models and separating them with no overlap --- computable without labels (\S6.2).
-\item \textbf{Two results that prevent wasted effort}: temperature scaling provably cannot alter a binary conformal set (\S6.3), and APS/RAPS degenerate at two classes (\S6.4).
-\item \textbf{A reproducibility requirement with a free fix}: identical code, seed and splits on a different accelerator produce materially different single-split numbers, and five-split averaging absorbs it entirely (\S7).
-\item \textbf{A protocol validation}: applied to our own earlier pipeline, it surfaced six defects that each changed reported numbers (\S4); applied to our own new architecture, it withheld the result we wanted (\S5.6).
-\item \textbf{Practical recommendations} distilled from the above for anyone reporting on these benchmarks (\S8), and a dataset-quality audit of duplicate-conflicting labels in three of the eight benchmarks (\S9).
+\item \textbf{An evaluation protocol} for MoleculeNet property prediction that uses a canonical and five seeded scaffold splits, paired comparisons, Holm correction, across-dataset tests, an equivalence test, and one fixed hyper-parameter setting (Section~\ref{sec:3}).
+\item \textbf{A label leak through SMILES notation} in ClinTox and BBBP that inflates sequence and fusion models by up to 0.19 AUC, with an audit that detects it and a correction that removes it (Section~\ref{sec:4.1}).
+\item \textbf{A controlled case study of multi-view fusion.} With the leak removed, no fusion rung outperforms a fingerprint-plus-descriptor MLP and the advantage over a graph baseline is no longer significant across datasets (Section~\ref{sec:5}).
+\item \textbf{Conformal prediction results for imbalanced endpoints}: minority-class coverage failure traced to class weighting with a control experiment, randomised versus deterministic adaptive sets at two classes, and coverage as a function of distance to the training set (Section~\ref{sec:6}).
+\item \textbf{A measurement of device and seed variance} in these benchmarks' own units (Section~\ref{sec:7}), with practical recommendations (Section~\ref{sec:8}).
 \end{enumerate}
 
+\section{Related work}
+\label{sec:2}
 
-\section{Related work and what we take from it}
+\textbf{Evaluation of molecular property prediction.} MoleculeNet~\cite{moleculenet2018} standardised datasets and scaffold splits. Deng et al.~\cite{deng2023systematic} showed, across many representations and repeated splits, that fixed descriptors and fingerprints often match learned representations, that statistical testing changes conclusions, and that label quality and splitting choices matter. Guo et al.~\cite{guo2024scaffold} showed that scaffold splits can still overestimate performance on genuinely novel chemistry, and activity cliffs remain a known failure mode~\cite{vantilborg2022cliffs,qiao2025scage}. Dem{\v{s}}ar~\cite{demsar2006} set out non-parametric tests for comparing learners over multiple datasets.
 
-\begin{center}
+\textbf{Multi-view fusion.} Graph neural networks~\cite{xu2019gin,hu2020pretrain,xiong2020attentivefp,yang2019chemprop,heid2024chemprop} and chemical language models~\cite{chithrananda2020chemberta} have been combined by concatenation, attention and contrastive alignment~\cite{prakash2023synfusion,lu2024multimodal,wang2024multimodal,zhou2025mmfrl,liu2026localglobal,zhang2026sograph,zhang2024mvmrl}. KROVEX~\cite{jang2026krovex} fuses graph embeddings with statistically selected descriptors through a Kronecker product, and motif-level models such as AMCT~\cite{yu2026amct} argue that substructure interactions matter. Table~\ref{tab:1} lists the mechanisms we took from this work and how we implemented them. We implement mechanisms rather than complete published systems.
+
+\textbf{Uncertainty quantification.} Calibration by temperature or Platt scaling~\cite{guo2017calibration,platt2000probabilities} and distribution-free conformal prediction~\cite{vovk2022alrw,angelopoulos2023gentle} are both used in cheminformatics~\cite{norinder2014conformal,cortesciriano2020conformal,hirschfeld2020uq}. Class-conditional (Mondrian) conformal prediction is the established remedy for imbalanced bioactivity data~\cite{norinder2017imbalanced,sun2017mondrian}, and Tursunbadalov and Tursunbadalov~\cite{tursunbadalov2026quiet} recently quantified how badly marginal conformal prediction under-covers the minority class in MoleculeNet. Covariate shift between calibration and test molecules breaks the exchangeability conformal guarantees rely on~\cite{laghuvarapu2023codrug}. Adaptive prediction sets are defined with a randomisation term~\cite{romano2020aps,angelopoulos2021raps}, and conformalised quantile regression gives adaptive intervals~\cite{romano2019cqr}.
+
+\textbf{Reproducibility.} Run-to-run variation in neural-network training arises from nondeterminism amplified by optimisation instability~\cite{summers2021nondeterminism}, from GPU-level randomness~\cite{eryilmaz2024randomness} and from floating-point non-associativity~\cite{shanmugavelu2024floating}.
+
+\begin{table}[H]
+\centering
 \small
+\caption{Mechanisms taken from prior work and how they were implemented here.}
+\label{tab:1}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lll}
 \toprule
-Source idea & What we implement & Where it lands \\
+Source idea & Implementation in this work & Where evaluated \\
 \midrule
-Kronecker / bilinear fusion for second-order interactions~\cite{jang2026krovex} & Low-rank bilinear block between every view pair, rank 64 & \code{bilinear} rung; \code{proposed} \\
-Dual cross-attention over SMILES / graph / fingerprint~\cite{zhang2024mvmrl} & Views as tokens, 2 cross-attention layers, 4 heads & \code{xattn} rung; \code{proposed} \\
-Per-molecule gating for interpretable view attribution~\cite{zhang2026molvisgnn} & Softmax gate over views & \code{gated} rung; \code{proposed}; \S5.4 \\
-Atom + motif level interaction~\cite{yu2026amct} & Bond features in message passing (GINE); an explicit fragment view, probed rather than built & \code{gine} view; \S5.7 \\
-Conformation-aware models~\cite{qiao2025scage} and activity cliffs~\cite{vantilborg2022cliffs} & Cliff-stratified error analysis & \S6.7 \\
-Calibration~\cite{guo2017calibration} and distribution-free UQ~\cite{vovk2022alrw,angelopoulos2023gentle} & Out-of-fold calibration; split conformal & \S6 \\
+Kronecker or bilinear fusion of graph and descriptor features~\cite{jang2026krovex} & Low-rank (rank 64) bilinear product for every pair of views, without descriptor selection & \code{bilinear} rung; \code{proposed}; Section~\ref{sec:5.6} \\
+Dual cross-attention over SMILES, graph and fingerprint~\cite{zhang2024mvmrl} & Self-attention over the three view embeddings as tokens (2 layers, 4 heads) & \code{xattn} rung; \code{proposed} \\
+Per-molecule gating of modalities~\cite{zhang2026molvisgnn} & Softmax gate over the three view embeddings & \code{gated} rung; \code{proposed}; Section~\ref{sec:5.4} \\
+Atom- and motif-level interactions~\cite{yu2026amct} & Bond features in message passing (GINE); a motif probe instead of a motif encoder & \code{gine} view; Section~\ref{sec:5.7} \\
+Activity cliffs as a failure mode~\cite{vantilborg2022cliffs,qiao2025scage} & Error analysis stratified by cliff membership & Section~\ref{sec:6.7} \\
+Calibration and conformal prediction~\cite{guo2017calibration,vovk2022alrw,angelopoulos2023gentle} & Post-hoc calibration maps; split conformal prediction & Section~\ref{sec:6} \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-We deliberately do not attempt large-scale self-supervised pretraining, 3D-equivariant architectures, or quantum-chemical descriptor generation. We \emph{use} a pretrained SMILES encoder~\cite{chithrananda2020chemberta}; we do not pretrain one.
-
-We note for transparency that this paper's framing followed its measurements rather than preceding them: the original plan named the fusion architecture as the primary contribution, the ladder did not support that, and the efficiency and uncertainty results reported here are what the same experiments returned instead. The project record preserves the superseded claim rather than editing it away, which is the strongest evidence we can offer that the protocol was not tuned until it agreed with us.
-
-
-\section{The evaluation protocol}
+\section{Methods}
+\label{sec:3}
 
 \subsection{Datasets}
+\label{sec:3.1}
 
-Eight MoleculeNet~\cite{moleculenet2018} datasets: Tox21 (12 tasks), BBBP (1), ClinTox (2), BACE (1) and SIDER (27) for classification; ESOL~\cite{delaney2004esol} (logS), Lipophilicity (logD) and FreeSolv~\cite{mobley2014freesolv} (kcal$\cdot$mol\textsuperscript{-1}) for regression.
+We used eight MoleculeNet~\cite{moleculenet2018} datasets as served by DeepChem 2.8.0~\cite{deepchem2019} (Table~\ref{tab:2}): Tox21~\cite{huang2016tox21}, BBBP~\cite{martins2012bbbp}, ClinTox~\cite{gayvert2016clintox}, BACE~\cite{subramanian2016bace} and SIDER~\cite{kuhn2016sider} for classification, and ESOL~\cite{delaney2004esol}, Lipophilicity (AstraZeneca's ChEMBL deposition~\cite{gaulton2017chembl}) and FreeSolv~\cite{mobley2014freesolv} for regression. FreeSolv was loaded with DeepChem's SAMPL loader, because the FreeSolv loader serves an already standardised target and would report RMSE in no physical unit. Tox21 is sparsely measured: 15.3\% of training labels and 23.9\% of test labels on the canonical split are missing, and missing labels are masked out of every loss and metric. HIV was not included; eight datasets give an across-dataset sign-test floor of p = 0.0078, and HIV's size would have multiplied the compute of the full protocol.
 
-We dropped HIV from the core protocol. Statistical power across datasets comes from their \emph{number}, not their size: eight datasets put the two-sided signed-rank floor at p = 0.0078, which is sufficient, whereas HIV would have cost roughly 60 GPU-hours for the full protocol without lowering it.
+\begin{table}[H]
+\centering
+\small
+\caption{Datasets. Positive rate is the fraction of measured labels that are positive (range over tasks where there are several). Kekulé share is the fraction of aromatic molecules whose SMILES is written without lower-case aromatic atoms (Section~\ref{sec:4.1}).}
+\label{tab:2}
+\begin{tabular}{llllll}
+\toprule
+Dataset & Molecules & Tasks & Type & Positive rate & Kekulé share \\
+\midrule
+Tox21 & 7,823 & 12 & classification & 2.9--16.2\% & 0.0\% \\
+BBBP & 2,039 & 1 & classification & 76.5\% & 52.1\% \\
+ClinTox & 1,480 & 2 & classification & 7.6--93.6\% & 8.7\% \\
+BACE & 1,513 & 1 & classification & 45.7\% & 0.1\% \\
+SIDER & 1,427 & 27 & classification & 1.5--92.4\% & 100.0\% \\
+ESOL & 1,128 & 1 & regression (logS) & --- & 0.0\% \\
+Lipophilicity & 4,200 & 1 & regression (logD) & --- & 0.2\% \\
+FreeSolv & 642 & 1 & regression (kcal$\cdot$mol\textsuperscript{-1}) & --- & 0.0\% \\
+\bottomrule
+\end{tabular}
+\end{table}
 
-FreeSolv must be loaded from the SAMPL source. The commonly used convenience loader serves an already z-scored target; using it silently reports RMSE in no physical unit.
+\subsection{Models}
+\label{sec:3.2}
 
-\subsection{Splits: report both, always}
+\textbf{Single views.} Each view is projected to a common 256-dimensional embedding and followed by an identical two-layer head (256 hidden units, dropout 0.2), so that single-view comparisons differ only in representation.
 
-We report \textbf{both} the canonical DeepChem~\cite{deepchem2019} scaffold split and the mean $\pm$ 95\% CI over five seeded random scaffold splits. These differ by \textbf{up to 0.22 AUC on the same model and the same code} (BBBP, graph baseline: 0.6764 canonical against 0.8959 $\pm$ seeded; the largest gap among the pipeline models, with several others above 0.15). Reporting one is reporting a choice, and which one flatters a given model is not predictable in advance.
+\begin{itemize}
+\item \emph{Graph:} a two-layer GIN~\cite{xu2019gin} from our earlier pipeline (\code{gin\_ref}, 207,360 encoder parameters), and a four-layer edge-aware GINE encoder~\cite{hu2020pretrain} with residual connections and mean-plus-sum readout (\code{gine}, 1,070,852). Atoms carry 34 features and bonds 7, computed with RDKit 2025.03.5~\cite{rdkit}.
+\item \emph{Sequence:} the frozen ChemBERTa checkpoint \code{seyonec/ChemBERTa-zinc-base-v1}~\cite{chithrananda2020chemberta} with CLS and masked-mean pooling over at most 128 tokens (\code{seq\_frozen}), and the same model with LoRA adapters (rank 8, $\alpha$ 16)~\cite{hu2022lora} (\code{lora}).
+\item \emph{Descriptors:} a 1,024-bit Morgan fingerprint of radius 2~\cite{rogers2010ecfp} concatenated with 217 RDKit 2-D descriptors, fed to a two-layer MLP with batch normalisation (\code{desc}). Descriptors are median-imputed, standardised and clipped using training-split statistics only.
+\end{itemize}
 
-The disagreement is not symmetric, and the asymmetry matters more than the spread. Across the \textbf{37} (model, dataset) pairs for which we have both conventions on a classification dataset, the seeded mean is higher than the canonical split on \textbf{33}, with a median difference of \textbf{+0.068 AUC} and \textbf{30} of 37 pairs separated by more than our minimum detectable effect (Figure 4). The canonical DeepChem split is systematically the harder of the two. A paper reporting it and a paper reporting seeded scaffold splits are therefore not comparable even when both say ``scaffold split'', and the direction of the incomparability is predictable: canonical-split numbers will look worse.
+\textbf{Fusion.} The fusion models use the GINE, frozen-ChemBERTa and descriptor views. The five fusion rungs are described in Section~\ref{sec:5.2}.
 
-All splits are audited for scaffold leakage (0.0\% in both validation and test) and for train/test index overlap (zero).
+\textbf{External baselines.} AttentiveFP~\cite{xiong2020attentivefp} (four layers, two timesteps) was wrapped as a graph encoder and trained under our protocol, with the same projection, head, loss and hyper-parameters. Chemprop 2~\cite{heid2024chemprop,yang2019chemprop} was run through its own command-line interface on our splits, with its own featurisation, target scaling, learning-rate schedule and early stopping, for 50 epochs and without class weighting. Chemprop is therefore a comparison of complete methods, not of architectures under one recipe.
 
-\begin{center}
-\includegraphics[width=0.86\textwidth]{figures/fig4_canonical_vs_seeded.pdf}
-\end{center}
+\textbf{Earlier pipeline.} Our earlier pipeline contains a random forest on ECFP (\code{rf}), a GNN (\code{gnn}), a frozen-ChemBERTa head (\code{trf}), a stacking meta-learner fitted on out-of-fold predictions (\code{hybrid}) and a weighted ensemble (\code{ens}). It was run on five of the eight datasets.
 
-\textbf{Figure 4.} Each point is one (model, dataset) pair on a classification benchmark. Points above the diagonal are those the canonical split scores lower than the mean of five seeded scaffold splits. Generated by \code{python -m scripts.make\_figures}.
+\subsection{Splits}
+\label{sec:3.3}
 
-\subsection{Fitting discipline}
+We report two scaffold-split conventions. The \emph{canonical} split is DeepChem's deterministic scaffold split (80/10/10), which assigns the largest Bemis--Murcko scaffold groups~\cite{bemis1996frameworks} to training and the rarest to test; all acyclic molecules share one empty-scaffold group. The \emph{seeded} splits (seeds 0--4) use a balanced random scaffold split: groups larger than half the validation or test quota go to training, the remaining groups are shuffled and dealt into 80/10/10, and each acyclic molecule forms its own group. No scaffold is shared between training and test in any split. On seeded splits 1 and 2 one SIDER task has no positive test molecule and is not scored.
 
-\code{train} fits models. A \code{fit}/\code{cal} sub-split carved from train --- or out-of-fold predictions over train --- fits everything downstream: the meta-learner, the ensemble weights, the calibrators, the decision thresholds. \code{valid} is used for early stopping and hyper-parameter choice only. \code{test} is touched once.
+\subsection{Training and fitting discipline}
+\label{sec:3.4}
 
-\subsection{Comparisons: three levels, reported together}
+Every neural model was trained with Adam (learning rate 10\textsuperscript{-3}, weight decay 10\textsuperscript{-4}, batch size 128) for at most 100 epochs, with early stopping on validation AUC or RMSE (patience 15), restoring the best epoch. Classification losses are masked binary cross-entropy with per-task positive-class weights computed from the training labels; regression uses masked mean squared error on standardised targets, and all regression metrics are reported in chemical units. All models use one initialisation seed (42); the five seeded splits vary the data partition, not the initialisation. The setting is recorded in \code{configs/shared.yaml}, and a check fails if it drifts from the trainers' defaults. No architecture, including ours, was tuned; an Optuna~\cite{akiba2019optuna} study was implemented but not run, because tuning one arm of a comparison against fixed-setting baselines would confound architecture with search budget.
 
-Splits differ in difficulty far more than models differ from each other, so every comparison is \textbf{paired within split}. We then report three things, because they answer different questions and do not always agree:
+In the earlier pipeline the meta-learner, ensemble weights and decision thresholds are fitted on out-of-fold predictions over the training split. The validation split is used for early stopping and, in Section~\ref{sec:6}, as the calibration set; the test split is evaluated once.
+
+\subsection{Statistical comparisons}
+\label{sec:3.5}
+
+Splits differ in difficulty more than models differ from each other, so every comparison is paired within split and reported at three levels.
 
 \begin{enumerate}
-\item \textbf{Per-dataset}: is the mean paired difference larger than its own 95\% interval?
-\item \textbf{Per-dataset, Holm--Bonferroni corrected}~\cite{holm1979} across the eight datasets. Eight tests at $\alpha$ = 0.05 produce at least one false positive 34\% of the time, and several conclusions in this area rest on exactly one decisive dataset out of eight.
-\item \textbf{Across datasets}: one test over eight paired observations, reported as a sign test, a Wilcoxon signed-rank test on Cohen's \emph{dz}, and a Wilcoxon on raw differences. The last of these ranks an AUC point against a logS point, which is not a commensurable comparison~\cite{demsar2006}; we report it because it is what is usually done, and we report the other two because it is not sufficient.
+\item \emph{Per dataset:} a paired t-test over the five seeded splits. With five splits a Wilcoxon test cannot reach p < 0.05, so the t-test is used, with its normality assumption.
+\item \emph{Per dataset, corrected:} Holm--Bonferroni correction~\cite{holm1979} across the datasets in the comparison.
+\item \emph{Across datasets:} one test over the per-dataset mean differences, reported as a sign test, a Wilcoxon signed-rank test~\cite{wilcoxon1945} on Cohen's \emph{dz} (unit-free) and a Wilcoxon test on raw differences. The raw version ranks AUC differences against RMSE differences and is reported only for comparability with common practice~\cite{demsar2006}.
 \end{enumerate}
 
-With n = 5 splits the per-dataset Wilcoxon cannot go below p = 0.0625, so a clean 5--0 sweep is not significance; we use the paired difference's own interval instead and say so.
+With eight datasets the sign test cannot go below p = 0.0078, and a 7--1 result gives p = 0.070; with six datasets the floor is p = 0.031. Where a model's ClinTox and BBBP results are excluded (Section~\ref{sec:4.1}), its comparisons run over the remaining six datasets and are marked \emph{n} = 6. We ran several dozen across-dataset comparisons and did not correct across them, and the framing of this paper followed the results rather than a pre-registered hypothesis. The across-dataset p-values should therefore be read as exploratory. To claim that two models perform the same, we use an equivalence test (two one-sided tests~\cite{schuirmann1987tost}): the 90\% confidence interval of the paired difference must lie within the practical threshold of Section~\ref{sec:3.6}.
 
-\subsection{Minimum detectable effect}
+\subsection{Practical threshold}
+\label{sec:3.6}
 
-Measured from the baseline's across-seed intervals: \textbf{$\pm$0.02 AUC, $\pm$0.10 RMSE}. A difference smaller than this is inside the benchmark's own noise and we do not call it a result, even when it is statistically clear.
+We treat differences smaller than 0.02 AUC or 0.10 RMSE as too small to matter. These values were set from the across-split confidence intervals of the baseline models in our earlier pipeline, before the fusion experiments, so they are an empirical noise threshold rather than a power-based minimum detectable effect. A single RMSE threshold is applied across logS, logD and kcal$\cdot$mol\textsuperscript{-1}, which treats a 0.10 error equally in all three units.
 
-\subsection{One hyper-parameter setting}
+\subsection{Uncertainty quantification}
+\label{sec:3.7}
 
-Every model is trained under a single fixed hyper-parameter setting, recorded in \code{configs/shared.yaml} and asserted against the trainers' actual defaults by a check that fails when they drift. This makes the comparisons fair and leaves absolute numbers untuned; we consider that the right trade and state it as a limitation (\S10). No architecture in this paper has been tuned, including ours.
+\textbf{Calibration.} For each classification model and task we fitted identity, temperature and Platt maps on the validation split and kept the one with the lowest validation expected calibration error (ECE, 15 equal-count bins, confidence of the predicted class). Our Platt map is fitted with balanced class weights, which shifts probabilities toward the minority class; we report it as implemented. Test ECE with and without the map was compared over the five seeded splits by the interval of the paired difference.
 
+\textbf{Conformal prediction.} We used split conformal prediction~\cite{vovk2022alrw,angelopoulos2023gentle} at $\alpha$ = 0.1, with the validation split as the calibration set and the finite-sample quantile. For classification the default score is LAC (1 $-$ p of the class)~\cite{sadinle2019lac}, applied to each task separately. Coverage, per-class coverage and mean set size are averaged over tasks and then over the five seeded splits. Class-conditional (Mondrian) prediction fits one quantile per class. APS~\cite{romano2020aps} and RAPS ($\lambda$ = 0.1, k\_reg = 1)~\cite{angelopoulos2021raps} were evaluated both in their randomised form and deterministically. For regression we compared the absolute residual, the residual normalised by the disagreement of the earlier pipeline's base models, and conformalised quantile regression (CQR)~\cite{romano2019cqr} on a quantile version of the descriptor MLP. Because the calibration set is also the early-stopping set, the calibration scores are slightly optimistic, which biases test coverage downward.
 
-\section{Protocol validation: six defects it surfaces}
+\subsection{Hardware and software}
+\label{sec:3.8}
 
-We re-ran our own earlier multi-model pipeline under the protocol above. Six defects each changed reported numbers.
+Models were trained with PyTorch 2.3.1~\cite{paszke2019pytorch}, PyTorch Geometric 2.6.1~\cite{fey2019pyg}, Transformers 4.43.4~\cite{wolf2020transformers}, PEFT 0.12.0~\cite{mangrulkar2022peft} and scikit-learn 1.4.2~\cite{pedregosa2011sklearn}. The single views \code{gin\_ref}, \code{gine} and \code{desc}, the cached fusion ladder, the no-graph ablation and all canonical-SMILES re-runs were trained on an Intel Core i7-9750H CPU. LoRA, the frozen ChemBERTa view, AttentiveFP, Chemprop, the T4 copies of the cached ladder (suffix \code{\_gpu}), the rank sweep and the end-to-end ladder were trained on an NVIDIA T4 GPU in Google Colab. Comparisons between the two groups are cross-device; Section~\ref{sec:7} measures what that costs.
 
-\begin{enumerate}
-\item \textbf{A dropped missing-label mask.} Tox21 is sparsely measured. The mask marking unmeasured (compound, assay) pairs was not propagated, so unmeasured entries were trained and scored as negatives --- \textbf{23.9\% of the canonical test labels}.
-\item \textbf{Regression metrics in z-scored units}, so errors were unitless rather than in logS or kcal$\cdot$mol\textsuperscript{-1}.
-\item \textbf{Model selection on test.}
-\item \textbf{Four fitted stages on one validation split} --- meta-learner, ensemble weights, calibrators, thresholds --- with the improvement then reported on that same split.
-\item \textbf{A ``frozen'' encoder running with dropout active}, and computed bond features discarded before message passing.
-\item \textbf{No seeding} outside one component, making every reported neural number a single unreproducible draw.
-\end{enumerate}
+\section{Data and protocol audits}
+\label{sec:4}
 
-Re-running under the fixed protocol moves the numbers substantially and in both directions; Table 1 reports the corrected baseline. Two representative rows: Tox21 goes from 0.7514 AUC on the canonical split to 0.8223 $\pm$ 0.0239 across seeded splits, and ESOL from 1.1463 to 0.9778 $\pm$ 0.0984 logS.
+\subsection{SMILES notation predicts the label in ClinTox and BBBP}
+\label{sec:4.1}
 
-We also found and fixed two defects in \textbf{our own} evaluation before trusting it: a significance rule that tested the mean difference against the \emph{reference model's} spread rather than the paired difference's own (producing contradictory verdicts --- a 0--5 loss at p = 0.018 called ``inside noise'' while a weaker p = 0.027 was called a degradation), and a head-width confound in which the prediction head was sized from each encoder's output width, so a sequence view trained a 2.36M-parameter head against a 147k-parameter adapter. Every Phase 1 result was re-measured after the second fix.
+A molecule with an aromatic ring can be written with lower-case aromatic atoms or in Kekulé form. Graph, fingerprint and descriptor featurisers parse both into the same molecule; a language model reads the characters. We audited, for every dataset, whether the notation of aromatic molecules predicts the label (\code{scripts/audit\_notation.py}).
 
+In six datasets one notation is used throughout (Kekulé share 0.0--0.2\% or 100\%), so notation carries no label information. ClinTox was assembled from two source lists: approved drugs, written in aromatic form, and drugs that failed clinical trials for toxicity, written in Kekulé form. Among its 1,105 aromatic molecules the single notation bit predicts CT\_TOX with AUC 1.000 and FDA\_APPROVED with AUC 0.995. BBBP mixes both conventions (52.1\% Kekulé), and the bit predicts permeability with AUC 0.827.
+
+To measure the effect we re-ran every CPU-trained model that reads SMILES on ClinTox and BBBP with RDKit-canonical strings, changing nothing else (Table~\ref{tab:3}). Canonicalisation lowered the frozen ChemBERTa view by 0.193 AUC on ClinTox and 0.076 on BBBP, and each fusion model by 0.041 to 0.150 AUC. The graph and descriptor views are unaffected by construction. On ClinTox every canonicalised fusion model scores below the two-layer GIN (0.820--0.863 against 0.897); on BBBP they land within 0.013 of it (0.893--0.910 against 0.906).
+
+\begin{table}[H]
+\centering
+\small
+\caption{Test AUC with raw and RDKit-canonical SMILES (mean of five seeded splits; paired t-test over splits). \code{seq only} is the frozen ChemBERTa view trained from cached embeddings.}
+\label{tab:3}
+\begin{tabular}{llllll}
+\toprule
+Dataset & Model & Raw SMILES & Canonical SMILES & Change & p \\
+\midrule
+ClinTox & seq only (frozen ChemBERTa) & 0.988 & 0.795 & -0.193 & 0.003 \\
+ClinTox & \code{gated}, no graph & 0.983 & 0.840 & -0.144 & 0.062 \\
+ClinTox & \code{concat} & 0.968 & 0.863 & -0.104 & 0.106 \\
+ClinTox & \code{gated} & 0.985 & 0.851 & -0.134 & 0.011 \\
+ClinTox & \code{xattn} & 0.964 & 0.837 & -0.127 & 0.016 \\
+ClinTox & \code{bilinear} & 0.970 & 0.820 & -0.150 & 0.022 \\
+ClinTox & \code{proposed} & 0.968 & 0.851 & -0.117 & 0.007 \\
+ClinTox & \code{gin\_ref}, reads no SMILES & 0.897 & 0.897 & --- & --- \\
+ClinTox & \code{desc}, reads no SMILES & 0.841 & 0.841 & --- & --- \\
+BBBP & seq only (frozen ChemBERTa) & 0.947 & 0.871 & -0.076 & 0.002 \\
+BBBP & \code{gated}, no graph & 0.951 & 0.910 & -0.041 & 0.007 \\
+BBBP & \code{concat} & 0.944 & 0.893 & -0.051 & 0.024 \\
+BBBP & \code{gated} & 0.954 & 0.894 & -0.060 & 0.014 \\
+BBBP & \code{xattn} & 0.946 & 0.895 & -0.051 & 0.004 \\
+BBBP & \code{bilinear} & 0.950 & 0.902 & -0.047 & 0.007 \\
+BBBP & \code{proposed} & 0.953 & 0.907 & -0.046 & 0.017 \\
+BBBP & \code{gin\_ref}, reads no SMILES & 0.906 & 0.906 & --- & --- \\
+BBBP & \code{desc}, reads no SMILES & 0.907 & 0.907 & --- & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The corrected pipeline canonicalises SMILES for ClinTox and BBBP everywhere a sequence model reads them (\code{src/data/smiles.py}), and all CPU fusion results in this paper use canonical strings on those two datasets. The GPU-trained sequence models (the frozen and LoRA ChemBERTa views, the T4 ladder, the rank sweep and the end-to-end ladder) and the earlier pipeline's \code{trf}, \code{hybrid} and \code{ens} were not re-run. Their ClinTox and BBBP results are excluded, and their comparisons use the remaining six datasets.
+
+\subsection{Duplicate molecules with conflicting labels}
+\label{sec:4.2}
+
+Canonicalising the SMILES of each dataset reveals duplicates that raw strings hide (Table~\ref{tab:4}); five datasets have none. In BBBP, 10 of 60 duplicate groups carry contradictory labels. Aspirin, for example, appears twice, once labelled permeable and once not. All 19 ClinTox duplicate groups conflict, but they are the source-list artefact of Section~\ref{sec:4.1}: one drug entered once as approved (aromatic notation) and once as failed (Kekulé notation). Duplicate and contradictory labels in MoleculeNet were also reported by Deng et al.~\cite{deng2023systematic}.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Duplicate molecules after canonicalisation, and duplicate groups whose copies fall in different parts of a split.}
+\label{tab:4}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llllll}
+\toprule
+Dataset & Rows & Unique molecules & Duplicate groups & Conflicting groups & Groups crossing splits (canonical / seeded 0--4) \\
+\midrule
+BBBP & 2,039 & 1,975 & 60 & 10 & 0 / 1, 1, 2, 1, 2 \\
+ClinTox & 1,480 & 1,461 & 19 & 19 & 0 / 0, 0, 0, 0, 0 \\
+ESOL & 1,128 & 1,117 & 11 & 6 & 0 / 1, 1, 0, 0, 1 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+On the canonical split no duplicate crosses train, validation and test, because DeepChem groups all acyclic molecules together. The seeded splits treat each acyclic molecule as its own group, so small acyclic duplicates can land on both sides: chloroform, dichloromethane, divinyl ether and 2-chloro-1,1,1-trifluoroethane in BBBP, and a hexitol recorded with two different solubilities in ESOL. This is a small leak (at most two molecules per split) that we report rather than correct, because changing the split would invalidate every archived result.
+
+\subsection{Two scaffold-split conventions}
+\label{sec:4.3}
+
+The canonical and seeded conventions are both called ``scaffold split'' but give different numbers. Over all 113 (model, classification dataset) pairs with results under both conventions, the seeded mean exceeded the canonical split in 101 cases (median difference +0.046 AUC, maximum 0.223), and 93 pairs differed by more than 0.02 AUC (Figure~\ref{fig:1}). The canonical split is systematically harder, as expected from assigning the rarest scaffolds to test. Numbers from the two conventions are not comparable, and a paper should state which one it uses.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figures/fig1_canonical_vs_seeded.pdf}
+\caption{Test AUC on the canonical DeepChem scaffold split against the mean of five seeded scaffold splits, for every (model, classification dataset) pair with both. Points above the diagonal scored lower on the canonical split. Results that read raw SMILES on ClinTox or BBBP are excluded.}
+\label{fig:1}
+\end{figure}
+
+\subsection{Defects found in the earlier pipeline}
+\label{sec:4.4}
+
+Before any fusion experiment we re-ran our earlier pipeline under this protocol and found seven defects, each of which changed reported numbers: (1) Tox21's missing-label mask was not propagated, so unmeasured labels (23.9\% of the canonical test labels) were trained and scored as negatives; (2) regression errors were reported in standardised rather than chemical units; (3) the final model was selected on the test split; (4) the meta-learner, ensemble weights, calibrators and thresholds were all fitted on the validation split and evaluated there; (5) the frozen ChemBERTa encoder ran with dropout active; (6) computed bond features were discarded before message passing; and (7) only the random forest was seeded. We also corrected two defects in our own evaluation code: a significance rule that compared a paired difference with the reference model's spread instead of the difference's own interval, and prediction heads sized from each encoder's output width, which gave the sequence view a 2.36-million-parameter head. Table~\ref{tab:5} and Table~\ref{tab:6} report the corrected models.
 
 \section{Case study: the multi-view fusion ladder}
+\label{sec:5}
 
-\subsection{Views}
-
-Five single-view baselines, each projected to a common 256-dimensional width before an identically sized head, so that comparisons differ in representation and nothing else: the 2-layer GIN~\cite{xu2019gin} from our earlier pipeline (\code{gin\_ref}); an edge-aware GINE encoder~\cite{hu2020pretrain}; a frozen SMILES transformer~\cite{chithrananda2020chemberta} (CLS $\oplus$ mean pooling); the same transformer with LoRA adapters~\cite{hu2022lora}; and an ECFP~\cite{rogers2010ecfp} $\oplus$ 217 RDKit~\cite{rdkit} 2-D descriptor MLP.
-
-\textbf{No single view replaces the baseline graph encoder.} After correction, \code{gine} improves on 0 of 8 datasets at five times the parameters; the descriptor MLP on 0 of 8; the sequence views on 1 while degrading on 1.
-
-Two findings survive:
-
-\begin{itemize}
-\item \textbf{LoRA helps only where the frozen encoder was weak.} Against a \emph{matched frozen control} it improves on ESOL (p = 0.0071 after correction) and nowhere else, and both of its uncorrected wins are regression datasets. Without that control, its 0.9888 AUC on ClinTox would have read as evidence for fine-tuning when it is attributable to pooling and pretraining. This is the only per-dataset finding anywhere in this work that survives family-wise correction.
-\item \textbf{Leading by mean is not winning.} The descriptor view leads 6 of 8 datasets by mean and is decisive on none. Three of those leads are datasets where the descriptors encode the target's own physics: the classical ESOL solubility equation~\cite{delaney2004esol} is a linear function of four descriptors, three of which --- the octanol--water partition coefficient, molecular weight and rotatable-bond count --- are in this set, and topological polar surface area alone correlates with hydration free energy at r = $-$0.736 (r\textsuperscript{2} = 0.542) on FreeSolv.
-\end{itemize}
-
-The views are strongly complementary, which is the premise fusion needs: the best-to-worst spread reaches 0.148 AUC on ClinTox, and the ordering \emph{reverses} between datasets --- the descriptor view is best on FreeSolv and worst on ClinTox, the sequence views the opposite.
-
-\subsection{The ladder}
-
-Five fusion strategies behind one interface, each removing one mechanism:
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{lll}
-\toprule
-rung & mechanism & fusion parameters (3 views, d=256) \\
-\midrule
-\code{concat} & none --- stack and project & 0 \\
-\code{gated} & per-molecule softmax over views & \textbf{16,513} \\
-\code{xattn} & views as tokens, cross-attention & 1,054,208 \\
-\code{bilinear} & low-rank pairwise second-order term & 99,072 \\
-\code{proposed} & xattn $\rightarrow$ bilinear $\rightarrow$ gate & \textbf{1,169,793} \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbf{Every rung was verified to compute the kind of function it claims} before any of its results were interpreted. For a function of three views, the second-order interaction between two of them is the mixed difference \emph{D} = \emph{f}(a,b,c) $-$ \emph{f}(a$'$,b,c) $-$ \emph{f}(a,b$'$,c) + \emph{f}(a$'$,b$'$,c). If \emph{f} is additive in its views this cancels exactly, whatever the per-view functions are; a non-zero \emph{D} is proof the module mixes views multiplicatively rather than merely stacking them.
-
-\begin{center}
-\small
-\begin{tabular}{lllll}
-\toprule
-rung & max \textbackslash\{\} & \emph{D}\textbackslash\{\} &  &  \\
-\midrule
-\code{concat} & 2.4 $\times$ 10\textsuperscript{-7} & additive to float32 cancellation &  &  \\
-\code{gated} & 4.5 $\times$ 10\textsuperscript{-1} & interacting &  &  \\
-\code{xattn} & 1.1 $\times$ 10\textsuperscript{0} & interacting &  &  \\
-\code{bilinear} & 1.1 $\times$ 10\textsuperscript{1} & interacting &  &  \\
-\code{proposed} & 1.3 $\times$ 10\textsuperscript{1} & interacting &  &  \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Seven orders of magnitude separate the additive control from the cheapest interacting rung, so \code{concat} is a genuine additive floor and the ladder's logic holds. \textbf{The negative results below are not a broken implementation.} Reproduce with \code{python -m scripts.check\_mechanisms}, which exits non-zero if any rung stops behaving as its name claims.
-
-\subsection{Results}
-
-Across datasets (n = 8; sign / Wilcoxon-\emph{dz} / Wilcoxon-raw):
-
-\begin{center}
-\small
-\begin{tabular}{lllll}
-\toprule
-comparison & favoured & sign & \emph{dz} & raw \\
-\midrule
-\textbf{\code{proposed} vs baseline \code{gin\_ref}} & \textbf{8/8} & \textbf{0.0078} & \textbf{0.0078} & \textbf{0.0078} \\
-\code{proposed} vs \code{concat} & 7/8 & 0.0703 & \textbf{0.0391} & \textbf{0.0234} \\
-\code{desc} vs \code{gin\_ref} & 7/8 & 0.0703 & 0.0547 & 0.0781 \\
-\code{proposed} vs \code{gated} & 5/8 & 0.7266 & 0.2500 & 0.1953 \\
-\textbf{\code{proposed} vs \code{desc}} & 4/8 & 1.0000 & 0.5469 & 0.4609 \\
-\code{gated} vs \code{desc} & 2/8 & 0.2891 & 0.7422 & 0.5469 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Four readings, in decreasing order of confidence:
-
-\begin{enumerate}
-\item \textbf{The fusion model beats the baseline graph encoder decisively and on every dataset.} This is a real result and it is the one a conventional paper would report alone. It is also narrower than it looks, and the next table is why.
-\item \textbf{It does not beat the strongest single view.} A descriptor MLP over fingerprints and computed properties is statistically indistinguishable from a 1.17M-parameter fusion block over three representations.
-\item \textbf{Learned combination beats naive concatenation} --- but this is unit-dependent (significant on both Wilcoxon variants, not on the unit-free sign test) and must be reported with all three numbers.
-\item \textbf{The expensive mechanisms buy nothing over a cheap gate} --- which we state as the efficiency result it is. \code{proposed} over \code{gated} is 1 of 8 uncorrected (BACE, p = 0.017), \textbf{0 of 8 after correction} (p $\rightarrow$ 0.135), and shows no across-dataset difference. Cross-attention (1.05M parameters) and the bilinear block (99k) together buy one dataset that does not survive multiplicity. Read the other way round: \textbf{the 16,513-parameter gate delivers the 1,169,793-parameter block's accuracy at 1/71st of the fusion capacity}, and a practitioner who adopts it loses nothing this protocol can detect.
-\end{enumerate}
-
-\textbf{Against the full earlier pipeline, not just its graph encoder.} \code{gin\_ref} is a deliberately simple ablation reference --- the 2-layer GIN --- and beating it is not the same as beating the system it sat inside. The pipeline's five models cover five of our eight datasets, so the comparison is run there (n = 5, where the sign test cannot go below p = 0.0625):
-
-\begin{center}
-\small
+\caption{Test AUC on the classification datasets: canonical split / mean $\pm$ 95\% confidence interval over five seeded splits. ``---'' marks a model not run on that dataset or a result excluded because it read raw SMILES on ClinTox or BBBP.}
+\label{tab:5}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{llllll}
 \toprule
-comparison & per-dataset after Holm & favoured & sign & \emph{dz} & raw \\
+Model & Tox21 & BBBP & ClinTox & BACE & SIDER \\
 \midrule
-\code{proposed} vs \code{rf} & \textbf{4+ / 0$-$} & 5/5 & 0.0625 & 0.0625 & 0.0625 \\
-\code{proposed} vs \code{gnn} & \textbf{4+ / 0$-$} & 5/5 & 0.0625 & 0.0625 & 0.0625 \\
-\code{proposed} vs \code{trf} & \textbf{4+ / 0$-$} & 4/5 & 0.3750 & 0.1250 & 0.1250 \\
-\textbf{\code{proposed} vs \code{hybrid}} & \textbf{1+ / 0$-$} & 4/5 & 0.3750 & 0.1875 & 0.1875 \\
+RF (ECFP) & 0.731 / 0.805 $\pm$ 0.010 & 0.716 / 0.898 $\pm$ 0.042 & 0.770 / 0.845 $\pm$ 0.096 & --- & --- \\
+GNN (pipeline) & 0.723 / 0.800 $\pm$ 0.025 & 0.676 / 0.896 $\pm$ 0.047 & 0.891 / 0.878 $\pm$ 0.080 & --- & --- \\
+ChemBERTa head (pipeline) & 0.702 / 0.770 $\pm$ 0.015 & --- & --- & --- & --- \\
+Stacking meta-learner & 0.752 / 0.822 $\pm$ 0.017 & --- & --- & --- & --- \\
+Weighted ensemble & 0.751 / 0.822 $\pm$ 0.024 & --- & --- & --- & --- \\
+GIN, 2-layer (\code{gin\_ref}) & 0.729 / 0.811 $\pm$ 0.033 & 0.702 / 0.906 $\pm$ 0.038 & 0.870 / 0.897 $\pm$ 0.045 & 0.804 / 0.837 $\pm$ 0.060 & 0.587 / 0.622 $\pm$ 0.028 \\
+GINE & 0.720 / 0.814 $\pm$ 0.029 & 0.698 / 0.908 $\pm$ 0.039 & 0.858 / 0.883 $\pm$ 0.061 & 0.806 / 0.808 $\pm$ 0.071 & 0.524 / 0.551 $\pm$ 0.032 \\
+AttentiveFP & 0.781 / 0.823 $\pm$ 0.008 & 0.670 / 0.893 $\pm$ 0.027 & 0.895 / 0.923 $\pm$ 0.053 & 0.808 / 0.827 $\pm$ 0.064 & 0.560 / 0.579 $\pm$ 0.051 \\
+Chemprop & 0.721 / 0.822 $\pm$ 0.017 & 0.669 / 0.892 $\pm$ 0.044 & 0.865 / 0.864 $\pm$ 0.044 & 0.755 / 0.840 $\pm$ 0.076 & 0.615 / 0.598 $\pm$ 0.010 \\
+ChemBERTa, frozen & 0.699 / 0.782 $\pm$ 0.021 & --- & --- & 0.725 / 0.830 $\pm$ 0.044 & 0.576 / 0.583 $\pm$ 0.041 \\
+ChemBERTa + LoRA & 0.711 / 0.794 $\pm$ 0.030 & --- & --- & 0.715 / 0.813 $\pm$ 0.063 & 0.597 / 0.581 $\pm$ 0.049 \\
+ECFP + descriptor MLP (\code{desc}) & 0.757 / 0.828 $\pm$ 0.018 & 0.715 / 0.907 $\pm$ 0.033 & 0.867 / 0.841 $\pm$ 0.133 & 0.826 / 0.848 $\pm$ 0.068 & 0.613 / 0.640 $\pm$ 0.035 \\
+Fusion: \code{concat} & 0.743 / 0.817 $\pm$ 0.027 & 0.730 / 0.893 $\pm$ 0.057 & 0.924 / 0.863 $\pm$ 0.146 & 0.792 / 0.844 $\pm$ 0.069 & 0.554 / 0.575 $\pm$ 0.022 \\
+Fusion: \code{gated} & 0.749 / 0.827 $\pm$ 0.026 & 0.738 / 0.894 $\pm$ 0.041 & 0.756 / 0.851 $\pm$ 0.089 & 0.818 / 0.833 $\pm$ 0.076 & 0.582 / 0.622 $\pm$ 0.034 \\
+Fusion: \code{xattn} & 0.755 / 0.815 $\pm$ 0.030 & 0.735 / 0.895 $\pm$ 0.032 & 0.893 / 0.837 $\pm$ 0.106 & 0.817 / 0.857 $\pm$ 0.070 & 0.597 / 0.592 $\pm$ 0.037 \\
+Fusion: \code{bilinear} & 0.760 / 0.827 $\pm$ 0.029 & 0.757 / 0.902 $\pm$ 0.041 & 0.811 / 0.820 $\pm$ 0.149 & 0.816 / 0.851 $\pm$ 0.077 & 0.587 / 0.616 $\pm$ 0.049 \\
+Fusion: \code{proposed} & 0.741 / 0.825 $\pm$ 0.021 & 0.739 / 0.907 $\pm$ 0.041 & 0.898 / 0.851 $\pm$ 0.088 & 0.811 / 0.857 $\pm$ 0.075 & 0.614 / 0.638 $\pm$ 0.011 \\
+Fusion: \code{gated}, no graph & 0.763 / 0.821 $\pm$ 0.035 & 0.705 / 0.910 $\pm$ 0.031 & 0.826 / 0.840 $\pm$ 0.158 & 0.836 / 0.848 $\pm$ 0.089 & 0.616 / 0.624 $\pm$ 0.045 \\
+Fusion: \code{concat}, end-to-end & 0.719 / 0.806 $\pm$ 0.022 & --- & --- & 0.793 / 0.834 $\pm$ 0.084 & 0.543 / 0.539 $\pm$ 0.032 \\
+Fusion: \code{gated}, end-to-end & 0.731 / 0.823 $\pm$ 0.017 & --- & --- & 0.804 / 0.828 $\pm$ 0.084 & 0.604 / 0.640 $\pm$ 0.052 \\
+Fusion: \code{proposed}, end-to-end & 0.718 / 0.817 $\pm$ 0.018 & --- & --- & 0.783 / 0.856 $\pm$ 0.082 & 0.537 / 0.631 $\pm$ 0.028 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-The fusion model clears the pipeline's individual base models on 4 of 5 datasets after correction. \textbf{Against the pipeline's best configuration --- the stacking meta-learner --- it improves on 1 of 5 and shows no across-dataset difference.} So the honest version of reading 1 is that the architecture beats the components of the earlier system and roughly matches the system's own best combination of them. A paper reporting only \code{proposed} against \code{gin\_ref} would have claimed the stronger result, and that is the claim this table exists to prevent.
-
-\begin{center}
-\includegraphics[width=0.86\textwidth]{figures/fig3_params_vs_accuracy.pdf}
-\end{center}
-
-\textbf{Figure 3.} Every rung of the ladder against the size of its fusion block, averaged over the five classification datasets and five seeded splits. The band is the minimum detectable effect declared in \S3.5; all five rungs fall inside it. Two orders of magnitude of capacity produce no difference this protocol can resolve. Generated by \code{python -m scripts.make\_figures}.
-
-\textbf{End-to-end adaptation buys nothing.} Training LoRA adapters inside the fusion model rather than reading cached frozen embeddings gives 0 improvements and 0 degradations across 8 datasets, with 7 of 8 means favouring the cached version, for roughly 11 GPU-hours. The end-to-end ladder is nonetheless useful as an independent replication of the mechanism attribution in \S5.6, having been trained months later on different hardware.
-
-\subsection{Gate weights measure routing, not necessity}
-
-The gate assigns the graph view \textbf{0.4--1.1\%} of the weight on every dataset, and its preferred view matches the measured best single view on \textbf{7 of 8} --- so the weights are not noise.
-
-We then removed the graph view and retrained. Accuracy did not move (0 improves, 0 degrades after correction; no across-dataset difference: sign test p = 1.00, Wilcoxon on \emph{dz} p = 0.64) while cost collapsed:
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{lll}
-\toprule
- & full & no graph \\
-\midrule
-time per split & 17 min & \textbf{1.3 min} \\
-parameters (FreeSolv) & 2,050,694 & \textbf{848,514} \\
-graph library dependency & required & \textbf{none} \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-But removing a view holding 0.4\% of the weight \textbf{rewrote the other two weights}: the descriptor weight moved +0.487 on BACE, +0.389 on SIDER and +0.362 on BBBP, whose preferred view flipped outright from sequence to descriptor --- while accuracy stayed flat.
-
-\textbf{Gate weights are a readout of how one trained model routed information, not a measure of how much each view matters.} Both facts are needed: the agreement check says the weights are not noise, the ablation says they are not necessity. Interpretability claims built on attention or gate weights should be accompanied by the corresponding removal experiment.
-
-\subsection{An external baseline}
-
-Every comparison so far is internal: our models against each other and against the pipeline we started from. That is the weakest kind of evidence, because it cannot rule out that the whole family is poor. We therefore ran \textbf{AttentiveFP}~\cite{xiong2020attentivefp}, a widely used attention-based graph architecture, through the \emph{identical} protocol --- same splits, same 256-d projection, same head, same fixed hyper-parameters, same accelerator. What remains distinctively AttentiveFP is its message passing and its attention-based graph readout; what is held constant is everything else. A baseline trained under its own author's recipe and compared against ours would confound the architecture with the training protocol, which is the failure this paper exists to document.
-
-\begin{center}
-\small
-\begin{tabular}{llllll}
-\toprule
-comparison & favoured & sign & \emph{dz} & raw & after Holm \\
-\midrule
-AttentiveFP vs \code{gine} (ours) & 7/8 & 0.0703 & \textbf{0.0391} & \textbf{0.0234} & 0 / 0 \\
-AttentiveFP vs \code{gin\_ref} (baseline)* & 6/8 & 0.2891 & 0.1953 & 0.1094 & 0 / 0 \\
-\textbf{Chemprop vs \code{gin\_ref}} & 4/8 & 1.0000 & 0.9453 & 0.8438 & 0 / 0 \\
-Chemprop vs AttentiveFP & 4/8 & 1.0000 & 1.0000 & 1.0000 & 0 / 0 \\
-AttentiveFP vs \code{desc} & 2/8 & 0.2891 & 0.1484 & 0.3125 & 0 / 0 \\
-\textbf{Chemprop vs \code{desc}} & 2/8 & 0.2891 & 0.1094 & 0.3828 & 0 / \textbf{1} \\
-\textbf{\code{proposed} vs AttentiveFP} & \textbf{7/8} & 0.0703 & 0.0547 & 0.0547 & 0 / 0 \\
-\textbf{\code{proposed} vs Chemprop} & \textbf{6/8} & 0.2891 & 0.1094 & 0.1953 & \textbf{2} / 0 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-\textbackslash\{\}* Against the accelerator-matched instance of every baseline, per \S7: AttentiveFP ran on the same hardware as the models it is compared with here, so none of these is a cross-hardware comparison.
-
-Three readings.
-
-\textbf{AttentiveFP beats our edge-aware graph encoder} (unit-dependent: significant on both Wilcoxon variants, not on the sign test) at roughly twice the parameters --- 1,986,304 against 1,070,852. That is the expected direction, and it is reassuring that the protocol detects it: the published architecture is better than the one we built to represent it.
-
-\textbf{Neither external baseline beats the 2-layer GIN baseline.} AttentiveFP is favoured on 6 of 8 and Chemprop~\cite{yang2019chemprop,heid2024chemprop} on 4 of 8, with no across-dataset difference on any statistic and nothing surviving correction --- AttentiveFP at nearly ten times the baseline encoder's parameters (1,986,304 against 207,360). The two published methods are also indistinguishable from \emph{each other} (4/8, p = 1.00 on all three statistics).
-
-\textbf{Neither beats a fingerprint-plus-descriptor MLP either.} \code{desc} is favoured over each of them on 6 of 8, and decisively beats Chemprop on one dataset after correction. A pair of well-regarded graph architectures, trained on the same splits with the same budget, do not separate from a multilayer perceptron over computed chemistry.
-
-\textbf{Our fusion model is favoured over both and reaches significance against neither across datasets} --- 7 of 8 over AttentiveFP (0.055--0.070), 6 of 8 over Chemprop (0.11--0.29), though 2 datasets survive correction in the Chemprop comparison. The plan's criterion was to be \emph{competitive with or beating} a strong external baseline on most datasets. \textbf{Competitive is met on both; beating is not established on either}, and with n = 8 the sign test cannot reach 0.05 from a 7--1 split however large the effect.
-
-One inconsistency deserves stating rather than hiding: AttentiveFP beats \code{gine}, AttentiveFP ties \code{gin\_ref}, and \code{gine} ties \code{gin\_ref}. Those three cannot all be strictly true of an underlying ordering. With eight paired observations the tests are underpowered enough that intransitive verdicts are expected, and reading any single one of them as an ordering is exactly the over-reading this protocol is built to prevent.
-
-The wider point is the one the whole ladder makes. Two published graph architectures --- one attention-based, one a directed message-passing network --- a bond-aware graph encoder, a pretrained language model and a three-view fusion block are, on these eight benchmarks under a controlled protocol, all statistically indistinguishable from a two-layer graph network and from a multilayer perceptron over fingerprints and computed descriptors.
-
-\subsection{Which mechanism does the work?}
-
-The ladder was built so that ``fusion helps'' could be decomposed. With the end-to-end rungs now complete, it can be. The question is whether \code{proposed}'s advantage comes from cross-attention (the mechanism one source proposes~\cite{zhang2024mvmrl}) or from the explicit second-order bilinear term (the mechanism the other proposes~\cite{jang2026krovex}).
-
-Reported in three settings: the committed cached ladder (frozen embeddings, CPU), the same cached ladder regenerated on a T4, and the end-to-end ladder with LoRA adapters trained. The first two differ only in hardware, which \S7 shows is noise in the five-split mean; the third is a genuinely different training regime. Across-dataset Wilcoxon on \emph{dz}:
-
-\begin{center}
-\small
+\caption{Test RMSE on the regression datasets (ESOL in logS, Lipophilicity in logD, FreeSolv in kcal$\cdot$mol\textsuperscript{-1}): canonical split / mean $\pm$ 95\% confidence interval over five seeded splits.}
+\label{tab:6}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{llll}
 \toprule
-comparison & cached, CPU & cached, T4 & end-to-end, T4 \\
+Model & ESOL & Lipophilicity & FreeSolv \\
 \midrule
-\code{bilinear} vs \code{concat} & 7/8, \textbf{p = 0.039} & 8/8, \textbf{p = 0.008} & 6/8, p = 0.078 \\
-\code{xattn} vs \code{concat} & 5/8, p = 0.641 & 5/8, p = 0.547 & 4/8, p = 0.383 \\
-\code{proposed} vs \code{bilinear} & 5/8, p = 0.313 & 3/8, p = 0.547 & 6/8, p = 0.148 \\
-\textbf{\code{proposed} vs \code{xattn}} & 6/8, p = 0.078 & 7/8, p = 0.109 & 7/8, \textbf{p = 0.016} \\
+RF (ECFP) & 1.685 / 1.658 $\pm$ 0.441 & 0.960 / 1.004 $\pm$ 0.145 & --- \\
+GNN (pipeline) & 1.183 / 1.012 $\pm$ 0.131 & 0.790 / 0.805 $\pm$ 0.140 & --- \\
+ChemBERTa head (pipeline) & 1.412 / 1.496 $\pm$ 0.200 & 0.998 / 1.075 $\pm$ 0.084 & --- \\
+Stacking meta-learner & 1.200 / 0.987 $\pm$ 0.080 & 0.753 / 0.760 $\pm$ 0.123 & --- \\
+Weighted ensemble & 1.146 / 0.978 $\pm$ 0.098 & 0.753 / 0.760 $\pm$ 0.125 & --- \\
+GIN, 2-layer (\code{gin\_ref}) & 1.175 / 1.125 $\pm$ 0.357 & 0.778 / 0.744 $\pm$ 0.159 & 2.429 / 1.526 $\pm$ 0.354 \\
+GINE & 0.947 / 0.917 $\pm$ 0.108 & 0.720 / 0.743 $\pm$ 0.160 & 2.155 / 1.266 $\pm$ 0.257 \\
+AttentiveFP & 0.844 / 0.818 $\pm$ 0.185 & 0.685 / 0.659 $\pm$ 0.069 & 2.199 / 1.127 $\pm$ 0.401 \\
+Chemprop & 0.848 / 0.790 $\pm$ 0.150 & 0.740 / 0.641 $\pm$ 0.077 & 2.442 / 1.643 $\pm$ 0.321 \\
+ChemBERTa, frozen & 1.362 / 1.432 $\pm$ 0.257 & 0.922 / 1.020 $\pm$ 0.125 & 3.196 / 2.176 $\pm$ 0.467 \\
+ChemBERTa + LoRA & 1.194 / 1.114 $\pm$ 0.185 & 0.875 / 0.946 $\pm$ 0.135 & 3.179 / 1.835 $\pm$ 0.210 \\
+ECFP + descriptor MLP (\code{desc}) & 0.782 / 0.772 $\pm$ 0.144 & 0.719 / 0.677 $\pm$ 0.014 & 2.059 / 0.970 $\pm$ 0.254 \\
+Fusion: \code{concat} & 0.871 / 0.859 $\pm$ 0.119 & 0.729 / 0.685 $\pm$ 0.031 & 2.142 / 0.983 $\pm$ 0.224 \\
+Fusion: \code{gated} & 0.932 / 0.835 $\pm$ 0.160 & 0.736 / 0.696 $\pm$ 0.021 & 2.173 / 1.104 $\pm$ 0.313 \\
+Fusion: \code{xattn} & 0.871 / 0.850 $\pm$ 0.105 & 0.720 / 0.714 $\pm$ 0.027 & 2.169 / 0.942 $\pm$ 0.252 \\
+Fusion: \code{bilinear} & 0.836 / 0.827 $\pm$ 0.141 & 0.732 / 0.684 $\pm$ 0.030 & 2.015 / 1.037 $\pm$ 0.366 \\
+Fusion: \code{proposed} & 0.872 / 0.783 $\pm$ 0.102 & 0.709 / 0.689 $\pm$ 0.035 & 1.897 / 0.956 $\pm$ 0.269 \\
+Fusion: \code{gated}, no graph & 0.778 / 0.867 $\pm$ 0.231 & 0.721 / 0.682 $\pm$ 0.021 & 2.009 / 0.980 $\pm$ 0.293 \\
+Fusion: \code{concat}, end-to-end & 0.961 / 0.966 $\pm$ 0.153 & 0.762 / 0.721 $\pm$ 0.042 & 2.139 / 1.394 $\pm$ 0.356 \\
+Fusion: \code{gated}, end-to-end & 0.912 / 0.918 $\pm$ 0.221 & 0.724 / 0.693 $\pm$ 0.034 & 2.155 / 1.311 $\pm$ 0.176 \\
+Fusion: \code{proposed}, end-to-end & 0.941 / 0.843 $\pm$ 0.117 & 0.742 / 0.695 $\pm$ 0.008 & 1.929 / 1.002 $\pm$ 0.236 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-The pattern is the same in all three and points one way:
+\subsection{Single views}
+\label{sec:5.1}
 
-\begin{itemize}
-\item \textbf{The bilinear term is doing the work.} It is the only single mechanism that separates from plain concatenation, and it is favoured on 6 to 8 of 8 datasets in every setting.
-\item \textbf{Cross-attention is not.} It is indistinguishable from concatenation in all three (p = 0.38 to 0.64), and \code{proposed} is consistently better than \code{xattn} alone --- meaning what \code{proposed} adds over cross-attention is precisely the bilinear block.
-\item \textbf{\code{proposed} is indistinguishable from \code{bilinear} alone} in all three. The 1,054,208 cross-attention parameters buy nothing on top of the 99,072-parameter bilinear block.
-\end{itemize}
+No single view outperformed the two-layer GIN baseline after correction. \code{gine} improved on 0 of 8 datasets at five times the parameters, \code{desc} on 0 of 8 (favoured on 7 of 8 by mean; across datasets p = 0.070/0.055/0.078), and the sequence views on 0 of 6. The frozen ChemBERTa view was favoured on none of the six datasets it can be scored on (sign test p = 0.031) and was significantly worse on FreeSolv after correction. Against a matched frozen control, LoRA fine-tuning improved ESOL (Holm p = 0.0054) and no other dataset.
 
-So of the two mechanisms the literature proposes, one survives this evaluation in weakened form and the other does not survive at all.
+The descriptor view had the best mean on six of the eight datasets (Tox21, BACE, SIDER, ESOL, Lipophilicity, FreeSolv); GINE led on BBBP by 0.0005 AUC and the two-layer GIN on ClinTox. For the three regression targets the descriptors encode much of the physics: Delaney's ESOL equation is linear in four descriptors~\cite{delaney2004esol}, three of which (the octanol--water partition coefficient, molecular weight and rotatable-bond count) are in our descriptor set, and topological polar surface area alone correlates with FreeSolv hydration free energy at \emph{r} = $-$0.736. The ordering of views did change between datasets, but once the notation leak was removed the sequence views led on none of them.
 
-\subsubsection{The rank sweep, and what it does to the claim above}
+\subsection{Fusion rungs}
+\label{sec:5.2}
 
-The bilinear block's rank \emph{r} sets the size of the second-order interaction: two \emph{d} $\times$ \emph{r} projections per view pair in place of a full \emph{d} $\times$ \emph{d} form. Every result above used r = 64, chosen once. Having just identified this block as the mechanism that works, the obvious question is whether that choice made it work. We trained r $\in$ \{16, 32, 128\} on the same splits, on the same hardware as the cached-T4 column, changing nothing else.
+Five fusion strategies share one interface (Table~\ref{tab:7}). The fusion output feeds the same kind of two-layer head, but the head's input width follows the fusion output, so head size differs between rungs; Table~\ref{tab:7} reports both.
 
-\textbf{No rank is distinguishable from any other.} Against r = 64, each of r = 16, 32 and 128 gives 0 improves, 0 degrades, 8 indistinguishable. The extremes --- a 24,768-parameter interaction against a 198,144-parameter one, eight times apart --- differ at p = 0.844. The block is inert to its own capacity across the entire span.
-
-But against the ladder floor, the comparison the claim rests on, the ranks do not agree:
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{llllll}
-\toprule
-rank & fusion parameters & favoured vs \code{concat} & sign & \emph{dz} & raw \\
-\midrule
-16 & 24,768 & 6/8 & 0.289 & 0.055 & 0.195 \\
-32 & 49,536 & 6/8 & 0.289 & 0.109 & 0.109 \\
-\textbf{64} & \textbf{99,072} & \textbf{8/8} & \textbf{0.008} & \textbf{0.008} & \textbf{0.008} \\
-128 & 198,144 & 6/8 & 0.289 & 0.078 & 0.148 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Only r = 64 reaches significance, and p = 0.008 is the \emph{floor} for n = 8 --- the smallest value the sign test can return, reachable only by a clean sweep. The per-dataset means say why (mean paired difference against \code{concat}, positive favouring bilinear):
-
-\begin{center}
-\small
+\caption{Fusion rungs for three 256-dimensional views. Head parameters are for a single-task head.}
+\label{tab:7}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lllll}
 \toprule
-dataset & r = 16 & r = 32 & r = 64 & r = 128 \\
+Rung & Mechanism & Fusion parameters & Output width & Head parameters \\
 \midrule
-Tox21 & +0.0121 & +0.0125 & +0.0142 & +0.0154 \\
-ClinTox & +0.0171 & +0.0082 & +0.0162 & +0.0100 \\
-\textbf{SIDER} & \textbf{+0.0535} & \textbf{+0.0626} & \textbf{+0.0730} & \textbf{+0.0629} \\
-Lipophilicity & +0.0045 & +0.0016 & +0.0007 & +0.0017 \\
-FreeSolv & +0.0629 & +0.0774 & +0.0722 & +0.0363 \\
-BBBP & +0.0045 & $-$0.0018 & +0.0015 & $-$0.0007 \\
-BACE & $-$0.0047 & +0.0031 & +0.0065 & +0.0065 \\
-ESOL & $-$0.0134 & $-$0.0048 & +0.0129 & $-$0.0276 \\
+\code{concat} & concatenate the views & 0 & 768 & 197,121 \\
+\code{gated} & per-molecule softmax gate over views & 16,513 & 256 & 66,049 \\
+\code{xattn} & self-attention over the views as tokens & 1,054,208 & 768 & 197,121 \\
+\code{bilinear} & low-rank product for each pair of views (rank 64) & 99,072 & 192 & 49,665 \\
+\code{proposed} & \code{xattn}, then \code{bilinear} and \code{gated} in parallel & 1,169,793 & 448 & 115,201 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-Five datasets favour the bilinear term at every rank. Three change sign --- BBBP, BACE, ESOL --- and every one of those changes is far below our own minimum detectable effect (\S3.5): BBBP moves within $\pm$0.005 AUC, BACE within $\pm$0.007 AUC, ESOL within $\pm$0.03 RMSE, against thresholds of $\pm$0.02 and $\pm$0.10. Only SIDER exceeds the MDE, and it does so at every rank.
+Before interpreting results we checked that each fusion block computes the function it claims. For a function of three views, the mixed difference \emph{D} = \emph{f}(a,b,c) $-$ \emph{f}(a$'$,b,c) $-$ \emph{f}(a,b$'$,c) + \emph{f}(a$'$,b$'$,c) is zero for an additive function. At initialisation, max $|$\emph{D}$|$ was 2.4 $\times$ 10\textsuperscript{-7} for \code{concat} (numerical zero) and between 0.45 and 13 for the other rungs, a gap of more than six orders of magnitude (\code{scripts/check\_mechanisms.py}). This checks the fusion block only. Every model has a non-linear head on top, so the full \code{concat} model can still learn interactions between views.
 
-The direction therefore holds across six separately trained bilinear models --- the three settings above plus these three ranks --- favoured on 6 to 8 of 8 every time and never once reversed. What moves between p = 0.008 and p = 0.109 is which way three datasets sitting at effectively zero happen to land.
+\subsection{Results}
+\label{sec:5.3}
 
-\subsubsection{This is our own result failing our own standard}
+Table~\ref{tab:8} reports the across-dataset comparisons of the cached CPU ladder with ClinTox and BBBP on canonical SMILES.
 
-\code{bilinear}(r = 64) beats \code{concat} significantly. \code{bilinear}(r = 16) does not. And \code{bilinear}(r = 64) versus \code{bilinear}(r = 16) is \emph{also} not significant, at p = 0.641. That is exactly the error Gelman and Stern~\cite{gelman2006difference} name: the difference between ``significant'' and ``not significant'' is not itself significant.
-
-We report it because it is the same failure this paper spends its length documenting, one level up. \S3.2 shows a single scaffold split producing a 0.22 AUC swing; \S7 shows a seeded pipeline producing a different model on different hardware. Those are arguments that single-run results do not survive scrutiny. This is a \emph{multi-split, Holm-corrected, eight-dataset} result whose significance still turns on an architectural constant chosen once and never examined --- and we would not have known had we not run the ablation. A reader is entitled to ask how many published fusion results rest on a comparably arbitrary choice that was never swept. We cannot answer that, and neither could we have answered it about our own until we looked.
-
-The honest statement of \S5.6 is therefore: the bilinear term is the mechanism that separates from concatenation, the effect is real, small, and concentrated in one dataset, and its across-dataset p-value is not stable to a hyper-parameter that does not otherwise matter.
-
-\textbf{But neither clears the cheap baseline.} Against the 16,513-parameter gate in the end-to-end setting, \code{xattn} is favoured on 3 of 8 and \code{bilinear} on 3 of 8, with nothing surviving correction in either case. The second-order term beats naive concatenation and still does not beat a per-molecule volume knob. That is the finding in one line: \textbf{the mechanism that works is not the expensive one, and the mechanism that is expensive does not work.}
-
-\subsection{The view we did not build}
-
-The plan for this work named a sixth view that was never built: a motif view, embedding BRICS fragments~\cite{degen2008brics} and Murcko scaffolds~\cite{bemis1996frameworks} and pooling them, taken from the atom-and-motif idea of AMCT~\cite{yu2026amct}, which argues that motif-level interactions matter for properties such as toxicity and solubility. Leaving that as a scheduling note would make the omission unfalsifiable, so we measured it instead.
-
-What follows is a probe, not the view. Three feature sets are scored by one linear readout --- logistic regression for classification, ridge for regression, one fixed setting, no tuning --- across the same six splits under the same paired statistics as everything above. The motif vocabulary is built from \textbf{training molecules only}, per split, for the reason \S3.3 gives about every other fitted object here. \code{python -m scripts.probe\_motifs} reproduces both tables.
-
-\textbf{These are not the views of \S5.1, and must not be read against them.} The \code{ECFP+desc} arm shares the descriptor view's features and not its model: the trained MLP beats this linear stand-in by 0.069 AUC on Tox21 and 0.181 RMSE on Lipophilicity. Every comparison below is \emph{within} a table, where all three arms share the readout and only the feature set moves.
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
+\caption{Across-dataset comparisons of the cached fusion ladder (\emph{n} = 8): datasets favouring the first model, sign / Wilcoxon-\emph{dz} / Wilcoxon-raw p-values, and datasets improved or degraded after Holm correction.}
+\label{tab:8}
+\begin{tabular}{llll}
+\toprule
+Comparison & Favoured & p (sign / dz / raw) & Holm improves / degrades \\
+\midrule
+\code{proposed} vs \code{gin\_ref} & 7/8 & 0.070 / 0.109 / 0.078 & 1 / 0 \\
+\code{gated} vs \code{gin\_ref} & 4/8 & 1.000 / 0.547 / 0.383 & 1 / 0 \\
+\code{desc} vs \code{gin\_ref} & 7/8 & 0.070 / 0.055 / 0.078 & 0 / 0 \\
+\code{proposed} vs \code{desc} & 3/8 & 0.727 / 0.945 / 0.945 & 0 / 0 \\
+\code{gated} vs \code{desc} & 1/8 & 0.070 / 0.023 / 0.023 & 0 / 0 \\
+\code{concat} vs \code{desc} & 1/8 & 0.070 / 0.109 / 0.109 & 0 / 0 \\
+\code{xattn} vs \code{desc} & 2/8 & 0.289 / 0.109 / 0.148 & 0 / 0 \\
+\code{bilinear} vs \code{desc} & 1/8 & 0.070 / 0.023 / 0.023 & 0 / 0 \\
+\code{proposed} vs \code{concat} & 6/8 & 0.289 / 0.055 / 0.055 & 1 / 0 \\
+\code{proposed} vs \code{gated} & 6/8 & 0.289 / 0.039 / 0.039 & 0 / 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\code{proposed} was favoured over the two-layer GIN on 7 of 8 datasets, but no across-dataset statistic reached 0.05 (p = 0.070 / 0.109 / 0.078), and only FreeSolv improved after correction (0.956 against 1.526 kcal$\cdot$mol\textsuperscript{-1}). The descriptor MLP had the same record against the GIN (7 of 8; p = 0.070 / 0.055 / 0.078) with no pretrained encoder and no graph library. No fusion rung outperformed the descriptor MLP. \code{proposed} was favoured over it on 3 of 8 datasets (p $\geq$ 0.727) and \code{xattn} on 2. \code{concat}, \code{gated} and \code{bilinear} were each favoured on 1 of 8, and \code{gated} and \code{bilinear} were significantly worse than the MLP on both Wilcoxon statistics (p = 0.023; sign test p = 0.070), with no single dataset surviving correction. Within the ladder, \code{proposed} was favoured over \code{concat} and over \code{gated} on 6 of 8 datasets each. Against \code{gated} both Wilcoxon statistics were significant (p = 0.039) but the sign test was not (p = 0.289) and no dataset survived correction; against \code{concat} no across-dataset statistic was significant (p $\geq$ 0.055) and SIDER improved after correction.
+
+\begin{table}[H]
+\centering
+\small
+\caption{\code{proposed} against the earlier pipeline's models on the datasets where they were run. \code{trf} and \code{hybrid} read raw SMILES on BBBP and ClinTox, so those comparisons use Tox21, ESOL and Lipophilicity only.}
+\label{tab:9}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllll}
+\toprule
+Comparison & Datasets & Favoured & p (sign / dz / raw) & Holm improves / degrades \\
+\midrule
+\code{proposed} vs \code{rf} & 5 & 5/5 & 0.062 / 0.062 / 0.062 & 2 / 0 \\
+\code{proposed} vs \code{gnn} & 5 & 4/5 & 0.375 / 0.188 / 0.312 & 1 / 0 \\
+\code{proposed} vs \code{trf} & 3 & 3/3 & 0.250 / 0.250 / 0.250 & 3 / 0 \\
+\code{proposed} vs \code{hybrid} & 3 & 3/3 & 0.250 / 0.250 / 0.250 & 1 / 0 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\code{proposed} was favoured over the random forest on all five datasets (ESOL and Lipophilicity after correction), over the earlier GNN on 4 of 5 (ESOL after correction; the GNN led on ClinTox), and over the SMILES transformer and the stacking meta-learner on all three comparable datasets (all three and ESOL, respectively, after correction). With five or three datasets the across-dataset tests cannot reach 0.05: the smallest attainable sign-test p-values are 0.062 and 0.25. Every corrected improvement except the transformer's Tox21 result is on a regression dataset.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figures/fig2_params_vs_accuracy.pdf}
+\caption{Mean test AUC over the five classification datasets (canonical SMILES for ClinTox and BBBP; five seeded splits) against the number of parameters in the fusion block plus prediction head, for each rung of the cached ladder. Labels give the fusion-block and head parameter counts. Paired comparisons are in Table~\ref{tab:8}.}
+\label{fig:2}
+\end{figure}
+
+End-to-end training of LoRA adapters inside the fusion model rather than reading cached embeddings did not improve the proposed model on any of the six datasets on which it can be compared (the end-to-end model was favoured on 0 of 6; p = 0.031 on all three statistics, the smallest attainable at \emph{n} = 6; no dataset differed after correction). The end-to-end models were trained on a T4 and the cached model on CPU, so this comparison also crosses devices (Section~\ref{sec:7}).
+
+\subsection{Removing the graph view, and what the gate weights show}
+\label{sec:5.4}
+
+On every dataset the gate assigned the graph view 0.4--1.4\% of its weight (mean over five splits). Retraining the gated model without the graph view left accuracy statistically unchanged (favoured on 5 of 8 datasets; p = 0.727 / 0.250 / 0.461; no dataset differed after correction) and cut training time from about 17 minutes to about 1.3 minutes per split on our CPU (Table~\ref{tab:10}). An equivalence test within $\pm$0.02 AUC / $\pm$0.10 RMSE, however, established equivalence on only 2 of 8 datasets (Tox21 and Lipophilicity; 90\% interval inside the margin), so the ablation shows no detectable loss rather than demonstrated equivalence.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Cost of the gated model with and without the graph view (Intel i7-9750H CPU, all eight datasets per split).}
+\label{tab:10}
+\begin{tabular}{lll}
+\toprule
+ & With graph view & Without graph view \\
+\midrule
+Training time per split & 16--21 min & 1.2--1.8 min \\
+Parameters (FreeSolv model) & 2,050,694 & 848,514 \\
+Requires a graph library & yes & no \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Removing a view that carried at most 1.4\% of the gate weight changed the remaining weights substantially: the descriptor weight rose on all eight datasets, from 0.23--0.80 to 0.81--0.97, and the three datasets on which the three-view gate had favoured the sequence view (BBBP, ClinTox and BACE) switched to the descriptor view. Gate weights are computed over unnormalised view embeddings and varied widely across splits (for example SIDER's sequence weight was 0.43 $\pm$ 0.34). They describe how one trained model routed information, not how much each view matters. This agrees with the literature on attention weights as explanations~\cite{jain2019attention,wiegreffe2019attention}.
+
+\subsection{External baselines}
+\label{sec:5.5}
+
+\begin{table}[H]
+\centering
+\small
+\caption{External baselines (\emph{n} = 8). AttentiveFP and Chemprop were trained on a T4 GPU, \code{gine}, \code{desc} and \code{proposed} on CPU, and \code{gin\_ref\_gpu} is the T4 copy of the GIN baseline; comparisons across the two groups are cross-device (Section~\ref{sec:7}).}
+\label{tab:11}
+\begin{tabular}{llll}
+\toprule
+Comparison & Favoured & p (sign / dz / raw) & Holm improves / degrades \\
+\midrule
+AttentiveFP vs \code{gine} & 7/8 & 0.070 / 0.039 / 0.023 & 0 / 0 \\
+AttentiveFP vs \code{gin\_ref} (T4) & 6/8 & 0.289 / 0.195 / 0.109 & 0 / 0 \\
+Chemprop vs \code{gin\_ref} (T4) & 4/8 & 1.000 / 0.945 / 0.844 & 0 / 0 \\
+Chemprop vs AttentiveFP & 4/8 & 1.000 / 1.000 / 1.000 & 0 / 0 \\
+AttentiveFP vs \code{desc} & 2/8 & 0.289 / 0.148 / 0.312 & 0 / 0 \\
+Chemprop vs \code{desc} & 2/8 & 0.289 / 0.109 / 0.383 & 0 / 1 \\
+\code{proposed} vs AttentiveFP & 6/8 & 0.289 / 0.461 / 0.312 & 0 / 0 \\
+\code{proposed} vs Chemprop & 6/8 & 0.289 / 0.250 / 0.312 & 2 / 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+AttentiveFP (2,447,360 encoder parameters, 2.3 times GINE and 11.8 times the two-layer GIN) was favoured over our GINE encoder on 7 of 8 datasets, significant on the Wilcoxon statistics but not the sign test, with no dataset surviving correction. Neither AttentiveFP nor Chemprop differed from the two-layer GIN across datasets, and neither outperformed the descriptor MLP; the MLP was favoured over each on 6 of 8 datasets and outperformed Chemprop on FreeSolv after correction. Chemprop's FreeSolv error (1.64 kcal$\cdot$mol\textsuperscript{-1} against 0.97 for the MLP) is consistent with its recipe being poorly suited to that small dataset in 50 epochs, so this single result should not be read as a statement about the architecture. \code{proposed} was favoured over AttentiveFP and over Chemprop on 6 of 8 datasets each, with no across-dataset statistic significant (p $\geq$ 0.250); against Chemprop, SIDER and FreeSolv improved after correction.
+
+\subsection{Which mechanism separates from concatenation}
+\label{sec:5.6}
+
+We compared the mechanisms in three settings: the cached ladder on CPU (\emph{n} = 8, canonical SMILES), the same cached ladder trained on a T4 (\emph{n} = 6) and the end-to-end ladder with LoRA adapters (\emph{n} = 6) (Table~\ref{tab:12}).
+
+\begin{table}[H]
+\centering
+\small
+\caption{Mechanism comparisons: datasets favouring the first model and Wilcoxon-\emph{dz} p-value.}
+\label{tab:12}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llll}
+\toprule
+Comparison & cached, CPU & cached, T4 & end-to-end, T4 \\
+\midrule
+\code{bilinear} vs \code{concat} & 6/8, p = 0.312 & 6/6, p = 0.031 & 6/6, p = 0.031 \\
+\code{xattn} vs \code{concat} & 5/8, p = 0.742 & 4/6, p = 0.219 & 3/6, p = 0.438 \\
+\code{proposed} vs \code{bilinear} & 6/8, p = 0.195 & 3/6, p = 1.000 & 4/6, p = 0.438 \\
+\code{proposed} vs \code{xattn} & 6/8, p = 0.078 & 5/6, p = 0.219 & 6/6, p = 0.031 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+Bilinear fusion separated from concatenation in both T4 settings, favoured on all six datasets with the smallest p-value attainable at \emph{n} = 6 (0.031). It did not separate on the CPU ladder once ClinTox and BBBP were canonicalised (6 of 8, p = 0.312): it lost to \code{concat} on ClinTox in all five splits (0.820 against 0.863 AUC) and was favoured on 5 of the 6 datasets that the T4 settings cover. Cross-attention separated from concatenation in no setting. \code{proposed} did not separate from \code{bilinear} in any setting and separated from \code{xattn} only end-to-end. With three settings, four comparisons, no correction across them and the T4 results at the floor of the test, we read the bilinear advantage as suggestive rather than established, and the rank sweep below weakens it further.
+
+\textbf{Rank sweep.} The bilinear rank \emph{r} sets the size of the second-order term (two 256 $\times$ \emph{r} projections per view pair). Every result above used \emph{r} = 64, chosen without tuning, so we trained \emph{r} $\in$ \{16, 32, 128\} on the T4 under otherwise identical conditions (Table~\ref{tab:13}). No pair of ranks differed on any statistic (all p $\geq$ 0.094; \emph{n} = 6). Against \code{concat}, only \emph{r} = 64 reached the \emph{n} = 6 floor of p = 0.031, while \emph{r} = 16, 32 and 128 were favoured on 4, 5 and 5 of 6 datasets with p between 0.062 and 0.69. Because the ranks cannot be told apart, the significance of the \emph{r} = 64 result should not be attributed to that rank. This is the error Gelman and Stern describe: the difference between ``significant'' and ``not significant'' is not itself significant~\cite{gelman2006difference}. SIDER shows the largest bilinear advantage at every rank, and the paired differences on the remaining datasets are small relative to the practical threshold.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Bilinear rank sweep on the T4 cached ladder (\emph{n} = 6): comparison with \code{concat} and with \emph{r} = 64.}
+\label{tab:13}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llll}
+\toprule
+Rank & Fusion parameters & vs \code{concat}: favoured, sign / dz / raw p & vs r = 64: favoured, dz p \\
+\midrule
+16 & 24,768 & 4/6, 0.688 / 0.219 / 0.438 & 1/6, 0.156 \\
+32 & 49,536 & 5/6, 0.219 / 0.062 / 0.156 & 2/6, 0.156 \\
+64 & 99,072 & 6/6, 0.031 / 0.031 / 0.031 & --- \\
+128 & 198,144 & 5/6, 0.219 / 0.094 / 0.219 & 3/6, 0.438 \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+
+\subsection{A motif probe}
+\label{sec:5.7}
+
+The atom-and-motif idea of AMCT~\cite{yu2026amct} suggested a sixth view built from BRICS fragments~\cite{degen2008brics} and Murcko scaffolds~\cite{bemis1996frameworks}. Instead of building it we ran a probe: fingerprint-plus-descriptor features, motif indicators, and both, each scored by one untuned linear model (logistic regression or ridge regression) on the same splits, with the motif vocabulary built from training molecules only (Table~\ref{tab:14}). The linear \code{ECFP+desc} arm shares the descriptor view's features but not its model. The trained MLP outperforms it by 0.069 AUC on Tox21 and 0.181 RMSE on Lipophilicity, so the probe's numbers are comparable only within Table~\ref{tab:14}.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Motif probe: mean over five seeded splits (AUC or RMSE). The change column is the paired difference from adding motifs to \code{ECFP+desc}, with its 95\% interval (positive favours adding motifs).}
+\label{tab:14}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lllllll}
 \toprule
-dataset & metric & \code{ECFP+desc} & \code{motif} & both & change from adding motifs & BRICS fragments seen \\
+Dataset & Metric & \code{ECFP+desc} & Motifs & Both & Change from adding motifs & BRICS fragments seen in training \\
 \midrule
 Tox21 & AUC & 0.759 & 0.653 & 0.760 & +0.001 $\pm$ 0.002 & 58\% \\
-BBBP & AUC & 0.880 & 0.776 & 0.880 & $-$0.000 $\pm$ 0.004 & 61\% \\
+BBBP & AUC & 0.880 & 0.776 & 0.880 & -0.000 $\pm$ 0.004 & 61\% \\
 ClinTox & AUC & 0.850 & 0.738 & 0.855 & +0.005 $\pm$ 0.006 & 62\% \\
-BACE & AUC & 0.849 & 0.819 & 0.846 & $-$0.003 $\pm$ 0.011 & 92\% \\
+BACE & AUC & 0.849 & 0.819 & 0.846 & -0.003 $\pm$ 0.011 & 92\% \\
 SIDER & AUC & 0.611 & 0.590 & 0.614 & +0.003 $\pm$ 0.004 & 61\% \\
 ESOL & RMSE & 0.903 & 2.383 & 0.901 & +0.002 $\pm$ 0.023 & 31\% \\
-Lipophilicity & RMSE & 0.858 & 1.006 & 0.877 & $-$0.020 $\pm$ 0.014 & 84\% \\
+Lipophilicity & RMSE & 0.858 & 1.006 & 0.877 & -0.020 $\pm$ 0.014 & 84\% \\
 FreeSolv & RMSE & 1.036 & 3.438 & 1.000 & +0.037 $\pm$ 0.077 & 24\% \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-Means over the five seeded splits; the change column is the paired difference with its own 95\% interval, signed so that positive favours adding motifs.
+Motif indicators alone carried real but weaker signal: they lost to \code{ECFP+desc} on 8 of 8 datasets (sign test p = 0.0078), with five datasets surviving correction. Adding them changed nothing measurable: the combination was favoured on 5 of 8 datasets (p = 0.73), and its only uncorrected per-dataset difference was a loss of 0.020 logD on Lipophilicity (p = 0.0195; Holm p = 0.156). On the canonical split, where there is no interval, motifs alone beat \code{ECFP+desc} on BACE (0.7667 against 0.7529) and SIDER (0.5826 against 0.5783), and the combination improved 7 of 8 numbers. The conclusion rests on the seeded splits. A scaffold split guarantees that no ring-bearing test molecule shares a Murcko scaffold with training, so scaffold indicators cannot transfer. BRICS fragments transfer partially, from 95\% of a molecule's fragments seen in training on the best BACE split to 16\% on the worst FreeSolv split. Coverage tracks the number of fragments per molecule (\emph{r} = 0.93 over 48 dataset--split pairs). A linear readout is a lower bound on what a trained motif encoder could extract.
 
-\textbf{Fragments carry real signal, and strictly less of it.} Over the seeded splits the motif arm loses to the \code{ECFP+desc} arm on 8 of 8 datasets --- sign test p = 0.0078, Wilcoxon p = 0.0078 on both raw and standardised differences --- and every one of the eight gaps exceeds the minimum detectable effect of \S3.5, with five surviving Holm correction individually. It is not noise, though. Fragments alone reach 0.819 AUC on BACE against that arm's 0.849, and 0.590 on SIDER against 0.611. A molecule's fragment inventory does predict these endpoints; it predicts them worse than a fingerprint and a descriptor block already do.
+\section{Calibration and conformal prediction}
+\label{sec:6}
 
-\textbf{Added to those, they change nothing.} No dataset survives correction in either direction, and across the seeded splits the combination is favoured on 5 of 8 at sign-test p = 0.73. The single decisive per-dataset difference is a \emph{loss}: 0.020 logD on Lipophilicity, at p = 0.0195 uncorrected, 0.156 after Holm, and below the $\pm$0.10 practical threshold in any case.
+\subsection{Post-hoc calibration}
+\label{sec:6.1}
 
-\textbf{And the canonical split disagrees with all of that.} \S3.2 requires both conventions, and this is a case where reporting one would have been reporting a choice:
+Over 51 (model, classification dataset) pairs, fitting a calibration map on the validation split reduced test ECE by more than its interval on 17, increased it on 1 (Chemprop on SIDER, 0.106 to 0.113) and left it within the interval on the rest. Raw-SMILES results on ClinTox and BBBP are excluded, and the canonical-SMILES CPU models are included. Improvement was not confined to the worst-calibrated models (median raw ECE 0.086 where the map helped, 0.089 elsewhere), and with this many pairs a few verdicts are expected by chance. The balanced class weighting of our Platt map (Section~\ref{sec:3.7}) is one reason a map can worsen calibration on imbalanced data.
 
-\begin{center}
+\subsection{Minority-class coverage under marginal conformal prediction}
+\label{sec:6.2}
+
+Split conformal prediction was first validated on synthetic data (90.1\%, 90.1\% and 90.3\% coverage at a 90\% target). On Tox21 at $\alpha$ = 0.1, overall coverage ranged from 89.4\% to 91.0\% across the fifteen models (Table~\ref{tab:15}). Coverage of active compounds did not: three models covered 9.7--14.1\% of actives with mean set sizes of 0.97--0.99, while the other twelve covered 71.1--79.8\% with set sizes of 1.16--1.26.
+
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{llll}
+\caption{Split conformal prediction on Tox21 at a nominal 90\% (LAC score; mean over 12 tasks and five seeded splits). Class-conditional results fit one quantile per class. \code{desc (no class weighting)} is the control described in the text.}
+\label{tab:15}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllllll}
 \toprule
-DeepChem canonical split & \code{ECFP+desc} & \code{motif} & both \\
+Model & Class-weighted loss & Coverage & Actives covered & Set size & Actives, class-conditional & Set size, class-conditional \\
 \midrule
-BACE (AUC) & 0.7529 & \textbf{0.7667} & 0.7576 \\
-SIDER (AUC) & 0.5783 & \textbf{0.5826} & 0.5784 \\
-datasets where the arm beats \code{ECFP+desc} & --- & \textbf{2 of 8} & \textbf{7 of 8} \\
+ChemBERTa head (pipeline) & no & 91.0\% & 9.7\% & 0.99 & 90.0\% & 1.52 \\
+Random forest (pipeline) & balanced trees & 90.7\% & 9.8\% & 0.98 & 91.1\% & 1.52 \\
+Chemprop & no & 90.6\% & 14.1\% & 0.97 & 90.7\% & 1.44 \\
+\code{desc} (no class weighting) & no & 90.7\% & 16.3\% & 0.97 & 89.2\% & 1.41 \\
+\code{gated}, no graph & yes & 89.9\% & 71.1\% & 1.16 & 88.4\% & 1.40 \\
+\code{concat} (T4) & yes & 89.8\% & 71.3\% & 1.19 & 88.9\% & 1.42 \\
+GNN (pipeline) & yes & 90.0\% & 72.3\% & 1.22 & 89.6\% & 1.47 \\
+Weighted ensemble & blend of rf, gnn, trf & 89.8\% & 72.4\% & 1.17 & 90.3\% & 1.44 \\
+\code{gated} & yes & 90.3\% & 72.4\% & 1.17 & 88.8\% & 1.40 \\
+\code{proposed} (T4) & yes & 89.4\% & 72.7\% & 1.20 & 90.1\% & 1.42 \\
+Stacking meta-learner & balanced meta-learner & 90.2\% & 74.9\% & 1.19 & 90.5\% & 1.47 \\
+\code{xattn} (T4) & yes & 90.1\% & 76.1\% & 1.24 & 89.6\% & 1.42 \\
+\code{gin\_ref} (T4) & yes & 89.8\% & 76.8\% & 1.26 & 87.0\% & 1.42 \\
+\code{bilinear} (T4) & yes & 90.4\% & 77.7\% & 1.23 & 88.5\% & 1.40 \\
+\code{desc} & yes & 90.0\% & 77.9\% & 1.21 & 90.6\% & 1.41 \\
+AttentiveFP & yes & 90.3\% & 79.8\% & 1.23 & 88.2\% & 1.40 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-On one split there is no interval, so these are wins by mean and nothing more --- which is exactly \S3.2's point, not a hedge against an inconvenient result. But the direction reverses twice. Motifs alone, which lose every seeded dataset, beat the baseline on canonical BACE and SIDER; adding motifs, which is indistinguishable from nothing over five seeded splits, improves 7 of 8 canonical numbers. We report the disagreement because a paper that spends \S3.2 establishing that the two conventions are not interchangeable cannot then quote whichever one agrees with it. What survives both is the weaker and better-supported claim: \textbf{nothing here clears the minimum detectable effect on the convention that has error bars.}
+The three failing models are the random forest, the SMILES transformer of the earlier pipeline and Chemprop. Two were trained without class re-weighting, and the random forest's balanced class weights barely move vote-fraction probabilities. Ten of the twelve covering models were trained with a class-weighted loss. The other two, the weighted ensemble and the stacking meta-learner, combine the class-weighted GNN with the two failing pipeline models, and the meta-learner is itself fitted with balanced class weights. To separate training objective from architecture, we retrained the descriptor MLP without class weighting and left everything else unchanged. Its AUC was unchanged (0.831 against 0.828), but active coverage fell from 77.9\% to 16.3\% and mean set size from 1.21 to 0.97, moving it from the covering group to the failing group (Figure~\ref{fig:3}). Minority coverage under marginal conformal prediction therefore depends on how the minority class is weighted in training, not on the model family. A small mean set size is a symptom of the same cause and does not require test labels to compute, but it is not an independent predictor. Class-conditional conformal prediction restored active coverage to 87.0--91.1\% for every model, including the control (89.2\%), at larger mean set sizes (1.40--1.52).
 
-\textbf{The coverage table says why, and it is not a fact about fragments.} Across all 48 dataset-split pairs --- eight datasets, six splits --- \textbf{not one ring-bearing test molecule shares a Murcko scaffold with any training molecule.} Zero, in every cell, on both split conventions. That is not a property of these benchmarks; it is the definition of the split. A scaffold-level feature is exactly the feature a scaffold split guarantees will never be seen twice, so the scaffold half of a motif view is structurally dead on arrival under the protocol the field already agrees to use.
+This failure and its class-conditional remedy are established for imbalanced bioactivity data~\cite{norinder2017imbalanced,sun2017mondrian}, and Tursunbadalov and Tursunbadalov~\cite{tursunbadalov2026quiet} quantified it on MoleculeNet across three model types, explaining its size with a conservation identity. Our measurement extends theirs to fifteen models and adds the class-weighting control.
 
-BRICS fragments sit below the scaffold and do transfer, but unevenly: from 95\% of a test molecule's fragments already seen on the most favourable BACE split down to 16\% on the least favourable FreeSolv one. On FreeSolv, between 52\% and 77\% of test molecules share no vocabulary entry with the training split at all. What predicts coverage is simply how many fragments a molecule breaks into: across the 48 pairs, mean fragments per molecule correlates with fragment coverage at \textbf{r = 0.93}. BACE and Lipophilicity molecules yield 5 to 8 BRICS fragments each and recover 80--95\% of them; FreeSolv and ESOL molecules yield 1.3 to 2.5 and recover 16--39\%. Those two are also the smallest datasets, and two of the three where \S5.1 found the descriptor view leading because the descriptors encode the target's own physics. Fragments are least available exactly where they would have to be most useful.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figures/fig3_setsize_vs_minority_coverage.pdf}
+\caption{Mean prediction-set size against coverage of active compounds for fifteen models on Tox21 under marginal split conformal prediction at a nominal 90\%. The open marker is the descriptor MLP retrained without class weighting; the arrow joins it to the same model trained with class weighting.}
+\label{fig:3}
+\end{figure}
 
-This is the same phenomenon \S6.6 measures on the uncertainty side, in different units: what a model has seen decays with structural distance, and a scaffold split maximises that distance deliberately.
+\subsection{Temperature scaling and binary conformal sets}
+\label{sec:6.3}
 
-\textbf{What this establishes and what it does not.} It does not prove that no motif view can help. A linear readout over indicator features is a lower bound on what a trained fragment encoder could extract, and \S10 records that alongside the canonical-split disagreement. What it does replace is the sentence ``we ran out of time'', with two measurements: on the convention that carries error bars the information is redundant with a fingerprint, and its scaffold component cannot transfer under this split protocol at all. A reader is entitled to ask why a paper that cites atom-and-motif work does not test a motif view. This is the answer, and it cost minutes of CPU rather than building and training a sixth encoder.
+For a binary task with the LAC score, temperature scaling cannot change the prediction set. The score is 1 $-$ \emph{p} for the positive class and \emph{p} for the negative class. The temperature map \emph{g}(\emph{p}) = $\sigma$(logit(\emph{p})/\emph{T}) is strictly increasing and satisfies \emph{g}(1 $-$ \emph{p}) = 1 $-$ \emph{g}(\emph{p}), so both scores transform by the same increasing function. The conformal quantile of the transformed scores is the transformed quantile, so every comparison between a score and the threshold is unchanged. This follows from the invariance of split conformal prediction to strictly monotone transformations of the score~\cite{angelopoulos2023gentle}. We confirmed it empirically for three models (sets identical while probabilities moved by up to 0.02). Temperature scaling is therefore unnecessary before building binary LAC sets, though it can still improve the probabilities themselves. Platt scaling has an intercept, is not symmetric, and does change the sets; our class-balanced Platt map raised active coverage of the random forest to 85.7\%, but without any guarantee.
 
+\subsection{Adaptive prediction sets at two classes}
+\label{sec:6.4}
 
-\section{Calibration and conformal uncertainty}
+APS and RAPS are defined with a randomisation term~\cite{romano2020aps,angelopoulos2021raps}. Implemented deterministically, both collapsed at two classes: the lower-ranked class always scores 1.0, and when the conformal quantile reaches 1.0 every set contains both classes (Table~\ref{tab:16}). With randomisation both behaved as intended, with coverage at the nominal level and sets slightly larger than LAC's, and covered actives slightly better than LAC. Deterministic RAPS was identical to deterministic APS for these models. Tursunbadalov and Tursunbadalov~\cite{tursunbadalov2026quiet} likewise report a working APS at two classes on BBBP.
 
-\subsection{Post-hoc calibration mostly does not transfer}
-
-Across 65 (model, dataset) pairs and five seeded splits, fitting a temperature~\cite{guo2017calibration} or Platt~\cite{platt2000probabilities} map and evaluating test ECE: calibration \textbf{decisively helps on 20, hurts on 1, and is inside its own interval on 44}. Where it helps it helps the worst-calibrated models and never rescues one that was already well calibrated. A map fitted on one partition largely does not transfer to a scaffold-shifted test set by more than that partition's own noise --- and on one pair (Chemprop on SIDER, 0.106 to 0.113) it transfers in the wrong direction.
-
-\subsection{The guarantee is met by covering the wrong molecules}
-
-Split conformal~\cite{vovk2022alrw,angelopoulos2023gentle} was validated to nominal on synthetic data (90.1 / 90.1 / 90.3\% at a 90\% target) before use, so gaps on real data are findings rather than bugs.
-
-On Tox21 at a nominal 90\%, marginal coverage is met by every model --- and the minority class is not covered:
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{llll}
+\caption{LAC, APS and RAPS on Tox21 at a nominal 90\% (mean over 12 tasks and five seeded splits; CPU-trained models).}
+\label{tab:16}
+\begin{tabular}{lllll}
 \toprule
-model & overall & \textbf{actives} & mean set size \\
+Model & Score & Coverage & Actives covered & Mean set size \\
 \midrule
-SMILES transformer & 91.0\% & \textbf{9.7\%} & 0.99 \\
-Random forest & 90.7\% & \textbf{9.8\%} & 0.98 \\
-\textbf{Chemprop} & 90.6\% & \textbf{14.1\%} & 0.97 \\
-\code{fuse\_gated\_nograph} & 89.9\% & 71.1\% & 1.16 \\
-\code{fuse\_concat} & 89.8\% & 71.3\% & 1.19 \\
-\code{fuse\_gated} & 90.3\% & 72.4\% & 1.17 \\
-\code{fuse\_proposed} & 89.4\% & 72.7\% & 1.20 \\
-\code{gin\_ref} & 89.8\% & 76.8\% & 1.26 \\
-\code{desc} & 90.0\% & 77.9\% & 1.21 \\
-AttentiveFP & 90.3\% & 79.8\% & 1.23 \\
+\code{desc} & LAC & 90.0\% & 77.9\% & 1.21 \\
+\code{desc} & APS, deterministic & 99.1\% & 97.6\% & 1.93 \\
+\code{desc} & APS, randomised & 90.1\% & 81.3\% & 1.32 \\
+\code{desc} & RAPS, deterministic & 99.1\% & 97.6\% & 1.93 \\
+\code{desc} & RAPS, randomised & 90.0\% & 79.5\% & 1.27 \\
+\code{gin\_ref} & LAC & 89.8\% & 77.1\% & 1.25 \\
+\code{gin\_ref} & APS, deterministic & 99.2\% & 97.0\% & 1.93 \\
+\code{gin\_ref} & APS, randomised & 90.1\% & 81.8\% & 1.36 \\
+\code{gin\_ref} & RAPS, deterministic & 99.2\% & 97.0\% & 1.93 \\
+\code{gin\_ref} & RAPS, randomised & 89.9\% & 80.0\% & 1.31 \\
 \bottomrule
 \end{tabular}
-\end{center}
+\end{table}
 
-The catastrophic failure is \textbf{not an outlier but a mechanism, and mean set size predicts it.} Across \textbf{15 models} on Tox21 the column splits cleanly in two, with nothing in between:
+\subsection{Regression intervals}
+\label{sec:6.5}
 
-\begin{center}
+Table~\ref{tab:17} compares interval scores on ESOL. The comparison is across models: the absolute-residual and normalised scores are shown for the model they were run on, and CQR requires its own quantile model.
+
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{lll}
+\caption{Split conformal intervals on ESOL at a nominal 90\% (mean over five seeded splits).}
+\label{tab:17}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllll}
 \toprule
-group & models & actives covered \\
+Model & Score & Coverage & Mean width (logS) & Width s.d. \\
 \midrule
-mean set size $\leq$ 1.05 & 3 (random forest, SMILES transformer, \textbf{Chemprop}) & \textbf{9.7 -- 14.1\%} \\
-mean set size > 1.05 & 12 (everything else) & 71.1 -- 79.8\% \\
+\code{desc} & absolute residual & 85.1\% & 2.215 & 0.000 \\
+ensemble (\code{ens}) & absolute residual & 94.6\% & 4.153 & 0.000 \\
+ensemble (\code{ens}) & residual / base-model disagreement & 91.9\% & 7.071 & 3.979 \\
+quantile descriptor MLP & CQR & 87.7\% & 2.509 & 0.821 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-A \textbf{57-point gap} separates the two groups. On data that is 6--9\% positive, a marginal 90\% guarantee can be satisfied by emitting confident singletons of the majority class, and set size is exactly the diagnostic for whether a model is doing that. It costs nothing to compute and it tells you \emph{which} models will fail before you look at per-class coverage.
+The absolute residual gives every molecule the same interval. Normalising by base-model disagreement made widths vary but widened the ensemble's mean interval 1.7-fold. CQR produced varying widths at a mean width close to the \code{desc} model's constant interval, but under-covered by 2.3 points on ESOL, 2.2 on Lipophilicity and 4.2 on FreeSolv, consistent with the exchangeability violation measured next. We did not test whether widths track per-molecule error, so we do not claim that they do.
 
-\begin{center}
-\includegraphics[width=0.86\textwidth]{figures/fig1_setsize_vs_minority_coverage.pdf}
-\end{center}
+\subsection{Coverage and distance from the training set}
+\label{sec:6.6}
 
-\textbf{Figure 1.} Fifteen models on Tox21 under marginal split conformal at a nominal 90\%. The horizontal axis needs no labels, no minority statistics and no held-out actives to compute; the vertical axis needs all three. The shaded band is empty --- no model in this study sits between the two groups. Generated by \code{python -m scripts.make\_figures}.
+We binned Tox21 test molecules by Tanimoto similarity of their ECFP to the nearest training molecule and computed coverage per bin, separately for the two groups of Section~\ref{sec:6.2} (Table~\ref{tab:18}, Figure~\ref{fig:4}; six splits).
 
-The practical consequence is that the diagnostic is available \emph{before} deployment. Minority coverage requires a labelled evaluation set with enough actives to estimate it; mean set size requires only the model's own outputs on unlabelled molecules. A team choosing between candidate models for a screening campaign can rank them on this axis without running the experiment that would tell them the answer directly.
-
-That a well-regarded published method (Chemprop) sits in the failing group alongside a random forest is the part worth emphasising: this is not a property of weak models.
-
-Within the larger group, every architecture --- including every rung of the fusion ladder and both external baselines --- under-covers actives by 10--19 points, and the spread between the best and worst (71.1\% to 79.8\%) is \textbf{smaller than any of their gaps to nominal}. The under-coverage there is a property of the data and the method, not of the model.
-
-\textbf{Class-conditional (Mondrian) conformal repairs it}~\cite{vovk2022alrw}, fitting a separate quantile per class: actives rise to 87--91\% for every model, with the price openly visible in mean set size (0.98 $\rightarrow$ 1.52 for the random forest; \textasciitilde{}1.2 $\rightarrow$ \textasciitilde{}1.4 for the fusion ladder).
-
-\textbf{This result is not ours first.} Tursunbadalov \& Tursunbadalov~\cite{tursunbadalov2026quiet} report the same failure and the same fix, independently and four months before this draft: on four datasets marginal conformal meets its global 90\% target while minority coverage falls to 64.8\% on BBBP, 38.9\% on a Tox21 endpoint and 4.2\% on ClinTox, it reproduces across a random forest, a graph network and a frozen chemical language model, and class-conditional conformal closes it for a modest increase in set size. Their conservation identity --- the minority's shortfall equals the majority's surplus amplified by the imbalance ratio --- is a cleaner explanation of the magnitude than anything we offer.
-
-We report our measurement as \textbf{independent corroboration on a wider model set}, not as a discovery. What it adds is breadth and one mechanism: fifteen models including every rung of a fusion ladder and two published external baselines, where the spread across the twelve architectures that cover the minority class at all (71.1\% to 79.8\%) is smaller than any of their gaps to nominal, and where the three that fail are exactly the three whose mean set size is $\approx$ 1.0 --- on 6--9\% positive data, a marginal guarantee can be met with confident singletons of the majority class. That one of the three is Chemprop, a method a practitioner would actually reach for, is what makes this a property of the setting rather than of weak models. The set-size diagnostic is complementary to their coverage-gap diagnostic, costs nothing to compute, and predicts \emph{which} models will fail.
-
-The rest of \S6 does not overlap with their work: \S6.3's invariance proof, \S6.4's analysis of APS/RAPS at two classes, \S6.5's regression scores and \S6.6's distance stratification are, as far as we can determine, not covered there.
-
-\subsection{Temperature scaling provably cannot change a binary conformal set}
-
-The conformal score --- that of the least ambiguous set-valued classifier, LAC~\cite{sadinle2019lac} --- is \code{1 $-$ p} for an active and \code{p} for an inactive, and the temperature map \code{g} is symmetric about 0.5: \code{max |g(1$-$p) $-$ (1 $-$ g(p))| $\approx$ 2 $\times$ 10\textsuperscript{-16}} across the probability range. Both classes therefore pass through the \emph{same} strictly increasing map, the calibration quantile moves with them, and every \code{score $\leq$ q} comparison is preserved. Split conformal is invariant to monotone transformations of its score, so nothing can change. We verified the sets bit-identical while the underlying probabilities moved by up to 0.02.
-
-Platt scaling has an intercept, is not symmetric, and does change things --- recovering actives to 85.7\% on Tox21, but as a side effect of fitting with balanced class weights rather than by any guarantee, and landing short of the nominal 90\%.
-
-This matters because ``calibrate, then conformalize'' is a natural pipeline to build, and for binary tasks with this score it is provably wasted effort.
-
-\subsection{Adaptive set scores degenerate at two classes}
-
-APS~\cite{romano2020aps} and RAPS~\cite{angelopoulos2021raps} are the standard recommendations for set-valued classification. At two classes they are unusable:
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{lll}
+\caption{Tox21 conformal coverage by similarity to the nearest training molecule (nominal 90\%).}
+\label{tab:18}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llllll}
 \toprule
-score & Tox21 coverage & mean set size (max 2) \\
+Similarity & Mean molecules & Overall (12 covering) & Actives (12 covering) & Overall (3 failing) & Actives (3 failing) \\
 \midrule
-LAC (\code{1 $-$ p(true class)}) & 90.7\% & \textbf{0.98} \\
-APS & 99.9\% & 1.98 \\
-RAPS & 96.5\% & 1.27 \\
+0.0-0.3 & 74 & 88.1\% & 59.4\% & 89.6\% & 7.1\% \\
+0.3-0.4 & 161 & 88.3\% & 70.8\% & 89.6\% & 8.8\% \\
+0.4-0.5 & 179 & 89.5\% & 74.1\% & 90.4\% & 12.2\% \\
+0.5-0.7 & 255 & 90.0\% & 83.1\% & 90.5\% & 14.5\% \\
+0.7-1.0 & 114 & 92.4\% & 78.1\% & 92.8\% & 14.7\% \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-APS answers ``could be either'' for essentially every molecule. The reason is structural: with two classes the lower-ranked class always scores exactly 1.0, so the calibration scores collapse onto a spike, and any model emitting saturated probabilities (a random forest with unanimous votes does so for 15\% of Tox21 molecules) places \emph{top-class} scores on that same spike. When the quantile lands there, the lower-ranked class is admitted for every molecule.
+For the twelve covering models, overall coverage rose from 88.1\% for the most novel molecules to 92.4\% for close analogues, and active coverage from 59.4\% to a peak of 83.1\% at similarity 0.5--0.7. The three failing models covered 7--15\% of actives in every band, including close analogues. Distance from the training set therefore degrades coverage for all models, consistent with a violation of exchangeability~\cite{laghuvarapu2023codrug}. It does not explain the difference between the groups.
 
-RAPS is \textbf{not} identical to APS here, which is the natural assumption --- its rank penalty adds a constant to the lower-ranked class and so appears to be a monotone map on the score, to which conformal is invariant. It is not: the penalty is a function of the \emph{class}, not the score. What it does is break the tie at the spike, and that alone changes mean set size from 2.000 to 1.000.
-
-\subsection{Interval width, and what carries information}
-
-For regression, the choice of score determines whether the interval says anything:
-
-\begin{center}
-\small
-\begin{tabular}{llll}
-\toprule
-score & ESOL coverage & mean width & width s.d. \\
-\midrule
-absolute residual (constant width) & 85.1\% & 2.215 & \textbf{0.000} \\
-normalised by base-model disagreement & 91.9\% & \textbf{7.071} & 3.979 \\
-\textbf{conformalized quantile regression} & 87.7\% & \textbf{2.509} & \textbf{0.821} \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-The constant-width score is correct and useless: every molecule receives the same interval, so it cannot indicate which predictions to distrust. Normalising by an ensemble-disagreement proxy makes width vary but buys that adaptivity by inflating every interval --- three times the width. CQR~\cite{romano2019cqr}, fitting explicit conditional quantiles with pinball loss, is the only score we tested that varies width meaningfully at a usable mean width. It under-covers by 2--4 points, which is the same exchangeability failure documented next.
-
-\subsection{Coverage decays with distance from the training set}
-
-Binning Tox21 test molecules by Tanimoto similarity to their nearest training neighbour, averaged over the same fifteen models and six splits as \S6.2:
-
-\begin{center}
-\small
-\begin{tabular}{llll}
-\toprule
-similarity & mean n & overall & \textbf{actives} \\
-\midrule
-0.0--0.3 (most novel) & 74 & 88.4\% & \textbf{49.0\%} \\
-0.3--0.4 & 161 & 88.6\% & 58.4\% \\
-0.4--0.5 & 179 & 89.7\% & 61.8\% \\
-0.5--0.7 & 255 & 90.1\% & 69.4\% \\
-0.7--1.0 (close analogues) & 114 & 92.5\% & 65.5\% \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Overall coverage falls monotonically from 92.5\% to 88.4\% --- a 4-point drift that a marginal guarantee can absorb almost unnoticed. Active coverage falls from 69.4\% to \textbf{49.0\%}, so on the molecules a scaffold split exists to test, a nominal 90\% guarantee covers barely half the compounds a screen is run to find. (The actives column is \emph{not} monotone at the top: the most-similar band sits at 65.5\% on \textasciitilde{}114 molecules with a low positive rate, which we read as sampling noise rather than a reversal, and report rather than smooth.)
-
-This is the exchangeability assumption~\cite{angelopoulos2023gentle} failing, measured rather than argued, and it is the mechanism behind \S6.2: the models that emit near-singleton sets are the ones that resolve this tension by abandoning the minority class everywhere rather than only at the far end.
-
-\begin{center}
-\includegraphics[width=0.86\textwidth]{figures/fig2_coverage_by_distance.pdf}
-\end{center}
-
-\textbf{Figure 2.} The two lines are the same guarantee, read two ways. The blue line is what a marginal conformal report shows; the red line is what a screening campaign experiences. Generated by \code{python -m scripts.make\_figures}.
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.82\textwidth]{figures/fig4_coverage_by_distance.pdf}
+\caption{Tox21 conformal coverage against Tanimoto similarity to the nearest training molecule, for all molecules (dashed) and active compounds (solid), separately for the twelve covering and the three failing models of Section~\ref{sec:6.2}. The dotted line is the nominal 90\%.}
+\label{fig:4}
+\end{figure}
 
 \subsection{Activity cliffs}
+\label{sec:6.7}
 
-A test molecule is \emph{on a cliff} if another molecule in the dataset is within ECFP Tanimoto 0.9 and carries the opposite label. Comparing cliff to non-cliff molecules within the same test set and the same model:
+We defined a test molecule to be on a cliff if another molecule in the dataset lies within ECFP Tanimoto similarity 0.9 and carries the opposite label, a looser definition than the potency-based cliffs of van Tilborg et al.~\cite{vantilborg2022cliffs}. Splits with fewer than ten cliff molecules were skipped (Table~\ref{tab:19}).
 
-\begin{center}
+\begin{table}[H]
+\centering
 \small
+\caption{AUC on cliff and non-cliff test molecules (similarity threshold 0.9). BACE results average the three seeded splits with at least ten cliff molecules; Tox21 averages all five.}
+\label{tab:19}
+\resizebox{\textwidth}{!}{%
 \begin{tabular}{lllll}
 \toprule
-dataset & model & cliff & non-cliff & penalty \\
+Dataset (cliff / non-cliff molecules; splits) & Model & Cliff AUC & Non-cliff AUC & Difference \\
 \midrule
-BACE (13 / 139) & \code{desc} & 0.5025 & 0.8447 & +0.3421 \\
-BACE & \code{fuse\_gated} & 0.5338 & 0.8245 & +0.2906 \\
-Tox21 (34 / 749) & \code{desc} & 0.7148 & 0.8327 & +0.1179 \\
-Tox21 & \code{fuse\_gated} & 0.6883 & 0.8323 & +0.1439 \\
+BACE (13 / 139; 3 splits) & \code{desc} & 0.503 & 0.845 & 0.342 \\
+BACE (13 / 139; 3 splits) & \code{gated} & 0.534 & 0.824 & 0.291 \\
+Tox21 (34 / 749; 5 splits) & \code{desc} & 0.715 & 0.833 & 0.118 \\
+Tox21 (34 / 749; 5 splits) & \code{gated} & 0.688 & 0.832 & 0.144 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-On BACE every model is \textbf{at chance} on cliff molecules while scoring 0.82--0.84 on the rest. Fusion helps on BACE and ClinTox and hurts slightly on Tox21. Cliff sets are 10--34 molecules, so this is directional rather than decisive, and the ordering is stable at a 0.85 threshold.
+Both models were near chance on BACE cliff molecules and markedly worse on Tox21 cliff molecules. With 10--17 cliff molecules per BACE split and no intervals, these results are descriptive, and the direction agrees with van Tilborg et al.
 
-Van Tilborg et al.~\cite{vantilborg2022cliffs} report the same direction across many methods and targets, under a stricter definition: pairs of similar molecules with a large measured difference in potency, on curated bioactivity data. Ours is a label flip within ECFP Tanimoto 0.9 on binary MoleculeNet labels, which is looser and over-counts (\S10).
+\section{Device and seed variance}
+\label{sec:7}
 
+We trained five models (\code{gin\_ref} and the four cached fusion rungs with a graph view) twice with identical code, seed and split indices, once on the CPU and once on a T4 GPU. Of 240 test metrics, 4 were identical; the median absolute difference was 0.017 and the mean 0.033 (maximum 0.451 RMSE). Initial weights match across devices, but dropout masks are drawn on the device, so the two runs follow different random streams. Scaled by the practical threshold of Section~\ref{sec:3.6} (Table~\ref{tab:20}), 58 of 240 single-split results (24\%) and 7 of 40 canonical-split results moved by more than the threshold, but only 1 of 40 five-split means did. Under the paired tests of Section~\ref{sec:3.5} the device effect was not detectable for any of the five models.
 
-\section{Seeded is not reproducible across hardware}
+To separate the device from the random stream, we also retrained two CPU models (\code{desc} and \code{fuse\_gated\_nograph}) with seed 43 instead of 42 on the same CPU. Changing the seed moved results as much as changing the device: 25 of 96 single-split results (26\%) and 7 of 16 canonical-split results exceeded the threshold (median absolute difference 0.015), and none of the 16 five-split means did. The device effect is therefore of the same size as ordinary seed variance, which is what a change of random stream would produce.
 
-We regenerated five models under identical code, identical seeds and identical split indices, on a different accelerator. Of 240 test metrics present in both runs, \textbf{only 4 were identical}; the median absolute difference was 0.033 and the largest was 0.4514 RMSE.
-
-The cause is not a seeding defect. Weight initialisation occurs on CPU before transfer and matches exactly; dropout masks are drawn \emph{on device}, so a CPU run and a CUDA run draw from different generators. Different masks, different optimisation trajectory, different model.
-
-Scaled by this work's own minimum detectable effect:
-
-\begin{center}
+\begin{table}[H]
+\centering
 \small
-\begin{tabular}{llll}
+\caption{Absolute change in test metrics between two otherwise identical trainings, in multiples of the practical threshold (0.02 AUC, 0.10 RMSE).}
+\label{tab:20}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lllllll}
 \toprule
-reporting unit & median & max & fraction exceeding MDE \\
+Change & Models & Canonical split: median / max & Canonical over threshold & All single splits over threshold & Five-split mean: median / max & Five-split means over threshold \\
 \midrule
-single canonical split & 0.34 $\times$ MDE & \textbf{2.16 $\times$ MDE} & \textbf{7 of 40 (18\%)} \\
-mean over 5 seeded splits & 0.26 $\times$ MDE & 1.00 $\times$ MDE & 1 of 40 (2\%) \\
+device: CPU vs T4 & 5 & 0.34 / 2.16 & 7 of 40 & 58 of 240 & 0.26 / 1.00 & 1 of 40 \\
+seed: 42 vs 43, same CPU & 2 & 0.76 / 1.92 & 7 of 16 & 25 of 96 & 0.21 / 0.53 & 0 of 16 \\
 \bottomrule
 \end{tabular}
-\end{center}
+}
+\end{table}
 
-Under the paired test we report, the device effect is \textbf{not detectable at all}: 0 improves, 0 degrades and 8 indistinguishable on all five models, with no across-dataset difference.
+These results agree with reports of run-to-run variation from nondeterminism~\cite{summers2021nondeterminism,eryilmaz2024randomness,shanmugavelu2024floating}. A quarter of single-split results in these benchmarks change by more than the practical threshold under a change of device or seed alone, and averaging over five splits largely, though not always, removes the effect. Benchmark tables should record the device, and single-split comparisons should not be made across devices.
 
-The per-split differences are noise, not bias --- they are large, and they average out. We consider this the strongest available justification for multi-seed reporting: the protocol was built to absorb split-to-split variance and it absorbs hardware variance too, while the single-split number it replaces does not. \textbf{Nearly one in five canonical-split numbers moves by more than the effect size the field reports differences at, from nothing but a change of GPU.}
+\section{Recommendations}
+\label{sec:8}
 
-A practical consequence: benchmark tables should record the accelerator, and cross-hardware comparisons of single-split numbers should be treated as uncontrolled.
-
-Run-to-run instability of this kind is documented outside this field. Summers and Dinneen~\cite{summers2021nondeterminism} trace run-to-run variation in neural-network training to nondeterminism amplified by instability in optimisation, and Eryılmaz et al.~\cite{eryilmaz2024randomness} report GPU-level randomness moving performance scores by up to 4.77\% in computer-vision benchmarks while arguing against single-run reporting. What \S7 adds is the same measurement in this benchmark's own units, against a minimum detectable effect declared in advance.
-
-
-\section{Practical recommendations}
-
-Everything below follows from a measurement in this paper, and each is cheap enough to adopt immediately.
-
-\textbf{For anyone training these models.}
+For training and model selection:
 
 \begin{enumerate}
-\item \textbf{Try the cheap configuration first, and make it prove it is worse.} A 16,513-parameter gate matched a 1,169,793-parameter fusion block on all eight datasets (\S5.3), and dropping the graph view left accuracy unmoved while cutting training from 17 to 1.3 minutes per split and removing the graph-library dependency entirely (\S5.4). Neither saving was available to us until we built the comparison that could detect its absence.
-\item \textbf{Include a descriptor baseline.} An ECFP-plus-descriptor MLP was favoured over our fusion model on 4 of 8 datasets (p = 0.55) and over a published external baseline on one dataset after correction (\S5.5). It trains in minutes. A multi-view result that is not compared against it is not yet a result.
-\item \textbf{Fix one hyper-parameter setting across every arm.} Tuning one side of a comparison against fixed-setting baselines measures search budget, not architecture. We state the setting in a machine-checked configuration file (\S3.6).
-\item \textbf{Before building a view, check that its features survive your split.} A motif view was on our plan until we measured what a scaffold split leaves it: across all 48 dataset-split pairs, no ring-bearing test molecule shares a Murcko scaffold with any training molecule, and on FreeSolv between 52\% and 77\% of test molecules share no training fragment either (\S5.7). The check is a vocabulary intersection over the training split and costs minutes, which is worth spending before committing to an encoder whatever that encoder would cost.
+\item \textbf{Audit how inputs are written, not only what they contain.} Sequence models read the notation of a SMILES string. In ClinTox and BBBP notation predicts the label; canonicalise strings or audit notation before training a language model (Section~\ref{sec:4.1}).
+\item \textbf{Include a fingerprint-plus-descriptor baseline.} In this study it had the best mean of any single view on six of eight datasets, and no fusion model outperformed it (Sections~\ref{sec:5.1} and \ref{sec:5.3}).
+\item \textbf{Try the cheaper configuration first.} Dropping the graph view reduced training time roughly thirteen-fold with no detectable loss (Section~\ref{sec:5.4}), although equivalence was not established on every dataset.
+\item \textbf{Fix one hyper-parameter setting across every compared model,} or tune all of them with the same budget (Section~\ref{sec:3.4}).
 \end{enumerate}
 
-\textbf{For anyone reporting on these benchmarks.}
+For reporting:
 
 \begin{enumerate}
-\item \textbf{Report both split conventions, or say which one you used.} Two procedures both called ``scaffold split'' differ by up to 0.22 AUC on the same model and the same code (\S3.2).
-\item \textbf{Average over several splits, and record the accelerator.} Identical code, seed and splits on a different GPU moved 18\% of single-split numbers by more than the effect size the field reports differences at; the five-split mean absorbed it entirely (\S7). Recording the device costs one column.
-\item \textbf{State a minimum detectable effect before reading the results.} Ours is $\pm$0.02 AUC and $\pm$0.10 RMSE (\S3.5). Differences below it should not be described as improvements.
-\item \textbf{Correct for testing eight datasets at once, and report the across-dataset test separately.} Eight independent tests at $\alpha$ = 0.05 produce at least one false positive 34\% of the time (\S3.4).
-\item \textbf{Sweep the constants you chose without thinking.} Our own mechanism claim reaches significance at one bilinear rank and at none of the other three, though the ranks are mutually indistinguishable (\S5.6). We would not have known without the sweep.
+\item \textbf{State the split convention and report more than one split.} The canonical and seeded scaffold conventions differ by up to 0.223 AUC on the same model (Section~\ref{sec:4.3}).
+\item \textbf{Record the accelerator and average over splits} (Section~\ref{sec:7}).
+\item \textbf{Report paired, corrected per-dataset tests together with across-dataset tests, and test equivalence before claiming it} (Sections~\ref{sec:3.5} and \ref{sec:5.4}).
+\item \textbf{Treat untuned constants as hyper-parameters.} A significant result at one rank, among ranks that cannot be told apart, is not evidence for that rank (Section~\ref{sec:5.6}).
 \end{enumerate}
 
-\textbf{For anyone deploying with uncertainty estimates.}
+For uncertainty estimates:
 
 \begin{enumerate}
-\item \textbf{Check mean prediction-set size before you check anything else.} It separated the three models whose minority coverage collapses from the twelve whose does not, with no overlap and no labels required (\S6.2). It is the cheapest deployment check in this paper.
-\item \textbf{Use class-conditional conformal on imbalanced endpoints.} Marginal conformal met its 90\% target while covering 9.7--14.1\% of actives; the class-conditional variant restored 87--91\% at a visible and reportable cost in set size (\S6.2) --- the same fix reported independently by Tursunbadalov \& Tursunbadalov~\cite{tursunbadalov2026quiet}.
-\item \textbf{Do not temperature-scale before conformalizing a binary task.} It cannot change the prediction set --- we prove it (\S6.3) --- and the empirical check agrees to the last molecule.
-\item \textbf{Do not reach for APS or RAPS at two classes.} Both degenerate there (\S6.4). For regression intervals that vary informatively per molecule, use conformalized quantile regression (\S6.5).
+\item \textbf{Report per-class coverage on imbalanced endpoints and use class-conditional conformal prediction}~\cite{norinder2017imbalanced,sun2017mondrian}. Minority coverage depends on class weighting in training (Section~\ref{sec:6.2}).
+\item \textbf{Use the randomised forms of APS and RAPS} (Section~\ref{sec:6.4}).
+\item \textbf{Temperature scaling is unnecessary before binary LAC conformal sets} (Section~\ref{sec:6.3}).
 \end{enumerate}
-
-
-\section{Dataset quality: duplicate molecules with conflicting labels}
-
-Canonicalising the SMILES in each benchmark reveals duplicates that raw strings hide, and in three of the eight the duplicates disagree with themselves. \code{python -m scripts.audit\_duplicates} reproduces the table.
-
-\begin{center}
-\small
-\begin{tabular}{lllll}
-\toprule
-dataset & rows & unique molecules & duplicate groups & groups whose labels conflict \\
-\midrule
-BBBP & 2,039 & 1,975 & 60 & 10 \\
-ClinTox & 1,480 & 1,461 & 19 & 19 \\
-ESOL & 1,128 & 1,117 & 11 & 6 \\
-\bottomrule
-\end{tabular}
-\end{center}
-
-The other five datasets have no duplicates at all. Aspirin is one of the BBBP cases, present twice and labelled both permeable and not.
-
-\textbf{This is not leakage, and the audit is what establishes that.} No duplicate group spans more than one split in any of the eight datasets, because identical molecules share a Bemis-Murcko scaffold~\cite{bemis1996frameworks} and a scaffold split necessarily keeps them together. A random split would not have. That is a concrete, checkable argument for the scaffold protocol rather than an asserted one, and it is the second time in this paper that a property we adopted for one reason turned out to be load-bearing for another.
-
-\textbf{It does bound achievable accuracy.} No model can be right about both copies of a molecule the benchmark labels two ways, so a component of every reported ClinTox error --- 19 self-contradictory groups in 1,480 molecules --- belongs to the data rather than to the architecture. We are not aware of this being accounted for in the numbers this benchmark is usually compared against, and we report it so that future work can subtract it rather than chase it.
-
 
 \section{Limitations}
+\label{sec:9}
 
 \begin{itemize}
-\item \textbf{No hyper-parameter tuning.} Every model uses one fixed setting held identical across architectures. This is what makes the comparisons fair and it leaves every absolute number untuned; a tuned version of any row here would be higher. We consider tuning one arm of a comparison against fixed-setting baselines to be the principal way a fusion result is manufactured, and we did not do it.
-\item \textbf{Eight datasets, five seeds.} The across-dataset sign test cannot go below p = 0.0078, so a 7--1 split cannot reach significance on that statistic however large the effect.
-\item \textbf{The comparison against the earlier pipeline runs on five datasets, not eight} (\S5.3), because that is where the pipeline's models exist. At n = 5 the sign test floors at p = 0.0625, so \emph{no} comparison in that table can reach p < 0.05 on that statistic, however large the effect. The per-dataset Holm column carries the weight there, and the conclusion we draw from it --- that the architecture clears the pipeline's base models but not its stacking meta-learner --- is correspondingly weaker evidence than the eight-dataset results.
-\item \textbf{Our own headline mechanism result is not stable to a hyper-parameter} (\S5.6). The bilinear term separates from concatenation at every rank we tried, but only at r = 64 does it reach across-dataset significance, and the ranks are mutually indistinguishable. The effect is real; the p-value attached to it in this paper is partly an artefact of a constant chosen once. We found this because we swept it, and we report it rather than quoting the sweep only where it agrees.
-\item \textbf{Two comparisons are cross-hardware} (\S7): the LoRA views against the CPU-trained graph reference, and the end-to-end ladder against the cached ladder. Both are unbiased in the five-split mean, so neither conclusion changes, but the within-device comparisons --- LoRA against its matched frozen control, and the cached ladder internally --- are the ones we lead with.
-\item \textbf{Cliff sets are small} (10--34 molecules), and the fingerprint-similarity definition over-counts relative to a proper matched-molecular-pair analysis.
-\item \textbf{Conformal calibration uses the validation split} for the models without out-of-fold predictions, which is also the early-stopping split; this biases the fitted map, not the test evaluation.
-\item \textbf{Single architecture family.} We tested the mechanisms two specific proposals~\cite{zhang2024mvmrl,jang2026krovex} advocate, not those proposals' full published systems.
-\item \textbf{The motif result is a lower bound, not an impossibility proof} (\S5.7). A linear readout over fragment indicators bounds what a \emph{trained} fragment encoder could extract from below, and we did not build that encoder. The predictive half is also the half the two split conventions disagree about: motifs lose all eight seeded datasets and win two canonical ones, and adding them improves 7 of 8 canonical numbers while being indistinguishable from nothing over the seeded splits. Only the seeded convention carries intervals, so that is the one we draw the conclusion from --- but the disagreement is real and we report it rather than the convention that suits us. The coverage half is stronger than either: zero scaffold transfer across all 48 dataset-split pairs is a property of the split protocol and holds for any motif encoder.
+\item \textbf{No hyper-parameter tuning.} Absolute numbers are untuned; a tuned model would likely score higher.
+\item \textbf{Partial re-run after the leakage finding.} Only CPU-trained models were re-run with canonical SMILES. GPU-trained sequence models and the earlier pipeline's \code{trf}, \code{hybrid} and \code{ens} are compared on six datasets (three for the pipeline comparisons), which lowers statistical power.
+\item \textbf{Head-size confound in the ladder.} Head width follows fusion output width (Table~\ref{tab:7}), so rungs differ in head capacity as well as mechanism.
+\item \textbf{Exploratory statistics.} Across-dataset tests are not corrected across the many comparisons reported, and five splits give low per-dataset power.
+\item \textbf{Calibration set equals the early-stopping set,} which biases conformal coverage downward (Section~\ref{sec:3.7}).
+\item \textbf{Cross-device comparisons.} Comparisons with AttentiveFP, Chemprop and the T4-trained models mix devices (Sections~\ref{sec:3.8} and \ref{sec:7}).
+\item \textbf{Chemprop was run with its own recipe,} so its comparison is between complete methods.
+\item \textbf{Implemented mechanisms, not published systems.} \code{xattn} and \code{bilinear} implement ideas from MvMRL and KROVEX, not those systems.
+\item \textbf{Small duplicate leak in the seeded splits} (Section~\ref{sec:4.2}).
+\item \textbf{Small, loosely defined cliff sets} (Section~\ref{sec:6.7}).
+\item \textbf{Motif probe is a lower bound,} because a trained motif encoder was not built (Section~\ref{sec:5.7}).
 \end{itemize}
 
-
-\section{Reproducibility and status}
-
-Every number is generated from archived per-split predictions and metrics by scripts in the repository; the tables in this draft are built by \code{python -m scripts.make\_tables} and are not transcribed. The fixed hyper-parameter setting is machine-checked against the training code.
-
-\textbf{Pending compute:} none. Every experiment this paper reports is complete. Two ablations named in the plan were deliberately not run and are not reported: two of the three leave-one-view-out arms (the third, and the only one a claim rests on, is in \S5.4), and the motif view, which was not built --- \S5.7 reports the probe that was run in its place and what it found. An Optuna~\cite{akiba2019optuna} study is implemented in the repository and has never been run; \S10 says why.
-
-
 \section{Conclusion}
+\label{sec:10}
 
-We built the measurement before the model, and the measurement is what paid.
+Applying one strict protocol to a multi-view fusion architecture and its components produced mostly negative but useful results. The largest effect in the study was not architectural. In ClinTox and BBBP the notation of the SMILES string predicts the label, which inflated every sequence-reading model by up to 0.19 AUC. With that leak removed, no fusion variant outperformed a fingerprint-plus-descriptor MLP, and the advantage over a two-layer graph network was no longer significant across datasets. Under marginal conformal prediction, coverage of active compounds on imbalanced Tox21 depended on class weighting during training rather than on model family. Adaptive prediction sets need their randomisation at two classes, and single-split results vary with the device and seed. The protocol and code are public so that these checks can be applied to other architectures.
 
-\textbf{What it returned is usable today.} The expensive fusion block can be replaced by a gate 71$\times$ smaller with no measurable loss, and the graph view can be removed outright for a 13$\times$ training speed-up and one fewer library to install --- findings worth more to a practitioner than the architecture they came from. Mean prediction-set size separates the models whose minority coverage collapses from those whose does not, with no overlap and without needing a single label, which makes it the cheapest pre-deployment check we know of for the failure mode that matters most in a screening context. Temperature scaling provably cannot alter a binary conformal set, so a step many pipelines perform can simply be dropped. And recording which accelerator produced a number, then averaging over five splits, removes an error that moved 18\% of single-split results by more than the effect sizes this field reports.
+\section*{Declarations}
 
-\textbf{What it withheld is the reason to believe the rest.} The mechanisms we implemented work as specified --- verified, not assumed --- and do not beat a descriptor MLP on these benchmarks. Two published external baselines do not beat a two-layer graph network. Gate weights reorganise when a 0.4\%-weight view is removed, so they should not be read as importance. Our own mechanism claim reaches across-dataset significance at one bilinear rank and at none of the other three, though the ranks cannot be told apart. A protocol that returns only confirmations is not measuring anything; this one returned the efficiency result and the diagnostics \emph{and} refused the headline we started out wanting, from the same eight datasets and the same six splits.
+\textbf{Data availability.} All datasets are public MoleculeNet benchmarks obtained through DeepChem 2.8.0. Per-split test and validation metrics for every model, the code that generates the split indices, and all derived statistics are in the code repository.
 
-The transferable claim is not about any architecture. It is that an evaluation strong enough to be trusted when it disappoints you is also strong enough to find the savings a weaker one walks past --- and that on these benchmarks those savings are large, immediate, and were sitting underneath a result nobody had reason to question.
+\textbf{Code availability.} Code, configuration and archived metrics are available at \url{https://github.com/ItisAarya/molecular-property-prediction-public} and archived on Zenodo (\url{https://doi.org/10.5281/zenodo.22734878}). Per-split predictions for the GPU-trained models are available from the author on request.
 
+\textbf{Competing interests.} [AUTHOR TO COMPLETE]
+
+\textbf{Funding.} [AUTHOR TO COMPLETE]
+
+\textbf{Author contributions.} A.S. designed the study, wrote the code, ran the experiments, analysed the results and wrote the manuscript.
+
+\textbf{Use of generative AI.} [AUTHOR TO COMPLETE: state whether and how AI tools were used in code, analysis or writing, as required by the target journal.]
 
 
 \bibliographystyle{unsrt}
 \bibliography{references}
 
-\section{Appendix A. Reproducing every number in this paper}
+\appendix
+\section{Reproducing the results}
+\label{sec:A}
 
 \begin{quote}
 \ttfamily\small\noindent
-python -m scripts.check\_configs     \# 27 assertions: the config matches the trainers \\
-python -m scripts.check\_paper       \# 185 assertions: the prose matches the archives \\
-python -m scripts.check\_deploy      \# the live featuriser matches the training features \\
-python -m scripts.check\_mechanisms  \# each fusion rung computes what its name claims \\
-python -m scripts.make\_tables       \# regenerates Tables 1-3 \\
-python -m scripts.make\_figures      \# regenerates every figure \\
-python -m scripts.audit\_duplicates  \# regenerates the section 9 table \\
-python -m scripts.probe\_motifs      \# regenerates the section 5.7 table \\
+python -m scripts.check\_configs       \# configuration matches trainer defaults \\
+python -m scripts.check\_mechanisms    \# fusion blocks compute what they claim \\
+python -m scripts.audit\_notation      \# SMILES-notation audit (Section 4.1) \\
+python -m scripts.audit\_duplicates    \# duplicate audit, all splits \\
+python -m scripts.run\_comparisons     \# every paired comparison \\
+python -m scripts.leakage\_effect      \# Table 3 \\
+python -m scripts.equivalence         \# equivalence tests \\
+python -m scripts.device\_effect       \# Table 20 \\
+python -m scripts.make\_figures        \# Figures 1-4 \\
+python -m scripts.fill\_draft\_tables   \# every table in the draft \\
+python -m scripts.check\_paper         \# prose numbers match archives \\
+python -m scripts.make\_latex          \# this LaTeX project \\
 \end{quote}
 
-Every table and figure is generated from \code{results/runs/<split>/\{metrics,preds\}}, which holds archived per-split predictions and metrics for 1,406 (model, dataset, split) fits. No number in the prose is transcribed by hand without an assertion behind it, and a claim that disappears from the draft fails the check as loudly as one that becomes wrong.
+Per-split metrics for every fit are archived under \code{results/runs/<split>/metrics/}. Results that read raw SMILES on ClinTox and BBBP are kept under \code{<model>\_rawsmiles} and excluded from comparisons (\code{src/eval/leakage.py}).
 
 
 \end{document}

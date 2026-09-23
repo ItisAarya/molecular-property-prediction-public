@@ -94,7 +94,7 @@ def check_dataset(ds, n, do_seq):
     if do_seq:
         ez = np.load(os.path.join(POOL, f"{ds}_chemberta.npz"))
         want_s = np.concatenate([ez["cls"][:n], ez["mean"][:n]], axis=1)
-        live_s = F.chemberta(smiles).numpy()
+        live_s = F.chemberta(smiles, ds).numpy()
         if not np.allclose(live_s, want_s, rtol=1e-4, atol=1e-4):
             worst = float(np.abs(live_s - want_s).max())
             bad.append(f"seq: embeddings differ, max |diff| = {worst:.3g}")

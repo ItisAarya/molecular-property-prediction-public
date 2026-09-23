@@ -6,7 +6,8 @@ Find molecules that appear more than once in a dataset, and check whether the co
     python -m scripts.audit_duplicates
     python -m scripts.audit_duplicates --datasets bbbp clintox
 
-Writes `results/metrics/duplicate_audit.csv`.
+Writes `results/metrics/duplicate_audit.csv` (the canonical split) and
+`results/metrics/duplicate_audit_by_split.csv` (every split variant).
 
 WHY THIS EXISTS
 ---------------
@@ -17,16 +18,24 @@ measured answers**. Aspirin is in BBBP twice, labelled both permeable and not.
 
 That matters for a paper in two ways, and they pull in opposite directions.
 
-It is **not leakage**, and the audit is what establishes that: no duplicate group is split
-across train/valid/test in any of the eight datasets. Identical molecules share a Murcko
-scaffold, so a scaffold split necessarily keeps them together. A random split would not have,
-which is one more concrete reason to prefer the scaffold protocol -- and unlike most such
-arguments, this one is checkable rather than asserted.
+Whether it is **leakage** depends on the split, and the audit is what establishes which.
+On the canonical DeepChem split no duplicate group crosses train/valid/test: DeepChem groups
+every acyclic molecule under the one empty scaffold, so identical molecules always share a
+group. The five seeded splits (`src/data/splits.py`) treat each acyclic molecule as its own
+group instead, so an acyclic duplicate *can* land on both sides. It does, rarely: 1-2 groups
+per split in BBBP (chloroform, dichloromethane, divinyl ether, 2-chloro-1,1,1-trifluoroethane)
+and 0-1 in ESOL (a hexitol recorded twice with different solubilities). The by-split archive
+records every such case, so the size of that leak is a measurement, not an assumption.
 
 It **is** a ceiling on achievable accuracy. A model cannot be right about both copies of a
 molecule the benchmark labels two ways, so some fraction of every reported error on these
-datasets is not the model's to fix. Nineteen self-contradictory groups in a 1,480-molecule
-dataset is not a rounding error.
+datasets is not the model's to fix.
+
+ClinTox needs a caveat. All 19 of its conflicting groups are one drug entered twice, once from
+each of the benchmark's source lists: once in aromatic notation labelled approved and
+non-toxic, once in Kekule notation labelled failed for toxicity. They are an artefact of how
+the benchmark was assembled, and the same artefact makes SMILES notation predict the ClinTox
+labels (`scripts/audit_notation.py`).
 
 WHAT COUNTS AS A CONFLICT
 -------------------------
@@ -101,6 +110,10 @@ def audit(ds, variant="deepchem"):
     }
 
 
+VARIANTS = ["deepchem", "seed0", "seed1", "seed2", "seed3", "seed4"]
+BY_SPLIT_OUT = os.path.join(MET_DIR, "duplicate_audit_by_split.csv")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.strip().splitlines()[2])
     ap.add_argument("--datasets", nargs="+", default=None)
@@ -130,15 +143,26 @@ def main():
 
     os.makedirs(MET_DIR, exist_ok=True)
     df.to_csv(args.out, index=False)
+
+    # Every split variant, because the seeded splits group acyclic molecules differently from
+    # the canonical one and can separate identical molecules. Written only for the full set.
+    if args.out == OUT:
+        by_split = pd.DataFrame([dict(audit(ds, v), variant=v)
+                                 for v in VARIANTS for ds in datasets])
+        by_split.to_csv(BY_SPLIT_OUT, index=False)
+        crossing = by_split[by_split.groups_spanning_splits > 0]
+        print("\nDuplicate groups that cross train/valid/test, by split variant:")
+        print(crossing[["variant", "dataset", "groups_spanning_splits"]].to_string(index=False)
+              if len(crossing) else "  none")
+        print(f"Wrote {BY_SPLIT_OUT}")
     print()
     total_cross = int(df.groups_spanning_splits.sum())
     if total_cross:
         print(f"WARNING: {total_cross} duplicate group(s) span more than one split. That is "
               f"leakage: the same molecule is being trained on and tested on.")
     else:
-        print("No duplicate group spans more than one split in any dataset -- identical "
-              "molecules share a scaffold, so the scaffold split keeps them together. "
-              "No leakage.")
+        print(f"No duplicate group spans more than one split in any dataset on the "
+              f"{args.variant} split.")
     print(f"\nWrote {args.out}")
 
 

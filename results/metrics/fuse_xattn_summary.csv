@@ -1,9 +1,3 @@
-dataset,tag,valid_auc,test_auc,params,trainable,best_epoch,mode,seq,valid_rmse,test_rmse
-tox21,fuse_xattn,0.8378612654434631,0.8209378053109747,3233552,3233552,4,xattn,cached,,
-bbbp,fuse_xattn,0.9702298532262531,0.9586619924043237,3229701,3229701,4,xattn,cached,,
-clintox,fuse_xattn,0.9874846218596218,0.9379577675532114,3229958,3229958,7,xattn,cached,,
-esol,fuse_xattn,,,3225861,3225861,34,xattn,cached,0.8517981057837855,0.9355008932356165
-lipophilicity,fuse_xattn,,,3229189,3229189,21,xattn,cached,0.6883021519628562,0.7081028186993558
-bace,fuse_xattn,0.9490196078431373,0.8124675324675324,3225349,3225349,7,xattn,cached,,
-sider,fuse_xattn,0.5739965709757497,0.5978437323282562,3236895,3236895,25,xattn,cached,,
-freesolv,fuse_xattn,,,3222277,3222277,25,xattn,cached,0.8534192099090792,0.7848333022778958
+dataset,tag,valid_auc,test_auc,params,trainable,best_epoch,mode,seq,views
+clintox,fuse_xattn,0.8590380973193472,0.8359574308906594,3229958,3229958,5,xattn,cached,graph|seq|desc
+bbbp,fuse_xattn,0.9361672666851287,0.9297399941571721,3229701,3229701,5,xattn,cached,graph|seq|desc

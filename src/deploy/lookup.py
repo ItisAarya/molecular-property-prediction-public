@@ -52,10 +52,10 @@ Aspirin is one of them: BBBP holds it twice, once labelled permeable and once no
 first match would show one of two contradictory answers with no hint that the other exists.
 `find` returns every match and flags the disagreement.
 
-None of this is leakage. **No duplicate group spans two splits in any of the eight
-datasets** -- identical molecules share a scaffold, so the scaffold split necessarily keeps
-them together. A random split would not have, which is one more reason the protocol here
-uses scaffolds.
+On the canonical DeepChem split, which is what the deployed models were trained on, no
+duplicate group spans two splits. The seeded splits can separate a few acyclic duplicates
+(`scripts/audit_duplicates.py` records them per split), so this lookup reports every match
+rather than assuming a molecule appears in one split only.
 
 The index is built once per dataset and cached: canonicalising a few thousand SMILES costs
 a few seconds, and a Streamlit rerun would otherwise pay it on every keystroke.

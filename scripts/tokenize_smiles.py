@@ -5,6 +5,7 @@ from transformers import AutoTokenizer
 import argparse
 
 from scripts.dataset_select import add_datasets_arg, resolve
+from src.data.smiles import sequence_input
 
 IN_DIR = "data"
 OUT_DIR = "data"
@@ -13,7 +14,8 @@ MAX_LEN = 128
 
 def tokenize_split(tokenizer, ds, split_tag):
     df = pd.read_csv(os.path.join(IN_DIR, f"{ds}_{split_tag}.csv"))
-    smiles = df["smiles"].astype(str).tolist()
+    # Canonical where the dataset's notation leaks the label -- see src/data/smiles.py.
+    smiles = sequence_input(df["smiles"].astype(str).tolist(), ds)
     ycols = [c for c in df.columns if c != "smiles"]
     y = df[ycols].values if len(ycols)>1 else df[ycols[0]].values.reshape(-1,1)
 

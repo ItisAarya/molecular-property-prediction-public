@@ -103,7 +103,9 @@ def build_graphs(ds):
 
 def build_tokens(ds, tokenizer, smiles, y):
     """Re-tokenise the pooled SMILES so padding width is consistent across the whole pool."""
-    enc = tokenizer(list(smiles), padding=True, truncation=True,
+    # Same rule as scripts/tokenize_smiles.py: canonical where notation leaks the label.
+    from src.data.smiles import sequence_input
+    enc = tokenizer(sequence_input(smiles, ds), padding=True, truncation=True,
                     max_length=MAX_LEN, return_tensors="pt")
     torch.save({
         "input_ids": enc["input_ids"],

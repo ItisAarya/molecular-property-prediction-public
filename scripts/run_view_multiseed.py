@@ -49,7 +49,14 @@ ENCODER_OF = {
     # is measured on the same splits, under the same protocol, as everything it is being
     # compared against.
     "attentivefp": "attentivefp",
+    # Control for the conformal section: the descriptor view trained without class
+    # weighting. Not a model the paper recommends -- it exists to show what the loss
+    # weighting, rather than the architecture, does to minority coverage.
+    "desc_nopw": "desc",
 }
+
+# Extra trainer flags for tags that share an encoder but differ in training.
+VIEW_EXTRA_ARGS = {"desc_nopw": ["--no-pos-weight"]}
 
 # Fusion variants run through a different trainer but the same loop, splits and archive
 # layout, so they are driven from here rather than from a parallel script.
@@ -61,6 +68,10 @@ FUSION_OF = {f"fuse_{m}": m
 # routed little through, not that nothing was lost. Retraining without each view is what
 # actually answers that.
 FUSION_VIEWS = {
+    # The frozen ChemBERTa view alone, from cached embeddings: the same model as `seq_frozen`
+    # (a 1536 -> 256 projection and the shared head) without running the transformer each
+    # epoch. Used to measure the SMILES-notation leak on ClinTox and BBBP (src/data/smiles.py).
+    "fuse_seqonly": ("concat", ["seq"]),
     "fuse_gated_nograph": ("gated", ["seq", "desc"]),
     "fuse_gated_noseq": ("gated", ["graph", "desc"]),
     "fuse_gated_nodesc": ("gated", ["graph", "seq"]),
@@ -112,7 +123,8 @@ def run_tag(tag, log, extra_args=(), seq="cached", out_tag=None):
         cmd += list(extra_args)
     else:
         cmd = [sys.executable, "-u", "-m", "src.train.train_view",
-               "--encoder", ENCODER_OF[tag], "--tag", out_tag, *extra_args]
+               "--encoder", ENCODER_OF[tag], "--tag", out_tag,
+               *VIEW_EXTRA_ARGS.get(tag, []), *extra_args]
     proc = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
     output = proc.stdout + proc.stderr
     for line in output.splitlines():

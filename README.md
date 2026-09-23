@@ -1,14 +1,22 @@
-# Graph Neural Network and Transformer Fusion for Molecular Property Prediction: What a Strict Evaluation Protocol Finds
+# Graph Neural Network and Transformer Fusion for Molecular Property Prediction under a Strict Evaluation Protocol
 
-Eight MoleculeNet datasets, five molecular representations, five ways of fusing them,
-and distribution-free uncertainty on top — all measured under one protocol, across six
-scaffold splits, with the negative results reported.
+Eight MoleculeNet datasets, five molecular representations, five ways of fusing them, two
+external baselines and distribution-free uncertainty on top, all measured under one protocol
+across six scaffold splits, with the negative results reported.
 
-The headline is not an architecture. It is a protocol strict enough to separate a real gain
-from a favourable split — and four results it returned: a **71x smaller fusion block that
-performs identically**, a **free diagnostic** for which models abandon their minority class,
-a proof that one standard calibration step cannot help, and a reproducibility requirement
-that costs one extra column.
+The protocol found three things worth knowing before any architecture:
+
+- **In ClinTox and BBBP, the way a SMILES string is written predicts the label.** Approved drugs
+  are written in aromatic notation and failed ones in Kekulé notation, so a language model can
+  read the answer from the spelling (notation-bit AUC 1.000 for ClinTox toxicity, 0.827 for
+  BBBP permeability). Canonicalising the strings drops a frozen ChemBERTa model from 0.988 to
+  0.795 AUC on ClinTox. `src/data/smiles.py` now canonicalises both datasets;
+  `scripts/audit_notation.py` checks any dataset.
+- **With that leak removed, fusion does not beat a fingerprint-plus-descriptor MLP**, and its
+  advantage over a two-layer GIN is no longer significant across datasets.
+- **Minority-class coverage under marginal conformal prediction depends on class weighting in
+  training, not on the architecture**: the same descriptor MLP covers 77.9% of Tox21 actives
+  with class weighting and 16.3% without it, at the same AUC.
 
 ---
 
@@ -18,39 +26,38 @@ An earlier MoleculeNet pipeline of our own, rebuilt to answer one question prope
 combining molecular representations actually help?* Answering it required first fixing an
 evaluation that could not have detected the answer either way.
 
-**What the evaluation found in that earlier code** (all real, all changed numbers):
+**What the evaluation found in that earlier code** (each of these changed reported numbers):
 
-- Tox21's missing-label mask was dropped, so **24% of canonical test labels were fabricated
-  as negatives**.
+- Tox21's missing-label mask was dropped, so **23.9% of canonical test labels were treated as
+  negatives**.
 - Regression metrics were reported in z-scored units, not logS / logD / kcal·mol⁻¹.
 - Model selection ran on the **test** split.
 - The meta-learner, ensemble weights, calibrators and decision thresholds were all fitted
-  on a single validation split.
-- The "frozen" ChemBERTa ran with dropout active; computed `edge_attr` was discarded.
-- Nothing was seeded.
+  on a single validation split and evaluated there.
+- The "frozen" ChemBERTa ran with dropout active, and computed bond features were discarded.
+- Only the random forest was seeded.
 
-**What the fixed evaluation then found about the new work:**
-
-Counts below are datasets where the candidate wins, out of 8, **after** Holm–Bonferroni
-correction; the uncorrected count is given where it differs, because that is the number an
-uncorrected analysis would have reported.
+**What the fixed evaluation then found** (ClinTox and BBBP on canonical SMILES; "after
+correction" means Holm–Bonferroni across datasets; across-dataset p-values are sign /
+Wilcoxon on Cohen's *dz* / Wilcoxon on raw differences):
 
 | Question | Answer |
 |---|---|
-| Does an edge-aware graph encoder beat the baseline 2-layer GIN? | No — **0** of 8 (1 uncorrected), at 5× the parameters |
-| Does LoRA fine-tuning beat a frozen transformer? | Only on **ESOL** — 1 of 8 (2 uncorrected), and both raw wins were regression, where the frozen encoder was weak |
-| Does concatenating views beat the best single view? | No — 0 of 8 |
-| Does the proposed cross-attention + bilinear fusion beat a 16.5k-parameter gate? | No — **0** of 8 (1 uncorrected: BACE at p=0.017 → 0.135), for 71× the parameters |
-| Does end-to-end adaptation beat cached frozen embeddings? | No — 0 of 8, for ~11 GPU-hours |
-| Is the graph view needed at all? | No — 0 of 8 either way; dropping it runs 13× faster on 42% of the parameters |
-| Would a motif (BRICS / Murcko) view have added anything? | Not measurably — 0 of 8 in a linear probe, though the canonical split disagrees |
-| Does the fusion model beat the baseline GIN *across datasets*? | **Yes** — favoured on 8/8, p=0.0078 on all three across-dataset statistics |
-| Does it beat the best single view (`desc`) across datasets? | No — 4/8, p=0.55 |
-| Does a 90% conformal guarantee cover 90% of actives? | No — 71–80%, and 9.7% in the worst case |
+| Does SMILES notation leak the label? | **Yes**, in ClinTox and BBBP. Canonicalising lowers every fusion model by 0.041–0.150 AUC on those two datasets |
+| Does an edge-aware graph encoder (GINE) beat the two-layer GIN? | No: 0 of 8 datasets after correction, at 5× the parameters |
+| Does LoRA fine-tuning beat a frozen transformer? | Only on ESOL (Holm p = 0.0054) |
+| Does the proposed fusion beat the two-layer GIN across datasets? | Not significantly: favoured on 7 of 8, p = 0.070 / 0.109 / 0.078; only FreeSolv after correction |
+| Does any fusion rung beat the descriptor MLP (`desc`)? | No. `proposed` is favoured on 3 of 8 (p ≥ 0.727); `gated` and `bilinear` are worse on 7 of 8 (Wilcoxon p = 0.023) |
+| Does `proposed` beat a 16.5k-parameter gate? | Favoured on 6 of 8 (Wilcoxon p = 0.039, sign p = 0.289); no dataset after correction |
+| Does end-to-end LoRA adaptation beat cached embeddings? | No: favoured on 0 of 6 |
+| Is the graph view needed? | No detectable loss without it (favoured on 5 of 8, p ≥ 0.250), about 13× faster; equivalence shown on only 2 of 8 |
+| Does bilinear fusion beat concatenation? | On both T4 ladders (6 of 6, p = 0.031), not on the CPU ladder (6 of 8, p = 0.312), and the bilinear ranks cannot be told apart |
+| Would a motif (BRICS / Murcko) view add anything? | Not measurably in a linear probe (favoured on 5 of 8, p = 0.73) |
+| Does a 90% conformal guarantee cover 90% of Tox21 actives? | No: 71–80% for twelve models, 10–14% for Chemprop, the earlier transformer and the random forest |
+| Does moving from CPU to GPU change results? | As much as changing the seed: about a quarter of single-split results move by more than 0.02 AUC / 0.10 RMSE; five-split means rarely do |
 
-The last three rows are the point. The fusion model **is** better than the baseline it
-started from, and that survives every test. It is **not** better than a descriptor MLP, and no
-amount of architecture in between changed that.
+The paper (`paper/draft.md`, built into `paper/latex/` by `python -m scripts.make_latex`)
+reports every comparison, including the ones that did not go our way.
 
 ---
 
@@ -60,13 +67,18 @@ amount of architecture in between changed that.
 conda env create -f environment.yml && conda activate mpp
 python -m scripts.prep_moleculenet          # DeepChem -> CSV + npz
 python -m scripts.make_graphs               # RDKit graphs (34 atom / 7 bond dims)
-python -m scripts.make_descriptors          # 217 RDKit 2-D descriptors, raw
-python -m scripts.tokenize_smiles           # ChemBERTa token ids
-python -m scripts.cache_embeddings          # frozen-encoder embeddings
-python -m scripts.verify_prep               # assertions over every artifact
+python -m scripts.tokenize_smiles           # ChemBERTa token ids (canonical SMILES for ClinTox, BBBP)
+python -m scripts.cache_embeddings          # frozen-encoder embeddings (~25 min on a laptop CPU)
 python -m scripts.build_pool                # per-split artifacts -> data/pool/
+python -m scripts.make_descriptors          # 217 RDKit 2-D descriptors, raw (needs the pool)
 python -m scripts.make_splits               # deepchem + seeds 0-4, audits leakage
+python -m scripts.verify_prep               # assertions over every artifact
+python -m src.data.materialize --variant deepchem   # write the canonical split's per-split files
 ```
+
+The order matters: `make_descriptors` reads `data/pool/pool_index.json`, which `build_pool`
+writes, and the checks below read per-split files that only exist once a split variant has been
+materialised.
 
 Then train and compare:
 
@@ -81,9 +93,9 @@ trainers' actual defaults. Run it before trusting a comparison.
 `python -m scripts.probe_motifs` answers the question the views table invites — *why is there
 no motif view?* — with a measurement rather than a schedule. Three feature sets under one
 linear readout across all six splits. Over the five seeded splits, fragments alone lose on 8
-of 8 datasets and add nothing that clears the minimum detectable effect; on the canonical
-split they win 2 of 8 and adding them improves 7 of 8 numbers, with no interval to say whether
-that means anything. Both are reported (§3.2), and the conclusion is drawn from the convention
+of 8 datasets and adding them changes nothing measurable; on the canonical split they win 2 of 8
+and adding them improves 7 of 8 numbers, with no interval to say whether that means anything.
+Both are reported (Section 5.7 of the paper), and the conclusion is drawn from the convention
 that has error bars.
 
 The coverage half is the sharper half, because it holds for any motif encoder rather than only
@@ -135,8 +147,10 @@ python -m scripts.make_explainer_pdf
 python -m scripts.make_models_pdf
 ```
 
-`.pdflib/` is gitignored; `MPP_PDFLIB` overrides the location. Every number in both PDFs is
-computed from the repository at build time rather than typed.
+`.pdflib/` is gitignored; `MPP_PDFLIB` overrides the location. Parameter counts and model
+tallies in `MODELS_AND_DATA_EXPLAINED.pdf` are computed at build time; the results in
+`PROJECT_EXPLAINED.pdf` are written into `scripts/make_explainer_pdf.py`, so re-check them
+against `paper/draft.md` after any re-run.
 
 ---
 
@@ -144,7 +158,7 @@ computed from the repository at build time rather than typed.
 
 **Two splits are always reported, never one.** The DeepChem canonical scaffold split (hard,
 standard, comparable to published numbers) *and* mean ± 95% CI over five random scaffold
-splits. They differ by up to **0.18 AUC on the same model and the same code**, so quoting
+splits. They differ by up to **0.223 AUC on the same model and the same code**, so quoting
 whichever is kinder is a way to claim almost anything.
 
 **Comparisons are paired within split.** Splits differ in difficulty far more than models
@@ -153,7 +167,7 @@ five-point comparison has any power.
 
 **Three levels of evidence, all reported:**
 
-1. Per-dataset verdict from the paired difference's own 95% interval.
+1. Per dataset, a paired t-test over the five seeded splits, with the difference's own 95% interval.
 2. The same verdicts after a **Holm–Bonferroni correction** across the eight datasets —
    eight tests at α=0.05 produce a false positive 34% of the time, and several conclusions
    here rest on exactly one decisive dataset out of eight.
@@ -161,8 +175,10 @@ five-point comparison has any power.
    differences), which is the question "does A beat B in general?" — a different question
    from the per-dataset table, and the one the project's success criterion actually named.
 
-**Minimum detectable effect: ~±0.02 AUC / ~±0.10 RMSE.** Smaller is inside the interval and
-is not a result.
+**Practical threshold: ±0.02 AUC / ±0.10 RMSE.** Smaller differences are treated as too small
+to matter. The values are an empirical noise threshold taken from the earlier pipeline's
+split-to-split intervals, not a power calculation. Claims of *no difference* use an equivalence
+test against this threshold (`python -m scripts.equivalence`).
 
 **One hyper-parameter setting, held identical across every model.** That is what makes the
 comparisons fair and leaves the absolute numbers untuned. Optuna is written

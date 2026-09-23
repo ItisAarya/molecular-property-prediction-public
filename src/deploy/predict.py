@@ -174,11 +174,14 @@ def build_model(ds, tag=DEFAULT_TAG, mode="proposed"):
             N_ECFP,
             median=torch.zeros(n_desc), keep=keep,
             mean=torch.zeros(n_desc), std=torch.ones(n_desc),
-            hidden=hidden, dropout=fus["dropout"]),
+            hidden=hidden, dropout=cfg["encoders"]["desc"]["dropout"]),
     }
 
+    # Dropout is inactive in eval mode, so these values cannot change a prediction; they are
+    # read from the config only so the rebuilt module matches the trained one exactly.
     model = MultiViewModel(
-        encoders, mode=mode, n_tasks=len(tasks_of(ds)), d=d, dropout=fus["dropout"],
+        encoders, mode=mode, n_tasks=len(tasks_of(ds)), d=d,
+        dropout=cfg["representation"]["head_dropout"],
         rank=fus["rank"], n_layers=fus["xattn_layers"], n_heads=fus["xattn_heads"])
 
     _load_state(model, state, path)
@@ -248,7 +251,7 @@ class Predictor:
     def _raw(self, smiles):
         """Model outputs for the parsable inputs, plus the mask of which those were."""
         from src.deploy.featurize import featurize
-        views, ok = featurize(smiles)
+        views, ok = featurize(smiles, dataset=self.ds)
         if not ok.any():
             return None, ok
         out = self.model(views)

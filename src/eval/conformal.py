@@ -36,8 +36,8 @@ the plain version hides a different failure:
    unusable. `--score normalized` divides the residual by a per-molecule difficulty
    estimate, so width varies with how hard the molecule is.
 
-2. **Marginal coverage on imbalanced data** (`--conditional`). These datasets are ~6-9%
-   positive. A marginal 90% guarantee can be met by covering the negatives, which are most
+2. **Marginal coverage on imbalanced data** (`--conditional`). Tox21's tasks are 2.9-16.2%
+   positive (7.5% pooled). A marginal 90% guarantee can be met by covering the negatives, which are most
    of the data, while the actives -- the only class a toxicity screen cares about -- are
    covered far less. Per-class coverage is therefore always reported, and `--conditional`
    fits a separate quantile per class so the guarantee holds *within* each.
@@ -47,14 +47,14 @@ the plain version hides a different failure:
    missed on the rest, which inverts the point of the split. Splitting coverage by Tanimoto
    distance to the nearest training molecule turns that into a measurement.
 
-4. **Answering "either"** (`--set-score`). A binary prediction set containing *both* classes
-   is trivially correct and says nothing. the study plan §8 named RAPS for this
-   module; RAPS and APS are implemented and measured, and both are unusable here -- on
-   Tox21 with `rf` at a nominal 90%, APS reaches 99.9% coverage at a mean set size of 1.98
-   out of a maximum of 2, and RAPS 96.5% at 1.27, against LAC's 90.7% at 0.98. APS and RAPS
-   are designed for many-class problems where ranking down the class list is informative;
-   with two classes the cumulative score has nowhere to go. LAC (Sadinle 2019) is what this
-   project reports, and the substitution is a measured choice rather than an omission.
+4. **Answering "either"** (`--set-score`, `--randomized`). A binary prediction set containing
+   *both* classes is trivially correct and says nothing. APS and RAPS must be used in the
+   randomised form their papers define. Implemented deterministically, they collapse at two
+   classes: on Tox21 with `desc` at a nominal 90%, deterministic APS reaches 99.1% coverage at a
+   mean set size of 1.93 out of 2, and deterministic RAPS is identical. Randomised, APS gives
+   90.1% coverage at 1.32 and RAPS 90.0% at 1.27, against LAC's 90.0% at 1.21 -- usable, and
+   slightly kinder to actives than LAC (81.3% and 79.5% against 77.9%). LAC (Sadinle 2019)
+   stays the default because it gives the smallest sets.
 
 WHY THE QUANTILE HAS THE +1
 ---------------------------
@@ -220,45 +220,32 @@ RAPS_LAMBDA = 0.1     # RAPS penalty per rank beyond k_reg
 RAPS_K_REG = 1        # ranks up to here are unpenalised
 
 
-def binary_scores(p, cls, set_score="lac", lam=RAPS_LAMBDA, k_reg=RAPS_K_REG):
+def binary_scores(p, cls, set_score="lac", lam=RAPS_LAMBDA, k_reg=RAPS_K_REG, u=None):
     """
     The conformal score for class `cls` at predicted positive-probability `p`.
-
-    Three scoring rules, because the study plan §8 named RAPS and this module
-    was built on LAC without recording why.
 
     **lac** (least-ambiguous set-valued classifier, Sadinle 2019): `1 - P(cls)`. The class
     enters the set when the model gives it enough probability. Produces the smallest sets
     that achieve marginal coverage, and can produce empty ones.
 
     **aps** (adaptive prediction sets, Romano 2020): rank the classes by probability and
-    score a class by the cumulative probability down to and including it. Binary makes this
-    degenerate in a specific way: the higher-ranked class scores `max(p, 1-p)` and the
-    lower-ranked class scores exactly **1.0**, always, for every molecule. The calibration
-    scores therefore collapse onto "top-class scores in [0.5, 1], plus a spike at 1.0" --
-    and any model that emits saturated probabilities puts *top-class* points on that spike
-    too (a Random Forest with unanimous votes does this for 15% of Tox21 molecules).
+    score a class by the cumulative probability of the classes ranked above it plus its own.
+    Romano et al. define the score with a randomisation term: the class's own probability is
+    multiplied by `u ~ Uniform(0, 1)`, so the top class scores `u * p_top` and the other class
+    scores `p_top + u * p_other`. Pass `u` to get that randomised score.
 
-    When the quantile lands on the spike, `1.0 <= q` is true and APS admits the lower-ranked
-    class for **every** molecule: every set is {inactive, active}, coverage is ~100%, and
-    the model has answered "could be either" about the entire test set.
+    Without `u` (the deterministic variant), the lower-ranked class of a binary problem scores
+    exactly 1.0 for every molecule. The calibration scores then pile up on a spike at 1.0, and
+    a model that emits saturated probabilities puts top-class points on the spike too. When
+    the quantile lands there, every set contains both classes. That degeneracy is a property of
+    dropping the randomisation, not of having two classes: the randomised score spreads the
+    spike over [p_top, 1] and does not collapse. `results/metrics/conformal_alpha0.1_*aps*.csv`
+    records both.
 
-    **raps** (regularised APS, Angelopoulos 2021): APS plus `lam * (rank - k_reg)+`. With
-    two classes there is no long tail for the penalty to suppress, so the obvious reading is
-    that it does nothing -- it adds a constant `lam` to the lower-ranked class and leaves
-    the ordering of scores untouched.
-
-    That reading is wrong, and measuring it is why `--set-score raps` exists. The penalty is
-    a function of the *class*, not of the score, so it is not a monotone map on the score and
-    the invariance argument that kills temperature scaling (Session 15) does not transfer.
-    What `lam` actually does is break the tie at the spike: it moves the lower-ranked class
-    to `1 + lam` while leaving saturated top-class points at 1.0, so `1 + lam <= q` stays
-    false where `1.0 <= q` was true. Measured on Tox21 task 0, seed 0 -- both methods pick
-    q = 1.0000, and mean set size is **2.000 for APS against 1.000 for RAPS**.
-
-    The practical conclusion is that neither is usable here (see the module docstring); LAC
-    is what this project reports. But "RAPS = APS when K = 2" is a natural thing to assume
-    and it is false.
+    **raps** (regularised APS, Angelopoulos 2021): APS plus `lam * (rank - k_reg)+`. With two
+    classes and `k_reg = 1` the penalty adds `lam` to the lower-ranked class only, which breaks
+    the tie at the deterministic spike; with randomisation there is no spike to break. `lam`
+    and `k_reg` are fixed at 0.1 and 1 and were not tuned.
 
     Ties at p = 0.5 are broken toward the positive class so that exactly one class is
     ranked top; leaving both "top" would score them identically and inflate coverage.
@@ -270,7 +257,11 @@ def binary_scores(p, cls, set_score="lac", lam=RAPS_LAMBDA, k_reg=RAPS_K_REG):
         return 1.0 - prob
 
     is_top = (cls == 1) == (p >= 0.5)
-    aps = np.where(is_top, np.maximum(p, 1.0 - p), 1.0)
+    p_top = np.maximum(p, 1.0 - p)
+    if u is None:
+        aps = np.where(is_top, p_top, 1.0)
+    else:
+        aps = np.where(is_top, u * p_top, p_top + u * (1.0 - p_top))
     if set_score == "aps":
         return aps
     if set_score == "raps":
@@ -279,7 +270,7 @@ def binary_scores(p, cls, set_score="lac", lam=RAPS_LAMBDA, k_reg=RAPS_K_REG):
 
 
 def binary_sets(y_cal, p_cal, y_test, p_test, alpha=0.1, conditional=False,
-                mask_test=None, set_score="lac"):
+                mask_test=None, set_score="lac", rng=None):
     """
     Split conformal for one binary task, reporting coverage within each class.
 
@@ -287,15 +278,18 @@ def binary_sets(y_cal, p_cal, y_test, p_test, alpha=0.1, conditional=False,
     giving sets of size 0, 1 or 2. See `binary_scores` for the three scoring rules.
 
     `conditional=True` fits a separate threshold per class (Mondrian conformal). The
-    marginal version guarantees coverage averaged over classes, which on data that is 6-9%
-    positive is dominated by the negatives; the conditional version guarantees it for
+    marginal version guarantees coverage averaged over classes, which on imbalanced data
+    (Tox21 tasks are 2.9-16.2% positive) is dominated by the negatives; the conditional version guarantees it for
     actives and inactives separately, at the cost of larger sets.
     """
     ok_cal = np.isfinite(y_cal) & np.isfinite(p_cal)
     yc, pc = y_cal[ok_cal], np.clip(p_cal[ok_cal], 0.0, 1.0)
     if yc.size == 0:
         return None
-    score_cal = binary_scores(pc, yc, set_score)
+    # `rng` switches APS/RAPS to their randomised definitions: one uniform draw per molecule,
+    # shared by both of its classes, as in Romano et al. (2020).
+    u_cal = rng.uniform(size=pc.shape) if (rng is not None and set_score != "lac") else None
+    score_cal = binary_scores(pc, yc, set_score, u=u_cal)
 
     if conditional:
         # Too few of a class to calibrate it is a real possibility here -- SIDER's rarest
@@ -314,8 +308,9 @@ def binary_sets(y_cal, p_cal, y_test, p_test, alpha=0.1, conditional=False,
         return None
     yt, pt = y_test[ok], np.clip(p_test[ok], 0.0, 1.0)
 
-    in_pos = binary_scores(pt, np.ones_like(pt, dtype=int), set_score) <= q_pos
-    in_neg = binary_scores(pt, np.zeros_like(pt, dtype=int), set_score) <= q_neg
+    u_test = rng.uniform(size=pt.shape) if (rng is not None and set_score != "lac") else None
+    in_pos = binary_scores(pt, np.ones_like(pt, dtype=int), set_score, u=u_test) <= q_pos
+    in_neg = binary_scores(pt, np.zeros_like(pt, dtype=int), set_score, u=u_test) <= q_neg
     sizes = in_pos.astype(int) + in_neg.astype(int)
     covered = np.where(yt == 1, in_pos, in_neg)
 
@@ -397,7 +392,7 @@ def recalibrate(y_cal, p_cal, p_test, kind):
 
 
 def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_test=None,
-             calibrate="none", set_score="lac"):
+             calibrate="none", set_score="lac", randomized=False):
     """Conformal behaviour for one model on one split variant."""
     preds = load_preds(ds, variant, tag)
     if preds is None:
@@ -410,9 +405,14 @@ def evaluate(ds, variant, tag, alpha, score="absolute", conditional=False, mask_
             pc, pt = preds["valid"][:, t], preds["test"][:, t]
             if calibrate != "none":
                 pc, pt = recalibrate(y["valid"][:, t], pc, pt, calibrate)
+            # Seeded per (variant, task) so a randomised APS/RAPS result is reproducible.
+            rng = None
+            if randomized:
+                split_id = int(variant[4:]) if variant.startswith("seed") else 99
+                rng = np.random.default_rng([split_id, t])
             r = binary_sets(y["valid"][:, t], pc, y["test"][:, t], pt,
                             alpha, conditional=conditional, mask_test=mask_test,
-                            set_score=set_score)
+                            set_score=set_score, rng=rng)
             if r:
                 rows.append(r)
         if not rows:
@@ -494,9 +494,13 @@ def main():
                          "changes nothing (see recalibrate); `logistic` does.")
     ap.add_argument("--set-score", default="lac", choices=["lac", "aps", "raps"],
                     help="classification set-construction score. `lac` is 1-p(true class) "
-                         "and is the default; `aps` and `raps` are the methods named in "
-                         "the plan -- see binary_scores for why raps cannot differ from "
-                         "aps when there are only two classes")
+                         "and is the default; see binary_scores for `aps` and `raps`")
+    ap.add_argument("--randomized", action="store_true",
+                    help="use the randomised APS/RAPS scores of the original papers")
+    ap.add_argument("--out", default=None,
+                    help="where to write. Defaults to the archive name for this setting; a "
+                         "run over a subset of tags should write somewhere else so it does "
+                         "not replace the full archive")
     ap.add_argument("--by-distance", action="store_true",
                     help="report coverage by Tanimoto similarity to the nearest "
                          "training molecule")
@@ -531,7 +535,8 @@ def main():
                 continue
 
             per = [evaluate(ds, v, tag, args.alpha, args.score, args.conditional,
-                            calibrate=args.calibrate, set_score=args.set_score)
+                            calibrate=args.calibrate, set_score=args.set_score,
+                            randomized=args.randomized)
                    for v in args.variants]
             per = [r for r in per if r]
             if not per:
@@ -581,8 +586,9 @@ def main():
     suffix = (f"_{args.calibrate}" if args.calibrate != "none" else "") + (
              "_bydistance" if args.by_distance
              else ("_conditional" if args.conditional else f"_{args.score}")) + (
-             f"_{args.set_score}" if args.set_score != "lac" else "")
-    out = os.path.join(MET_DIR, f"conformal_alpha{args.alpha:g}{suffix}.csv")
+             f"_{args.set_score}" if args.set_score != "lac" else "") + (
+             "_randomized" if args.randomized and args.set_score != "lac" else "")
+    out = args.out or os.path.join(MET_DIR, f"conformal_alpha{args.alpha:g}{suffix}.csv")
     df.to_csv(out, index=False)
     print(f"Wrote {out}")
     if missing:

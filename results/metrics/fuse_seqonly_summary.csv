@@ -1,0 +1,3 @@
+dataset,tag,valid_auc,test_auc,params,trainable,best_epoch,mode,seq,views
+clintox,fuse_seqonly,0.7710674452861952,0.7900053304904051,459778,459778,7,concat,cached,seq
+bbbp,fuse_seqonly,0.8969814455829411,0.9026438796377447,459521,459521,9,concat,cached,seq

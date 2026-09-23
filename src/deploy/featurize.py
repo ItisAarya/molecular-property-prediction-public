@@ -25,7 +25,8 @@ reimplementation:
           directly. 217 RDKit 2-D descriptors, NaN where undefined.
   graph   `scripts.make_graphs.mol_to_graph`, imported directly.
   seq     Frozen ChemBERTa, `concatenate([cls, mean])` -> 1536-d, mirroring
-          `scripts/cache_embeddings.py`. The masked mean matters: without the mask, a
+          `scripts/cache_embeddings.py`. Pass `dataset=` so ClinTox and BBBP inputs are
+          canonicalised exactly as their training strings were (src/data/smiles.py). The masked mean matters: without the mask, a
           short molecule's embedding is dragged toward the padding vector.
 
 `scripts/check_deploy.py` re-derives all four for real pool molecules and asserts they
@@ -108,7 +109,7 @@ def descriptors(mols):
 
 
 @torch.no_grad()
-def chemberta(smiles):
+def chemberta(smiles, dataset=None):
     """
     Frozen ChemBERTa embeddings: [CLS] and masked mean, concatenated to 1536-d.
 
@@ -117,6 +118,10 @@ def chemberta(smiles):
     inside the full split, which is what makes this comparable to the cached features.
     """
     tok, trf = _encoder()
+    # A model trained on canonical strings must be shown canonical strings: see
+    # src/data/smiles.py for which datasets and why.
+    from src.data.smiles import sequence_input
+    smiles = sequence_input(smiles, dataset) if dataset else list(smiles)
     enc = tok(list(smiles), padding=True, truncation=True, max_length=MAX_LEN,
               return_tensors="pt")
     hidden = trf(input_ids=enc["input_ids"],
@@ -128,7 +133,7 @@ def chemberta(smiles):
     return torch.cat([cls, mean], dim=1).float()
 
 
-def featurize(smiles, views=("graph", "seq", "desc")):
+def featurize(smiles, views=("graph", "seq", "desc"), dataset=None):
     """
     Build the view dict the fusion models expect, for a list of SMILES strings.
 
@@ -159,5 +164,5 @@ def featurize(smiles, views=("graph", "seq", "desc")):
         out["desc"] = (torch.from_numpy(ecfp(kept_mols)),
                        torch.from_numpy(descriptors(kept_mols).astype(np.float32)))
     if "seq" in views:
-        out["seq"] = chemberta(kept_smiles)
+        out["seq"] = chemberta(kept_smiles, dataset)
     return out, ok

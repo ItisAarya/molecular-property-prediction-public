@@ -61,10 +61,10 @@
   year         = {2025}
 }
 
-% DeepChem has no software paper and asks users to cite this book.
+% DeepChem has no software paper and asks users to cite this book. The O'Reilly title page
+% lists four authors; DeepChem's README citation adds two contributors. The publisher's list is used.
 @book{deepchem2019,
-  author    = {Ramsundar, Bharath and Eastman, Peter and Walters, Patrick and Pande, Vijay and
-               Leswing, Karl and Wu, Zhenqin},
+  author    = {Ramsundar, Bharath and Eastman, Peter and Walters, Patrick and Pande, Vijay},
   title     = {Deep Learning for the Life Sciences},
   publisher = {O'Reilly Media}, year = {2019}
 }
@@ -273,7 +273,7 @@
   author    = {Romano, Yaniv and Sesia, Matteo and Cand{\`e}s, Emmanuel J.},
   title     = {Classification with valid and adaptive coverage},
   booktitle = {Advances in Neural Information Processing Systems 33 (NeurIPS)},
-  year      = {2020}
+  pages     = {3581--3591}, year = {2020}
 }
 
 @inproceedings{angelopoulos2021raps,
@@ -346,10 +346,292 @@
   series    = {PMLR}, volume = {139}, pages = {9913--9922}, year = {2021}
 }
 
-@article{eryilmaz2024randomness,
-  author  = {Ery{\i}lmaz, Bahad{\i}r and Kora{\c{s}}, Osman Alperen and Schl{\"o}tterer, J{\"o}rg and
-             Seifert, Christin},
-  title   = {Investigating the impact of randomness on reproducibility in computer vision:
-             a study on applications in civil engineering and medicine},
-  journal = {arXiv preprint arXiv:2410.02806}, year = {2024}
+% Published version (IEEE CogMI 2024), checked against Crossref; arXiv:2410.02806 is the preprint.
+@inproceedings{eryilmaz2024randomness,
+  author    = {Ery{\i}lmaz, Bahad{\i}r and Kora{\c{s}}, Osman Alperen and Schl{\"o}tterer, J{\"o}rg and
+               Seifert, Christin},
+  title     = {Investigating the impact of randomness on reproducibility in computer vision:
+               a study on applications in civil engineering and medicine},
+  booktitle = {2024 IEEE 6th International Conference on Cognitive Machine Intelligence (CogMI)},
+  pages     = {265--274}, year = {2024},
+  doi       = {10.1109/CogMI62246.2024.00042}
+}
+
+% ------------------------------------------------------------------------------------------
+% Added in the September 2026 revision. Every DOI below was resolved against Crossref; arXiv
+% entries were read from the preprint's own title page.
+% ------------------------------------------------------------------------------------------
+
+% ---- datasets (original sources behind MoleculeNet)
+@article{huang2016tox21,
+  author  = {Huang, Ruili and Xia, Menghang and Nguyen, Dac-Trung and Zhao, Tongan and
+             Sakamuru, Srilatha and Zhao, Jinghua and Shahane, Sampada A. and Rossoshek, Anna and
+             Simeonov, Anton},
+  title   = {{Tox21Challenge} to build predictive models of nuclear receptor and stress response
+             pathways as mediated by exposure to environmental chemicals and drugs},
+  journal = {Frontiers in Environmental Science},
+  volume  = {3}, pages = {85}, year = {2016},
+  doi     = {10.3389/fenvs.2015.00085}
+}
+
+@article{martins2012bbbp,
+  author  = {Martins, Ines Filipa and Teixeira, Ana L. and Pinheiro, Luis and Falcao, Andre O.},
+  title   = {A {Bayesian} approach to in silico blood-brain barrier penetration modeling},
+  journal = {Journal of Chemical Information and Modeling},
+  volume  = {52}, number = {6}, pages = {1686--1697}, year = {2012},
+  doi     = {10.1021/ci300124c}
+}
+
+@article{gayvert2016clintox,
+  author  = {Gayvert, Kaitlyn M. and Madhukar, Neel S. and Elemento, Olivier},
+  title   = {A data-driven approach to predicting successes and failures of clinical trials},
+  journal = {Cell Chemical Biology},
+  volume  = {23}, number = {10}, pages = {1294--1301}, year = {2016},
+  doi     = {10.1016/j.chembiol.2016.07.023}
+}
+
+@article{subramanian2016bace,
+  author  = {Subramanian, Govindan and Ramsundar, Bharath and Pande, Vijay and Denny, Rajiah Aldrin},
+  title   = {Computational modeling of $\beta$-secretase 1 ({BACE-1}) inhibitors using ligand based
+             approaches},
+  journal = {Journal of Chemical Information and Modeling},
+  volume  = {56}, number = {10}, pages = {1936--1949}, year = {2016},
+  doi     = {10.1021/acs.jcim.6b00290}
+}
+
+@article{kuhn2016sider,
+  author  = {Kuhn, Michael and Letunic, Ivica and Jensen, Lars Juhl and Bork, Peer},
+  title   = {The {SIDER} database of drugs and side effects},
+  journal = {Nucleic Acids Research},
+  volume  = {44}, number = {D1}, pages = {D1075--D1079}, year = {2016},
+  doi     = {10.1093/nar/gkv1075}
+}
+
+% Lipophilicity is AstraZeneca's deposition of experimental logD7.4 values in ChEMBL.
+@article{gaulton2017chembl,
+  author  = {Gaulton, Anna and Hersey, Anne and Nowotka, Micha{\l} and Bento, A. Patr{\'i}cia and
+             Chambers, Jon and Mendez, David and Mutowo, Prudence and Atkinson, Francis and
+             Bellis, Louisa J. and Cibri{\'a}n-Uhalte, Elena and others},
+  title   = {The {ChEMBL} database in 2017},
+  journal = {Nucleic Acids Research},
+  volume  = {45}, number = {D1}, pages = {D945--D954}, year = {2017},
+  doi     = {10.1093/nar/gkw1074}
+}
+
+% ---- software
+@inproceedings{paszke2019pytorch,
+  author    = {Paszke, Adam and Gross, Sam and Massa, Francisco and Lerer, Adam and Bradbury, James and
+               Chanan, Gregory and Killeen, Trevor and Lin, Zeming and Gimelshein, Natalia and
+               Antiga, Luca and others},
+  title     = {{PyTorch}: an imperative style, high-performance deep learning library},
+  booktitle = {Advances in Neural Information Processing Systems 32 (NeurIPS)},
+  pages     = {8024--8035}, year = {2019}
+}
+
+@inproceedings{fey2019pyg,
+  author    = {Fey, Matthias and Lenssen, Jan Eric},
+  title     = {Fast graph representation learning with {PyTorch Geometric}},
+  booktitle = {ICLR Workshop on Representation Learning on Graphs and Manifolds},
+  year      = {2019}, note = {arXiv:1903.02428}
+}
+
+@inproceedings{wolf2020transformers,
+  author    = {Wolf, Thomas and Debut, Lysandre and Sanh, Victor and Chaumond, Julien and
+               Delangue, Clement and Moi, Anthony and Cistac, Pierric and Rault, Tim and
+               Louf, Remi and Funtowicz, Morgan and others},
+  title     = {Transformers: state-of-the-art natural language processing},
+  booktitle = {Proceedings of the 2020 Conference on Empirical Methods in Natural Language
+               Processing: System Demonstrations},
+  pages     = {38--45}, year = {2020},
+  doi       = {10.18653/v1/2020.emnlp-demos.6}
+}
+
+@article{pedregosa2011sklearn,
+  author  = {Pedregosa, Fabian and Varoquaux, Ga{\"e}l and Gramfort, Alexandre and Michel, Vincent and
+             Thirion, Bertrand and Grisel, Olivier and Blondel, Mathieu and Prettenhofer, Peter and
+             Weiss, Ron and Dubourg, Vincent and others},
+  title   = {Scikit-learn: machine learning in {Python}},
+  journal = {Journal of Machine Learning Research},
+  volume  = {12}, pages = {2825--2830}, year = {2011}
+}
+
+@misc{mangrulkar2022peft,
+  author       = {Mangrulkar, Sourab and Gugger, Sylvain and Debut, Lysandre and Belkada, Younes and
+                  Paul, Sayak and Bossan, Benjamin},
+  title        = {{PEFT}: state-of-the-art parameter-efficient fine-tuning methods},
+  howpublished = {\url{https://github.com/huggingface/peft}},
+  year         = {2022}
+}
+
+% ---- statistics
+@article{wilcoxon1945,
+  author  = {Wilcoxon, Frank},
+  title   = {Individual comparisons by ranking methods},
+  journal = {Biometrics Bulletin},
+  volume  = {1}, number = {6}, pages = {80--83}, year = {1945},
+  doi     = {10.2307/3001968}
+}
+
+@article{schuirmann1987tost,
+  author  = {Schuirmann, Donald J.},
+  title   = {A comparison of the two one-sided tests procedure and the power approach for assessing
+             the equivalence of average bioavailability},
+  journal = {Journal of Pharmacokinetics and Biopharmaceutics},
+  volume  = {15}, number = {6}, pages = {657--680}, year = {1987},
+  doi     = {10.1007/BF01068419}
+}
+
+% ---- evaluation practice in molecular property prediction
+@article{deng2023systematic,
+  author  = {Deng, Jianyuan and Yang, Zhibo and Wang, Hehe and Ojima, Iwao and Samaras, Dimitris and
+             Wang, Fusheng},
+  title   = {A systematic study of key elements underlying molecular property prediction},
+  journal = {Nature Communications},
+  volume  = {14}, pages = {6395}, year = {2023},
+  doi     = {10.1038/s41467-023-41948-6}
+}
+
+@inproceedings{guo2024scaffold,
+  author    = {Guo, Qianrong and Hernandez-Hernandez, Saiveth and Ballester, Pedro J.},
+  title     = {Scaffold splits overestimate virtual screening performance},
+  booktitle = {Artificial Neural Networks and Machine Learning -- ICANN 2024},
+  series    = {Lecture Notes in Computer Science},
+  publisher = {Springer}, pages = {58--72}, year = {2024},
+  doi       = {10.1007/978-3-031-72359-9_5}
+}
+
+@article{hirschfeld2020uq,
+  author  = {Hirschfeld, Lior and Swanson, Kyle and Yang, Kevin and Barzilay, Regina and
+             Coley, Connor W.},
+  title   = {Uncertainty quantification using neural networks for molecular property prediction},
+  journal = {Journal of Chemical Information and Modeling},
+  volume  = {60}, number = {8}, pages = {3770--3780}, year = {2020},
+  doi     = {10.1021/acs.jcim.0c00502}
+}
+
+% ---- multimodal / graph-transformer fusion for property prediction
+@article{prakash2023synfusion,
+  author  = {Sai Prakash, M. V. and Siddartha Reddy, N. and Parab, Ganesh and Varun, V. and
+             Vaddina, Vishal and Gopalakrishnan, Saisubramaniam},
+  title   = {Synergistic fusion of graph and transformer features for enhanced molecular property
+             prediction},
+  journal = {arXiv preprint arXiv:2310.03027}, year = {2023}
+}
+
+@article{lu2024multimodal,
+  author  = {Lu, Xiaohua and Xie, Liangxu and Xu, Lei and Mao, Rongzhi and Xu, Xiaojun and Chang, Shan},
+  title   = {Multimodal fused deep learning for drug property prediction: integrating chemical
+             language and molecular graph},
+  journal = {Computational and Structural Biotechnology Journal},
+  volume  = {23}, pages = {1666--1679}, year = {2024},
+  doi     = {10.1016/j.csbj.2024.04.030}
+}
+
+@article{wang2024multimodal,
+  author  = {Wang, Zeyu and Jiang, Tianyi and Wang, Jinhuan and Xuan, Qi},
+  title   = {Multi-modal representation learning for molecular property prediction: sequence, graph,
+             geometry},
+  journal = {arXiv preprint arXiv:2401.03369}, year = {2024}
+}
+
+@article{zhou2025mmfrl,
+  author  = {Zhou, Zhengyang and Li, Yunrui and Hong, Pengyu and Xu, Hao},
+  title   = {Multimodal fusion with relational learning for molecular property prediction},
+  journal = {Communications Chemistry},
+  volume  = {8}, pages = {200}, year = {2025},
+  doi     = {10.1038/s42004-025-01586-z}
+}
+
+@article{zhang2026sograph,
+  author  = {Zhang, Kaiyuan and Han, Congyu and Zhang, Fenghua and Lin, Cheng and Li, Quanlong and
+             Zang, Tianyi and Zhao, Yanli},
+  title   = {Multi-modal fusion frameworks of subgraph-optimized graph autoencoder for molecular
+             property prediction},
+  journal = {Journal of Chemical Information and Modeling},
+  volume  = {66}, number = {3}, pages = {1789--1800}, year = {2026},
+  doi     = {10.1021/acs.jcim.5c02536}
+}
+
+@article{liu2026localglobal,
+  author  = {Liu, Xiayu and Lu, Zhengyi and Liao, Yunhong and Fan, Chao and Li, Hou-biao},
+  title   = {Local-global multimodal contrastive learning for molecular property prediction},
+  journal = {arXiv preprint arXiv:2601.22610}, year = {2026}
+}
+
+% ---- conformal prediction in cheminformatics
+@article{norinder2014conformal,
+  author  = {Norinder, Ulf and Carlsson, Lars and Boyer, Scott and Eklund, Martin},
+  title   = {Introducing conformal prediction in predictive modeling. {A} transparent and flexible
+             alternative to applicability domain determination},
+  journal = {Journal of Chemical Information and Modeling},
+  volume  = {54}, number = {6}, pages = {1596--1603}, year = {2014},
+  doi     = {10.1021/ci5001168}
+}
+
+@article{norinder2017imbalanced,
+  author  = {Norinder, Ulf and Boyer, Scott},
+  title   = {Binary classification of imbalanced datasets using conformal prediction},
+  journal = {Journal of Molecular Graphics and Modelling},
+  volume  = {72}, pages = {256--265}, year = {2017},
+  doi     = {10.1016/j.jmgm.2017.01.008}
+}
+
+@article{sun2017mondrian,
+  author  = {Sun, Jiangming and Carlsson, Lars and Ahlberg, Ernst and Norinder, Ulf and
+             Engkvist, Ola and Chen, Hongming},
+  title   = {Applying {Mondrian} cross-conformal prediction to estimate prediction confidence on
+             large imbalanced bioactivity data sets},
+  journal = {Journal of Chemical Information and Modeling},
+  volume  = {57}, number = {7}, pages = {1591--1598}, year = {2017},
+  doi     = {10.1021/acs.jcim.7b00159}
+}
+
+@incollection{cortesciriano2020conformal,
+  author    = {Cort{\'e}s-Ciriano, Isidro and Bender, Andreas},
+  title     = {Concepts and applications of conformal prediction in computational drug discovery},
+  editor    = {Brown, Nathan},
+  booktitle = {Artificial Intelligence in Drug Discovery},
+  publisher = {Royal Society of Chemistry},
+  pages     = {63--101}, year = {2020},
+  doi       = {10.1039/9781788016841-00063}
+}
+
+@inproceedings{laghuvarapu2023codrug,
+  author    = {Laghuvarapu, Siddhartha and Lin, Zhen and Sun, Jimeng},
+  title     = {{CoDrug}: conformal drug property prediction with density estimation under
+               covariate shift},
+  booktitle = {Advances in Neural Information Processing Systems 36 (NeurIPS)},
+  year      = {2023},
+  doi       = {10.52202/075280-1641}
+}
+
+% ---- interpretability of attention/gate weights
+@inproceedings{jain2019attention,
+  author    = {Jain, Sarthak and Wallace, Byron C.},
+  title     = {Attention is not explanation},
+  booktitle = {Proceedings of the 2019 Conference of the North American Chapter of the Association
+               for Computational Linguistics: Human Language Technologies},
+  pages     = {3543--3556}, year = {2019},
+  doi       = {10.18653/v1/N19-1357}
+}
+
+@inproceedings{wiegreffe2019attention,
+  author    = {Wiegreffe, Sarah and Pinter, Yuval},
+  title     = {Attention is not not explanation},
+  booktitle = {Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing
+               and the 9th International Joint Conference on Natural Language Processing},
+  pages     = {11--20}, year = {2019},
+  doi       = {10.18653/v1/D19-1002}
+}
+
+% ---- floating-point non-determinism
+@inproceedings{shanmugavelu2024floating,
+  author    = {Shanmugavelu, Sanjif and Taillefumier, Mathieu and Culver, Christopher and
+               Hernandez, Oscar and Coletti, Mark and Sedova, Ada},
+  title     = {Impacts of floating-point non-associativity on reproducibility for {HPC} and deep
+               learning applications},
+  booktitle = {SC24-W: Workshops of the International Conference for High Performance Computing,
+               Networking, Storage and Analysis},
+  pages     = {170--179}, year = {2024},
+  doi       = {10.1109/SCW63240.2024.00028}
 }

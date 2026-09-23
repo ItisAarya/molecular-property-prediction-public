@@ -76,6 +76,8 @@ CHECKS = [
     (("encoders", "gine", "layers"), "src.train.train_view", "layers"),
     (("encoders", "gine", "readout"), "src.train.train_view", "readout"),
     (("encoders", "attentivefp", "timesteps"), "src.train.train_view", "timesteps"),
+    (("encoders", "attentivefp", "layers"), "src.train.train_view", "layers"),
+    (("encoders", "attentivefp", "dropout"), "src.train.train_view", "dropout"),
     (("encoders", "lora", "lora_r"), "src.train.train_view", "lora_r"),
     (("encoders", "lora", "lora_alpha"), "src.train.train_view", "lora_alpha"),
     (("encoders", "lora", "lora_dropout"), "src.train.train_view", "lora_dropout"),
@@ -124,6 +126,36 @@ def main():
         bad.append(f"  {'representation.embed_dim':42s} config="
                    f"{cfg['representation']['embed_dim']!r}  heads.EMBED_DIM={EMBED_DIM!r}")
     checked += 1
+
+    # Constructor defaults that no argparse flag overrides. These are the values the models
+    # were actually built with, so they are read from the signatures rather than restated.
+    import inspect
+    from src.models.encoders.descriptor import DescriptorEncoder
+    from src.models.encoders.graph import GINEEncoder, GINEncoder
+    from src.models.fusion import FusionModule
+    from src.models.heads import SingleViewModel
+    from src.models.multiview import MultiViewModel
+
+    def default(fn, name):
+        return inspect.signature(fn).parameters[name].default
+
+    for label, want, got in (
+        ("representation.head_dropout (single view)", cfg["representation"]["head_dropout"],
+         default(SingleViewModel.__init__, "dropout")),
+        ("representation.head_dropout (fusion)", cfg["representation"]["head_dropout"],
+         default(MultiViewModel.__init__, "dropout")),
+        ("fusion.xattn_dropout", cfg["fusion"]["xattn_dropout"],
+         default(FusionModule.__init__, "dropout")),
+        ("encoders.gine.dropout", cfg["encoders"]["gine"]["dropout"],
+         default(GINEEncoder.__init__, "dropout")),
+        ("encoders.gin.dropout", cfg["encoders"]["gin"]["dropout"],
+         default(GINEncoder.__init__, "dropout")),
+        ("encoders.desc.dropout", cfg["encoders"]["desc"]["dropout"],
+         default(DescriptorEncoder.__init__, "dropout")),
+    ):
+        checked += 1
+        if abs(float(want) - float(got)) > 1e-12:
+            bad.append(f"  {label:42s} config={want!r}  code default={got!r}")
 
     from src.eval.conformal import RAPS_K_REG, RAPS_LAMBDA
     for name, value, key in (("raps_lambda", RAPS_LAMBDA, "raps_lambda"),

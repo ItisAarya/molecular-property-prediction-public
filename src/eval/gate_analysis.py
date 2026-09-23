@@ -59,7 +59,10 @@ def single_view_scores(ds, variant):
     """Test score for each single view on this split, for the agreement check."""
     key = "auc" if is_classification(ds) else "rmse"
     out = {}
+    from src.eval.leakage import excluded
     for view, tag in VIEW_TO_TAG.items():
+        if excluded(ds, tag):
+            continue
         path = os.path.join(RUNS_DIR, variant, "metrics", f"{ds}_{tag}_test.csv")
         if os.path.exists(path):
             out[view] = float(pd.read_csv(path).iloc[0][key])
@@ -69,10 +72,13 @@ def single_view_scores(ds, variant):
 def best_single_view(ds, variants):
     """Which view wins this dataset on its own, averaged over splits."""
     per = [single_view_scores(ds, v) for v in variants]
-    per = [p for p in per if len(p) == len(VIEW_TO_TAG)]
-    if not per:
+    # Views with a valid score on every split. On ClinTox and BBBP the sequence view's
+    # archived runs read raw SMILES and are excluded (src/eval/leakage.py), so the agreement
+    # check there is between the graph and descriptor views only.
+    usable = [v for v in VIEW_TO_TAG if per and all(v in p for p in per)]
+    if not usable:
         return None
-    mean = {v: float(np.mean([p[v] for p in per])) for v in VIEW_TO_TAG}
+    mean = {v: float(np.mean([p[v] for p in per])) for v in usable}
     return (max if is_classification(ds) else min)(mean, key=lambda v: mean[v])
 
 

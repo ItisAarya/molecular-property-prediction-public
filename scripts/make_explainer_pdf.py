@@ -110,7 +110,7 @@ s.append(box(
     "\"will this dissolve in water?\". <b>But the real point of the project is not the predictor. "
     "It is the measuring.</b> We built a very strict way of testing whether such programs actually "
     "work, and then used it on our own program. It turned out that our fancy program was no better "
-    "than a very simple one. We are reporting that honestly, because most papers in this field never "
+    "than a simple one, and part of its apparent skill came from a hidden clue in the data. We are reporting that honestly, because most papers in this field never "
     "check carefully enough to find out.", LIGHT, BORDER))
 
 s.append(P("2. Key words, one line each", H1))
@@ -188,16 +188,16 @@ s.append(P("6. The architecture (how the program is built)", H1))
 s.append(P("The whole system is a pipeline. A molecule goes in one end and a prediction comes out "
            "the other.", BODY))
 s.append(Spacer(1, 4))
-s.append(flow(["Molecule", "Five views", "Make same size", "Fusion", "Head", "Prediction"]))
+s.append(flow(["Molecule", "Three views", "Make same size", "Fusion", "Head", "Prediction"]))
 s.append(Spacer(1, 8))
 s.append(table([
  ["Stage", "What happens here, in plain words"],
  ["1. Molecule", "One substance, written as a text string by a chemist."],
- ["2. Five views", "We describe it five different ways at once (previous page). Each view produces "
-  "its own list of numbers."],
- ["3. Make same size", "The five lists come out different lengths, so we shrink or stretch each one "
+ ["2. Three views", "The combined model describes it three ways at once: a network (GINE), text read "
+  "by ChemBERTa, and a list of chemical facts. Each view produces its own list of numbers."],
+ ["3. Make same size", "The three lists come out different lengths, so we shrink or stretch each one "
   "to exactly 256 numbers. This is important for fairness, see below."],
- ["4. Fusion", "The step that <b>combines</b> the five descriptions into one. This was meant to be "
+ ["4. Fusion", "The step that <b>combines</b> the three descriptions into one. This was meant to be "
   "the clever part of the project."],
  ["5. Head", "A small final calculator that turns the combined description into the actual answer."],
  ["6. Prediction", "\"87% likely to be toxic\", or \"dissolves at -3.2\"."],
@@ -215,10 +215,10 @@ s.append(box(
 s.append(P("7. The five ways of combining (the \"ladder\")", H1))
 s.append(P("We did not build just one combiner. We built five, from simplest to most complex, "
            "so we could see <b>which part actually helps</b>. If only the complicated one had been "
-           "built, we would never have known that the simple one works just as well.", BODY))
+           "built, we would never have known how little the complicated one adds.", BODY))
 s.append(table([
  ["Name", "What it does", "Size (settings it learns)"],
- ["concat", "Just glues the five descriptions end to end. No thinking.", "0"],
+ ["concat", "Just glues the three descriptions end to end. No thinking.", "0"],
  ["gated", "Learns how much to trust each view, per molecule. Like a volume knob per view.", "16,513"],
  ["xattn", "Lets the views \"talk to each other\" and compare notes.", "1,054,208"],
  ["bilinear", "Multiplies views together to catch combined effects.", "99,072"],
@@ -226,7 +226,7 @@ s.append(table([
 ], [24*mm, 106*mm, 38*mm]))
 s.append(P("The last column is roughly \"how many dials the program can adjust\". The "
            "<b>proposed</b> combiner has about <b>71 times more dials</b> than the simple "
-           "<b>gated</b> one. Remember that number for the results section.", SMALL))
+           "<b>gated</b> one (fusion step only). Remember that number for the results section.", SMALL))
 
 s.append(PageBreak())
 
@@ -253,9 +253,9 @@ s.append(B("This matches real life: a chemist wants to predict something <b>new<
 
 s.append(P("Why we do this six times, not once", H2))
 s.append(box(
- "One split is one roll of the dice. Do it a different way and the score changes. We found the same "
- "model, on the same data, scoring <b>0.68 under one split and 0.90 under another</b> &mdash; a gap of "
- "0.22, which is larger than almost any improvement papers claim. So we use <b>6 different splits</b> "
+ "One split is one roll of the dice. Do it a different way and the score changes. Two procedures that "
+ "are both called \"scaffold split\" gave the same model on the same data scores up to <b>0.22 AUC "
+ "apart</b>, which is larger than almost any improvement papers claim. So we use <b>6 different splits</b> "
  "(1 standard + 5 shuffled) and report the <b>average with a range</b>. A result that only shows up "
  "in one split is not a result.", AMBER, colors.HexColor("#E0BE84")))
 
@@ -279,7 +279,7 @@ s.append(P("Step 7 is called <b>early stopping</b>. Without it the program start
            "question.", BODY))
 s.append(P("One more rule we follow: some molecules have <b>missing</b> answers, because nobody ran "
            "that lab test. We skip those cells. The original code treated missing as \"not toxic\", "
-           "which invented fake answers for <b>24% of the Tox21 test data</b>. Finding and fixing that "
+           "which invented fake answers for <b>24% of the Tox21 test labels</b>. Finding and fixing that "
            "changed the results.", BODY))
 
 s.append(PageBreak())
@@ -305,29 +305,35 @@ s.append(table([
  ["Google Colab", "&mdash;", "Free cloud computers with GPUs, for the long training runs."],
 ], [40*mm, 22*mm, 106*mm]))
 s.append(P("A <b>GPU</b> is a chip originally made for video games. It does thousands of small sums "
-           "at once, which is exactly what training needs. Our biggest runs took about 11 hours on one.", SMALL))
+           "at once, which is exactly what training needs. Our longest runs used one in Google Colab.", SMALL))
 
 s.append(P("11. What we found", H1))
 s.append(P("These are the real results, stated plainly.", BODY))
 s.append(table([
  ["Question we asked", "Honest answer"],
- ["Does our combined model beat the old system we started from?",
-  "<b>Yes.</b> It won on all 8 datasets out of 8. This is a genuine, solid win."],
+ ["Did a hidden clue in the data inflate the text-reading models?",
+  "<b>Yes.</b> In two datasets the way a molecule is <i>written</i> gives the answer away. Removing "
+  "the clue dropped the text model from 0.99 to 0.80 on one of them."],
+ ["Does our combined model beat the simple network we started from?",
+  "<b>Not convincingly.</b> It had the better average on 7 of 8 datasets, but that is not enough "
+  "to rule out luck, and only 1 dataset passed the strict check."],
  ["Does it beat a simple list of chemical facts (the descriptor view)?",
-  "<b>No.</b> It won on 4 of 8 &mdash; that is a coin flip. The simple method is just as good."],
+  "<b>No.</b> It won on 3 of 8, and every other combiner did worse than it on 6 or 7 of 8."],
  ["Is the complex combiner better than the cheap one?",
-  "<b>No.</b> 71 times more dials bought us nothing that survives careful checking."],
+  "<b>Not clearly.</b> It averaged better on 6 of 8 datasets, but no single dataset passed the "
+  "strict check."],
  ["Do we need the molecule-as-network view at all?",
-  "<b>No.</b> Removing it changed nothing, ran <b>13 times faster</b>, and used 59% fewer dials."],
+  "<b>Apparently not.</b> Removing it made no detectable difference and ran <b>13 times faster</b>, "
+  "though we could only prove the two are equivalent on 2 of 8 datasets."],
  ["Does a famous published model (AttentiveFP) beat the old simple one?",
-  "<b>No</b>, not reliably &mdash; at 10 times the size. So this is not just our model being weak."],
+  "<b>No</b>, not reliably &mdash; at about 12 times the size. So this is not just our model being weak."],
  ["Does training on a different computer give the same answer?",
-  "<b>No.</b> Same code, same settings, different GPU: 18% of single-split scores moved more than "
-  "the size of effects people publish."],
+  "<b>Not exactly.</b> Moving from a laptop CPU to a GPU moved about a quarter of single-split "
+  "scores by more than our threshold &mdash; about as much as changing the random seed."],
 ], [72*mm, 96*mm]))
-s.append(box("<b>The honest headline:</b> our model beats the thing it replaced, and loses to a "
-             "simple list of chemical facts. Both halves are true and we report both. Many papers "
-             "would report only the first half.", GREEN, colors.HexColor("#9CC3A9")))
+s.append(box("<b>The honest headline:</b> once a hidden clue in the data was removed, our model "
+             "was no longer clearly better than the simple network it started from, and it never "
+             "beat a simple list of chemical facts. We report both.", GREEN, colors.HexColor("#9CC3A9")))
 
 s.append(PageBreak())
 
@@ -343,20 +349,22 @@ s.append(P("We found a serious problem with the standard version:", BODY))
 s.append(box(
  "It keeps its 90% promise <b>overall</b> &mdash; but only because most molecules are safe. For the "
  "<b>toxic</b> ones, the ones you actually care about, it was right as little as <b>10% of the time</b> "
- "in the worst case. The promise was technically true and practically useless. A fix called "
+ "in the worst case. We showed the cause: models trained without extra weight on the rare toxic class "
+ "fail this way, and the same model trained with that weight does not. A fix called "
  "<b>class-conditional</b> conformal prediction repairs it, by making a separate promise for each answer.",
  AMBER, colors.HexColor("#E0BE84")))
-s.append(P("<b>Be ready for this one:</b> another team published this same discovery in July 2026, "
-           "four months before us. We found their paper, we cite it, and we now present our version "
-           "as <b>independent confirmation on more models</b> rather than as our discovery. Saying "
+s.append(P("<b>Be ready for this one:</b> this failure was already known, and another team measured it "
+           "on these benchmarks in July 2026. We cite them and present our version "
+           "as <b>confirmation on more models, plus the class-weighting experiment</b>, rather than as our discovery. Saying "
            "this openly is the correct thing to do.", BODY))
 
 s.append(P("13. Questions a teacher may ask", H1))
 
 qa = [
  ("Q1. What is actually new here, if the model did not win?",
-  "The strict testing method, and what it revealed. We found 6 real errors in the system we "
-  "inherited, and we proved that two popular ideas in recent papers do not help. A carefully proven "
+  "The strict testing method, and what it revealed. We found 7 real errors in the system we "
+  "inherited, a hidden clue in two standard datasets, and no evidence that the popular fusion ideas we "
+  "tested beat a simple baseline. A carefully proven "
   "\"this does not work\" is useful, because it saves other people from repeating it."),
  ("Q2. Why is a negative result worth anything?",
   "Because we can show it is trustworthy. We tested on 8 datasets, 6 splits each, with statistical "
@@ -373,9 +381,10 @@ qa = [
   "scaffold so the test is genuinely new, and by never letting the model see the test data until "
   "the very end."),
  ("Q6. What is data leakage? Did you have any?",
-  "It is when answers sneak from the test side into training, making scores fake. The inherited "
-  "system had it: it was picking its best model by looking at the test scores. We fixed that so "
-  "all choices are made on the validation part only."),
+  "It is when the answer sneaks into the input, making scores fake. We found two kinds. The inherited "
+  "system picked its best model by looking at the test scores; we fixed that so all choices are made "
+  "on the validation part only. And in ClinTox and BBBP the way a molecule is written gives away the "
+  "answer to a text-reading model; we now rewrite every molecule in one standard form first."),
  ("Q7. Why did you use a language model on chemistry?",
   "Chemists already write molecules as text strings. A language model trained on millions of those "
   "strings learns chemical patterns the same way a text model learns grammar."),
@@ -384,9 +393,9 @@ qa = [
   "it to untuned ones, we would be measuring effort, not quality. We wrote the tuning tool and left "
   "it switched off on purpose, and we state this as a limitation."),
  ("Q9. What is the single most useful thing you found?",
-  "That the same code with the same random seed, run on a different GPU, gives different results "
-  "\u2014 enough to change 18% of single-split scores by more than the effects papers usually report. "
-  "Averaging over 6 splits absorbs it. A single-number result does not."),
+  "That the way a molecule is written can leak the answer. Text-reading models looked much better on "
+  "two standard datasets than they really are. Anyone using a language model on these benchmarks "
+  "should rewrite the molecules in one standard form first."),
  ("Q10. What would you do with more time?",
   "Run the settings-tuner fairly on every model, add more outside comparison models, and test on "
   "harder real-world data rather than public benchmark sets."),
@@ -394,8 +403,8 @@ qa = [
   "The predictor is not better than simple chemistry, so not as a product yet. The testing method "
   "is usable immediately \u2014 any team can run it to check whether their own model is really working."),
  ("Q12. How big is the project?",
-  "About 50 commits of work, 8 datasets, 6 splits, 13 models compared, roughly 30 hours of "
-  "training time across laptop and cloud GPUs, and an automatic checker that re-verifies every number in the write-up against the "
+  "8 datasets, 6 splits, more than 20 model variants compared, training on a laptop CPU and cloud "
+  "GPUs, and an automatic checker that re-verifies every number in the write-up against the "
   "saved results."),
 ]
 for q, a in qa:
@@ -403,7 +412,7 @@ for q, a in qa:
 
 s.append(Spacer(1, 10))
 s.append(box("<b>If you remember one sentence:</b> we built a fair way to test molecule-prediction "
-             "programs, used it on our own, and it honestly told us our complicated idea was no "
+             "programs, used it on our own, and it told us our complicated idea was no "
              "better than a simple one &mdash; which is exactly what a good measuring tool is "
              "supposed to do.", LIGHT, BORDER))
 

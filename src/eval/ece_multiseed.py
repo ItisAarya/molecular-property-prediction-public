@@ -128,6 +128,9 @@ def main():
     ap.add_argument("--tags", nargs="+", required=True)
     ap.add_argument("--datasets", nargs="+", default=None)
     ap.add_argument("--variants", nargs="+", default=[f"seed{i}" for i in range(5)])
+    ap.add_argument("--out", default=None,
+                    help="where to write; defaults to results/metrics/ece_multiseed.csv. A run "
+                         "over a subset of tags should write elsewhere so the archive survives.")
     ap.add_argument("--plots", action="store_true",
                     help="also write reliability curves (raw and calibrated) to "
                          "results/figs/, for the first variant only -- one curve per "
@@ -170,7 +173,7 @@ def main():
 
     df = pd.DataFrame(rows)
     os.makedirs(MET_DIR, exist_ok=True)
-    out = os.path.join(MET_DIR, "ece_multiseed.csv")
+    out = args.out or os.path.join(MET_DIR, "ece_multiseed.csv")
     df.to_csv(out, index=False)
 
     print(f"Test ECE, mean +/- 95% CI over {len(args.variants)} seeded splits.")

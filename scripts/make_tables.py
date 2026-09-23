@@ -22,7 +22,7 @@ WHAT IT EMITS
 -------------
 **Table 1 -- main results.** Every model on every dataset, canonical DeepChem split and
 mean +/- 95% CI over the five seeded splits, side by side. Both, always: they differ by up
-to 0.18 AUC on the same model and the same code, so reporting one is reporting a choice.
+to 0.223 AUC on the same model and the same code, so reporting one is reporting a choice.
 
 **Table 2 -- paired comparisons.** For each comparison that has been run: the per-dataset
 tally, the same tally after Holm-Bonferroni across the eight datasets, and the
@@ -102,7 +102,14 @@ def _from_tag_csv(variant, ds, tag):
 
 
 def value(variant, ds, tag):
-    """One model's test metric on one split, or None, from whichever source is correct."""
+    """One model's test metric on one split, or None, from whichever source is correct.
+
+    A result that read raw SMILES on a notation-leaking dataset is not a result: it is
+    printed as "--" (src/eval/leakage.py).
+    """
+    from src.eval.leakage import excluded
+    if excluded(ds, tag):
+        return None
     if tag in PIPELINE_TAGS:
         return _from_report(variant, ds, tag) or _from_tag_csv(variant, ds, tag)
     return _from_tag_csv(variant, ds, tag) or _from_report(variant, ds, tag)

@@ -71,7 +71,14 @@ def seeded_variants():
 
 
 def load_tag(variant, ds, tag):
-    """Test-set metric for one encoder on one dataset in one split, or None if absent."""
+    """Test-set metric for one encoder on one dataset in one split, or None if absent.
+
+    Results whose inputs leaked the label through SMILES notation (src/eval/leakage.py)
+    count as absent, so a comparison involving them runs over the remaining datasets.
+    """
+    from src.eval.leakage import excluded
+    if excluded(ds, tag):
+        return None
     path = os.path.join(RUNS_DIR, variant, "metrics", f"{ds}_{tag}_test.csv")
     if not os.path.exists(path):
         return None
@@ -159,7 +166,8 @@ def main():
     ap.add_argument("--a", default="gine", help="candidate encoder")
     ap.add_argument("--b", default="gin_ref", help="reference encoder")
     ap.add_argument("--datasets", nargs="+",
-                    default=["tox21", "bbbp", "clintox", "esol", "lipophilicity"])
+                    default=["tox21", "bbbp", "clintox", "esol", "lipophilicity",
+                             "bace", "sider", "freesolv"])
     args = ap.parse_args()
 
     variants = seeded_variants()

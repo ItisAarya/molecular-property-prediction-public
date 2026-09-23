@@ -1,3 +1,74 @@
+# v1.1.0 — review corrections (unreleased)
+
+A full reproduction and review of v1.0.0. The archive reproduced exactly, but the review found
+a label leak and several claims the archive did not support. **The v1.0.0 findings below are
+superseded where they conflict with this section.**
+
+## The notation leak
+
+In ClinTox and BBBP the notation of a SMILES string (aromatic or Kekulé) predicts the label:
+notation-bit AUC 1.000 for ClinTox toxicity and 0.827 for BBBP permeability. Only models that
+read SMILES characters can use it. `src/data/smiles.py` now canonicalises both datasets wherever
+a sequence model reads them, and `scripts/audit_notation.py` audits any dataset.
+
+- Re-run on canonical strings: the CPU cached ladder (`fuse_concat`, `fuse_gated`, `fuse_xattn`,
+  `fuse_bilinear`, `fuse_proposed`, `fuse_gated_nograph`), a sequence-only control
+  (`fuse_seqonly`) and the deployed models (`deploy_proposed`). The raw-string originals are
+  archived as `<tag>_rawsmiles`.
+- Not re-run (GPU or pipeline runs): LoRA, the frozen ChemBERTa view, the T4 ladder, the rank
+  sweep, the end-to-end ladder, and the pipeline's `trf`, `hybrid` and `ens`. Their ClinTox and
+  BBBP results are excluded (`src/eval/leakage.py`), and their comparisons run over six
+  datasets.
+- Effect: frozen ChemBERTa fell from 0.988 to 0.795 AUC on ClinTox, and every fusion model fell
+  by 0.041–0.150 AUC across the two datasets (`scripts/leakage_effect.py`).
+
+## Findings that changed
+
+- `proposed` vs the two-layer GIN: favoured on 7 of 8, p = 0.070 / 0.109 / 0.078 (was 8 of 8,
+  p = 0.0078). Only FreeSolv survives correction.
+- `proposed` vs `desc`: favoured on 3 of 8 (p ≥ 0.727). `gated` and `bilinear` are worse than
+  `desc` on 7 of 8 (Wilcoxon p = 0.023).
+- "A 16,513-parameter gate matches the 1,169,793-parameter block" was not supported:
+  `proposed` is favoured over `gated` on 6 of 8 (Wilcoxon p = 0.039, sign p = 0.289), and
+  equivalence holds on 2 of 8.
+- Bilinear vs concatenation is no longer significant on the CPU ladder (6 of 8, p = 0.312).
+  It is still significant on both T4 ladders (6 of 6, p = 0.031).
+- Conformal minority coverage: a control (`desc_nopw`, trained without class weighting) shows
+  the failure follows class weighting, not architecture (77.9% → 16.3% of actives at unchanged
+  AUC). Set size is a symptom of the same cause, not an independent predictor.
+- APS and RAPS: only the deterministic forms collapse at two classes; the randomised forms
+  (`--randomized`) behave as intended.
+- Device: CPU vs T4 moves 58 of 240 single-split results (24%) past the practical threshold.
+  A seed change on the same CPU moves 25 of 96 (26%), so the device effect is ordinary
+  seed variance.
+- Duplicates: seeded splits do put up to two duplicate groups in different parts of a split (BBBP,
+  ESOL). The canonical split does not.
+- Split conventions: up to 0.223 AUC apart on the same model (113 pairs).
+
+## Code and archive fixes
+
+- `configs/shared.yaml` now matches the trainers (`representation.head_dropout: 0.2`,
+  `fusion.xattn_dropout: 0.1`), and `scripts/check_configs.py` checks constructor defaults
+  (35 checks). `src/deploy/predict.py` reads the renamed keys.
+- `scripts/run_comparisons.py` regenerates all 59 paired comparisons over all eight datasets;
+  stale subset comparisons were removed.
+- New analyses: `scripts/equivalence.py` (TOST), `scripts/device_effect.py` (with a seed-43
+  control), `scripts/calibration_summary.py`, and a duplicate audit across every split.
+- `--no-pos-weight` in `src/train/train_view.py`; randomised APS/RAPS in `src/eval/conformal.py`.
+- Paper: rewritten draft with generated tables, `scripts/check_paper.py` (18 tables and 59
+  prose claims), a LaTeX builder with numbered floats and cross-references, 66 references with
+  dataset and software citations, and corrected metadata for three entries.
+- `constraints.txt` pins `rdkit==2025.3.5`, the version the archive was built with.
+
+## Still to do before release
+
+- Re-run the excluded GPU and pipeline models on canonical SMILES, if ClinTox and BBBP
+  comparisons for them are wanted.
+- Complete the competing-interests, funding and AI-use statements in the paper.
+- Publish per-split predictions for the GPU-trained models.
+
+---
+
 # v1.0.0 — Phases 0–5 complete
 
 An evaluation protocol for multi-view molecular property prediction, a fusion architecture
