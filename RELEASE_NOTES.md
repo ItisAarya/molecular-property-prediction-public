@@ -1,4 +1,4 @@
-# v1.1.0 — review corrections (unreleased)
+# v1.1.0 — review corrections
 
 A full reproduction and review of v1.0.0. The archive reproduced exactly, but the review found
 a label leak and several claims the archive did not support. **The v1.0.0 findings below are
@@ -90,12 +90,12 @@ a sequence model reads them, and `scripts/audit_notation.py` audits any dataset.
   Chemprop, the T4 ladder, the rank sweep and the end-to-end ladder. Their archived per-split
   results were used as they are; only the statistics built on them were recomputed.
 
-## Still to do before release
+## Known limitations of this release
 
-- Re-run the excluded GPU and pipeline models on canonical SMILES, if ClinTox and BBBP
-  comparisons for them are wanted.
-- Add a generative-AI statement to the paper if the target journal requires one.
-- Publish per-split predictions for the GPU-trained models.
+- The GPU and pipeline models listed above were not re-run on canonical SMILES, so their
+  ClinTox and BBBP results stay excluded and their comparisons run over six datasets.
+- Per-split predictions are not in the repository. The CPU-trained models regenerate them by
+  re-training; predictions for the GPU-trained models are available from the author on request.
 
 ---
 

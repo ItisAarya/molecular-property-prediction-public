@@ -251,8 +251,9 @@ metrics in `results/runs/<variant>/metrics/`.
 If you use this code or its evaluation protocol, please cite it:
 
 > Sharma, A. (2026). *Graph Neural Network and Transformer Fusion for Molecular Property
-> Prediction: What a Strict Evaluation Protocol Finds* (Version 1.0.0) [Computer software].
-> Zenodo. https://doi.org/10.5281/zenodo.22734878
+> Prediction under a Strict Evaluation Protocol: Notation Leakage, Descriptor Baselines and
+> Conformal Coverage* (Version 1.1.0) [Computer software]. Zenodo.
+> https://doi.org/10.5281/zenodo.22734878
 
 The DOI above is the **concept DOI** — it always resolves to the latest release. To cite a
 specific version instead, use that release's own DOI (v1.0.0 is
