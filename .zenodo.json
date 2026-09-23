@@ -1,7 +1,7 @@
 {
-  "title": "Graph Neural Network and Transformer Fusion for Molecular Property Prediction: What a Strict Evaluation Protocol Finds",
+  "title": "Graph Neural Network and Transformer Fusion for Molecular Property Prediction under a Strict Evaluation Protocol: Notation Leakage, Descriptor Baselines and Conformal Coverage",
   "upload_type": "software",
-  "description": "<p>An evaluation protocol for multi-view molecular property prediction, and a fusion architecture measured under it. Eight MoleculeNet datasets, six scaffold splits (the DeepChem canonical split plus five seeded), paired comparisons with Holm correction and an across-dataset test, split-conformal uncertainty (LAC, APS, RAPS, class-conditional, CQR), and machine-checked reproducibility gates that fail the build when a number, a config or a featuriser drifts.</p><p>The results are largely negative and are reported as such: the proposed fusion architecture does not beat a fingerprint-plus-descriptor MLP (4 of 8 datasets, p = 0.55); a 16,513-parameter gate matches a 1,169,793-parameter fusion block; roughly eleven GPU-hours of LoRA adaptation buy nothing over a cached frozen embedding; two published external baselines (AttentiveFP, Chemprop) are statistically indistinguishable from a two-layer graph network; a nominal 90% conformal guarantee covers 9.7-14.1% of active compounds for three of fifteen models, with mean prediction-set size predicting which; a fully seeded pipeline moved to a different GPU is a different model, moving 18% of single-split numbers by more than the field's reported effect sizes; and the significance of the paper's own mechanism claim is not stable to an architectural constant that does not otherwise matter.</p><p>The baseline pipeline is the author's own earlier work, preserved runnable so that claims about fixing its evaluation are checkable against archived predictions.</p>",
+  "description": "<p>An evaluation protocol for multi-view molecular property prediction, and a fusion architecture measured under it. Eight MoleculeNet datasets, six scaffold splits (the DeepChem canonical split plus five seeded), paired comparisons with Holm correction, an across-dataset test and an equivalence test, split-conformal uncertainty (LAC, APS, RAPS, class-conditional, CQR), and machine-checked reproducibility gates that fail the build when a number, a config or a featuriser drifts.</p><p>In ClinTox and BBBP the notation of a SMILES string (aromatic or Kekul&eacute;) predicts the label (notation-bit AUC 1.000 for ClinTox toxicity); canonicalising the strings lowers a frozen ChemBERTa model from 0.988 to 0.795 AUC on ClinTox. With the leak removed, no fusion variant outperforms a fingerprint-plus-descriptor MLP, the proposed fusion model's advantage over a two-layer graph network is not significant across datasets (favoured on 7 of 8, p &ge; 0.070), and a 16,513-parameter gate is not shown to be equivalent to the 1,169,793-parameter fusion block. Under marginal split conformal prediction on Tox21, three of fifteen models cover only 10-14% of active compounds; retraining the descriptor MLP without class weighting reproduces the failure (77.9% to 16.3%) at unchanged AUC. A change of accelerator moves single-split results about as much as a change of seed.</p><p>The baseline pipeline is the author's own earlier work, preserved runnable so that claims about fixing its evaluation are checkable against the archived per-split metrics.</p>",
   "creators": [
     {
       "name": "Sharma, Aarya",
@@ -18,10 +18,11 @@
     "multi-view learning",
     "graph neural networks",
     "reproducibility",
-    "negative results"
+    "negative results",
+    "data leakage"
   ],
   "language": "eng",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "access_right": "open",
   "license": "MIT"
 }

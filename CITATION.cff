@@ -4,12 +4,12 @@ title: "Graph Neural Network and Transformer Fusion for Molecular Property Predi
 abstract: >-
   An evaluation protocol for multi-view molecular property prediction, and a fusion
   architecture measured under it. Eight MoleculeNet datasets, six scaffold splits, paired
-  comparisons with family-wise correction and an across-dataset test, split-conformal
-  uncertainty, and machine-checked reproducibility gates. Reports negative results: the
-  proposed architecture does not beat a descriptor MLP, a 16,513-parameter gate matches a
-  1,169,793-parameter fusion block, two published external baselines are indistinguishable
-  from a two-layer graph network, and the significance of the paper's own mechanism claim
-  is not stable to an architectural constant.
+  comparisons with Holm correction and an across-dataset test, an equivalence test,
+  split-conformal uncertainty, and machine-checked reproducibility gates. Finds that SMILES
+  notation leaks the label in ClinTox and BBBP; with the leak removed, no fusion variant
+  outperforms a fingerprint-plus-descriptor MLP and the advantage over a two-layer graph
+  network is not significant across datasets; and minority-class conformal coverage on Tox21
+  depends on class weighting in training rather than on the architecture.
 type: software
 
 authors:

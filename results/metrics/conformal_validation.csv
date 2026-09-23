@@ -1,0 +1,14 @@
+check,item,value,identical,task_splits
+synthetic,regression,0.899222,,
+synthetic,binary_marginal,0.9000900000000001,,
+synthetic,binary_conditional_actives,0.9037817317336954,,
+synthetic,binary_conditional_inactives,0.9008264880067527,,
+temperature,rf/tox21,0.06343050301074982,True,60.0
+temperature,rf/bbbp,0.13115960359573364,True,5.0
+temperature,rf/clintox,0.035273849964141846,True,10.0
+temperature,gnn/tox21,0.176655113697052,True,60.0
+temperature,gnn/bbbp,0.2559954524040222,True,5.0
+temperature,gnn/clintox,0.2394946664571762,True,10.0
+temperature,ens/tox21,0.2349029779434204,True,60.0
+temperature,ens/bbbp,0.14123022556304932,True,5.0
+temperature,ens/clintox,0.18593519926071167,True,10.0

@@ -408,7 +408,7 @@ s.append(P("Alongside every prediction the app shows two things most demos hide:
 s.append(P("11. What we actually found \u2014 the honest version", H1))
 s.append(box(
     "First, a hidden clue: in two datasets (ClinTox and BBBP) the way a molecule is <i>written</i> "
-    "gives the answer away, and the language model was reading it. Once every molecule was "
+    "gives the answer away, and the language model was reading it. Once those molecules were "
     "rewritten in one standard form, those scores fell sharply.<br/><br/>"
     "With the clue removed, our elaborate design (rung 5, over a million extra parts to learn) "
     "<b>did not reliably beat</b> the simple volume-knob design (rung 2, about sixteen thousand) "

@@ -53,18 +53,48 @@ a sequence model reads them, and `scripts/audit_notation.py` audits any dataset.
 - `scripts/run_comparisons.py` regenerates all 59 paired comparisons over all eight datasets;
   stale subset comparisons were removed.
 - New analyses: `scripts/equivalence.py` (TOST), `scripts/device_effect.py` (with a seed-43
-  control), `scripts/calibration_summary.py`, and a duplicate audit across every split.
+  control), `scripts/calibration_summary.py`, `scripts/validate_conformal.py` (synthetic
+  coverage check and temperature-scaling invariance, both quoted in section 6), and a duplicate
+  audit across every split.
 - `--no-pos-weight` in `src/train/train_view.py`; randomised APS/RAPS in `src/eval/conformal.py`.
-- Paper: rewritten draft with generated tables, `scripts/check_paper.py` (18 tables and 59
+- Paper: rewritten draft with generated tables, `scripts/check_paper.py` (18 tables and 62
   prose claims), a LaTeX builder with numbered floats and cross-references, 66 references with
   dataset and software citations, and corrected metadata for three entries.
 - `constraints.txt` pins `rdkit==2025.3.5`, the version the archive was built with.
+
+## Independent verification of this release
+
+- **Data rebuilt from scratch.** From a clean export, the README pipeline (prep, graphs, tokens,
+  embeddings, pool, descriptors, splits) produced a data pool and 48 split files bit-identical
+  to those the archive was trained on, including the canonical-SMILES ClinTox and BBBP
+  embeddings, and `verify_prep` passed.
+- **CPU models re-trained from that rebuild** on the same Intel Core i7-9750H: the seven
+  canonical-SMILES models behind Table 3 and the fusion results (`fuse_seqonly`,
+  `fuse_gated_nograph`, `fuse_gated`, `fuse_proposed`, `fuse_concat`, `fuse_xattn`,
+  `fuse_bilinear` on ClinTox and BBBP), the class-weighting control `desc_nopw` and the seed-43
+  control. All 348 metric files and all 180 locally archived prediction arrays matched the
+  archive bit for bit. The motif probe (Table 14) re-ran to identical output.
+- **Statistics recomputed with independent code** (no project imports) from the per-split
+  metrics and raw predictions: every row of Tables 8, 9 and 11-13; Tables 2-6, 15, 16, 18 and
+  20; the absolute-residual and normalised rows of Table 17; the split-gap numbers, gate weights
+  and equivalence counts. Table 19 was re-aggregated from the archived per-split cliff results.
+  No mismatches.
+- **References.** All 55 entries with a DOI or arXiv identifier were checked against Crossref
+  and arXiv (title, first author, year).
+- **Fixed in this pass:** stale `paper/tables/`; a synthetic-validation number that no script
+  produced and a "probabilities moved by up to 0.02" claim the predictions contradict (up to
+  0.26), both now produced by `scripts/validate_conformal.py`; wording in sections 5.4 and 5.6;
+  the README citation title; and CITATION.cff / .zenodo.json abstracts that still stated
+  superseded v1.0.0 findings.
+- **Not re-trained** (GPU runs on Colab): LoRA, the frozen ChemBERTa view, AttentiveFP,
+  Chemprop, the T4 ladder, the rank sweep and the end-to-end ladder. Their archived per-split
+  results were used as they are; only the statistics built on them were recomputed.
 
 ## Still to do before release
 
 - Re-run the excluded GPU and pipeline models on canonical SMILES, if ClinTox and BBBP
   comparisons for them are wanted.
-- Complete the competing-interests, funding and AI-use statements in the paper.
+- Add a generative-AI statement to the paper if the target journal requires one.
 - Publish per-split predictions for the GPU-trained models.
 
 ---

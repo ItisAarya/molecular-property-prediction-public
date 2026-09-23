@@ -57,7 +57,9 @@ Wilcoxon on Cohen's *dz* / Wilcoxon on raw differences):
 | Does moving from CPU to GPU change results? | As much as changing the seed: about a quarter of single-split results move by more than 0.02 AUC / 0.10 RMSE; five-split means rarely do |
 
 The paper (`paper/draft.md`, built into `paper/latex/` by `python -m scripts.make_latex`)
-reports every comparison, including the ones that did not go our way.
+reports every comparison, including the ones that did not go our way. The compiled PDF is
+`paper/paper.pdf`; rebuild it from `paper/latex/` (Overleaf, or `tectonic main.tex`) after
+editing the draft.
 
 ---
 
@@ -216,9 +218,9 @@ tox21 (12 tasks), bbbp (1), clintox (2), bace (1), sider (27) — classification
 esol (logS), lipophilicity (logD), freesolv (kcal·mol⁻¹) — regression.
 
 Eight, not nine: HIV was dropped from the core protocol. Statistical power across datasets
-comes from their *number*, not their size — eight puts the across-dataset signed-rank floor
-at p=0.0078, which is all that is needed, and HIV would have cost ~60 h for the full
-protocol without lowering it.
+comes from their *number*, not their size. Eight puts the across-dataset sign-test floor at
+p=0.0078; a ninth dataset would lower it to p=0.0039, but HIV's size would have multiplied the
+compute of the full protocol (an estimated ~60 GPU-hours).
 
 FreeSolv must be loaded with `dc.molnet.load_sampl`. `dc.molnet.load_freesolv` serves an
 already z-scored target, and using it silently puts RMSE in no physical unit.
@@ -239,8 +241,8 @@ MIT — see [`LICENSE`](LICENSE).
 The baseline pipeline is our own earlier work, preserved runnable
 (`src/train/train_ml.py`, `train_gnn.py`, `train_transformer.py`, `train_hybrid.py`,
 `train_ensemble.py`) so that "we fixed the evaluation" is a checkable statement rather than an
-assertion. Every comparison against it in the paper is reproducible from the archived
-predictions in `results/runs/`.
+assertion. Every comparison against it in the paper is reproducible from the archived per-split
+metrics in `results/runs/<variant>/metrics/`.
 
 ## Citing this work
 
@@ -248,7 +250,8 @@ predictions in `results/runs/`.
 
 If you use this code or its evaluation protocol, please cite it:
 
-> Sharma, A. (2026). *Multi-view molecular property prediction, evaluated honestly*.
+> Sharma, A. (2026). *Graph Neural Network and Transformer Fusion for Molecular Property
+> Prediction: What a Strict Evaluation Protocol Finds* (Version 1.0.0) [Computer software].
 > Zenodo. https://doi.org/10.5281/zenodo.22734878
 
 The DOI above is the **concept DOI** — it always resolves to the latest release. To cite a
@@ -260,7 +263,8 @@ repository" box from it.
 
 ## Verifying the claims
 
-Every headline number in `paper/draft.md` is asserted against the archives:
+Every generated table and every checked prose number in `paper/draft.md` is asserted against
+the archives:
 
 ```bash
 python -m scripts.check_configs      # the config matches the trainers

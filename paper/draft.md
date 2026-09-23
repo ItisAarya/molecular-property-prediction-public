@@ -306,7 +306,7 @@ End-to-end training of LoRA adapters inside the fusion model rather than reading
 
 ### 5.4 Removing the graph view, and what the gate weights show
 
-On every dataset the gate assigned the graph view 0.4–1.4% of its weight (mean over five splits). Retraining the gated model without the graph view left accuracy statistically unchanged (favoured on 5 of 8 datasets; p = 0.727 / 0.250 / 0.461; no dataset differed after correction) and cut training time from about 17 minutes to about 1.3 minutes per split on our CPU (Table 10). An equivalence test within ±0.02 AUC / ±0.10 RMSE, however, established equivalence on only 2 of 8 datasets (Tox21 and Lipophilicity; 90% interval inside the margin), so the ablation shows no detectable loss rather than demonstrated equivalence.
+On every dataset the gate assigned the graph view 0.4–1.4% of its weight (mean over five splits). Retraining the gated model without the graph view produced no detectable change in accuracy (the model without the graph view was favoured on 5 of 8 datasets; p = 0.727 / 0.250 / 0.461; no dataset differed after correction) and cut training time from about 17 minutes to about 1.3 minutes per split on our CPU (Table 10). An equivalence test within ±0.02 AUC / ±0.10 RMSE, however, established equivalence on only 2 of 8 datasets (Tox21 and Lipophilicity; 90% interval inside the margin), so the ablation shows no detectable loss rather than demonstrated equivalence.
 
 **Table 10.** Cost of the gated model with and without the graph view (Intel i7-9750H CPU, all eight datasets per split).
 
@@ -316,7 +316,7 @@ On every dataset the gate assigned the graph view 0.4–1.4% of its weight (mean
 | Parameters (FreeSolv model) | 2,050,694 | 848,514 |
 | Requires a graph library | yes | no |
 
-Removing a view that carried at most 1.4% of the gate weight changed the remaining weights substantially: the descriptor weight rose on all eight datasets, from 0.23–0.80 to 0.81–0.97, and the three datasets on which the three-view gate had favoured the sequence view (BBBP, ClinTox and BACE) switched to the descriptor view. Gate weights are computed over unnormalised view embeddings and varied widely across splits (for example SIDER's sequence weight was 0.43 ± 0.34). They describe how one trained model routed information, not how much each view matters. This agrees with the literature on attention weights as explanations [@jain2019attention; @wiegreffe2019attention].
+Removing a view that carried at most 1.4% of the gate weight changed the remaining weights substantially: the descriptor weight rose on all eight datasets, from 0.23–0.80 to 0.81–0.97, and the three datasets on which the three-view gate had favoured the sequence view (BBBP, ClinTox and BACE) switched to the descriptor view. Gate weights are computed over unnormalised view embeddings and varied widely across splits (for example SIDER's sequence weight was 0.43 ± 0.34, mean and 95% interval over five splits). They describe how one trained model routed information, not how much each view matters. This agrees with the literature on attention weights as explanations [@jain2019attention; @wiegreffe2019attention].
 
 ### 5.5 External baselines
 
@@ -352,7 +352,7 @@ We compared the mechanisms in three settings: the cached ladder on CPU (*n* = 8,
 | `proposed` vs `xattn` | 6/8, p = 0.078 | 5/6, p = 0.219 | 6/6, p = 0.031 |
 <!-- END GENERATED -->
 
-Bilinear fusion separated from concatenation in both T4 settings, favoured on all six datasets with the smallest p-value attainable at *n* = 6 (0.031). It did not separate on the CPU ladder once ClinTox and BBBP were canonicalised (6 of 8, p = 0.312): it lost to `concat` on ClinTox in all five splits (0.820 against 0.863 AUC) and was favoured on 5 of the 6 datasets that the T4 settings cover. Cross-attention separated from concatenation in no setting. `proposed` did not separate from `bilinear` in any setting and separated from `xattn` only end-to-end. With three settings, four comparisons, no correction across them and the T4 results at the floor of the test, we read the bilinear advantage as suggestive rather than established, and the rank sweep below weakens it further.
+Bilinear fusion separated from concatenation in both T4 settings, favoured on all six datasets with the smallest p-value attainable at *n* = 6 (0.031). It did not separate on the CPU ladder once ClinTox and BBBP were canonicalised (6 of 8, p = 0.312): it lost to `concat` on ClinTox in all five splits (0.820 against 0.863 AUC) and was favoured on 5 of the 6 datasets that the T4 settings cover. Cross-attention separated from concatenation in no setting. `proposed` separated from `bilinear` in no setting on the unit-free statistics (on the CPU ladder only the raw-difference Wilcoxon reached p = 0.039; sign p = 0.289, *dz* p = 0.195) and from `xattn` only end-to-end. With three settings, four comparisons, no correction across them and the T4 results at the floor of the test, we read the bilinear advantage as suggestive rather than established, and the rank sweep below weakens it further.
 
 **Rank sweep.** The bilinear rank *r* sets the size of the second-order term (two 256 × *r* projections per view pair). Every result above used *r* = 64, chosen without tuning, so we trained *r* ∈ {16, 32, 128} on the T4 under otherwise identical conditions (Table 13). No pair of ranks differed on any statistic (all p ≥ 0.094; *n* = 6). Against `concat`, only *r* = 64 reached the *n* = 6 floor of p = 0.031, while *r* = 16, 32 and 128 were favoured on 4, 5 and 5 of 6 datasets with p between 0.062 and 0.69. Because the ranks cannot be told apart, the significance of the *r* = 64 result should not be attributed to that rank. This is the error Gelman and Stern describe: the difference between "significant" and "not significant" is not itself significant [@gelman2006difference]. SIDER shows the largest bilinear advantage at every rank, and the paired differences on the remaining datasets are small relative to the practical threshold.
 
@@ -396,7 +396,7 @@ Over 51 (model, classification dataset) pairs, fitting a calibration map on the 
 
 ### 6.2 Minority-class coverage under marginal conformal prediction
 
-Split conformal prediction was first validated on synthetic data (90.1%, 90.1% and 90.3% coverage at a 90% target). On Tox21 at α = 0.1, overall coverage ranged from 89.4% to 91.0% across the fifteen models (Table 15). Coverage of active compounds did not: three models covered 9.7–14.1% of actives with mean set sizes of 0.97–0.99, while the other twelve covered 71.1–79.8% with set sizes of 1.16–1.26.
+Split conformal prediction was first validated on exchangeable synthetic data with 8% positives (`scripts/validate_conformal.py`): at a 90% target, coverage was 89.9% for regression intervals, 90.0% for marginal binary sets and 90.4% for actives under class-conditional sets. On Tox21 at α = 0.1, overall coverage ranged from 89.4% to 91.0% across the fifteen models (Table 15). Coverage of active compounds did not: three models covered 9.7–14.1% of actives with mean set sizes of 0.97–0.99, while the other twelve covered 71.1–79.8% with set sizes of 1.16–1.26.
 
 **Table 15.** Split conformal prediction on Tox21 at a nominal 90% (LAC score; mean over 12 tasks and five seeded splits). Class-conditional results fit one quantile per class. `desc (no class weighting)` is the control described in the text.
 
@@ -431,7 +431,7 @@ This failure and its class-conditional remedy are established for imbalanced bio
 
 ### 6.3 Temperature scaling and binary conformal sets
 
-For a binary task with the LAC score, temperature scaling cannot change the prediction set. The score is 1 − *p* for the positive class and *p* for the negative class. The temperature map *g*(*p*) = σ(logit(*p*)/*T*) is strictly increasing and satisfies *g*(1 − *p*) = 1 − *g*(*p*), so both scores transform by the same increasing function. The conformal quantile of the transformed scores is the transformed quantile, so every comparison between a score and the threshold is unchanged. This follows from the invariance of split conformal prediction to strictly monotone transformations of the score [@angelopoulos2023gentle]. We confirmed it empirically for three models (sets identical while probabilities moved by up to 0.02). Temperature scaling is therefore unnecessary before building binary LAC sets, though it can still improve the probabilities themselves. Platt scaling has an intercept, is not symmetric, and does change the sets; our class-balanced Platt map raised active coverage of the random forest to 85.7%, but without any guarantee.
+For a binary task with the LAC score, temperature scaling cannot change the prediction set. The score is 1 − *p* for the positive class and *p* for the negative class. The temperature map *g*(*p*) = σ(logit(*p*)/*T*) is strictly increasing and satisfies *g*(1 − *p*) = 1 − *g*(*p*), so both scores transform by the same increasing function. The conformal quantile of the transformed scores is the transformed quantile, so every comparison between a score and the threshold is unchanged. This follows from the invariance of split conformal prediction to strictly monotone transformations of the score [@angelopoulos2023gentle]. We confirmed it empirically for the earlier pipeline's random forest, GNN and ensemble on Tox21, BBBP and ClinTox: the sets were identical for every task and split, while individual probabilities moved by up to 0.26 (`scripts/validate_conformal.py`). Temperature scaling is therefore unnecessary before building binary LAC sets, though it can still improve the probabilities themselves. Platt scaling has an intercept, is not symmetric, and does change the sets; our class-balanced Platt map raised active coverage of the random forest to 85.7%, but without any guarantee.
 
 ### 6.4 Adaptive prediction sets at two classes
 
@@ -571,15 +571,13 @@ Applying one strict protocol to a multi-view fusion architecture and its compone
 
 **Data availability.** All datasets are public MoleculeNet benchmarks obtained through DeepChem 2.8.0. Per-split test and validation metrics for every model, the code that generates the split indices, and all derived statistics are in the code repository.
 
-**Code availability.** Code, configuration and archived metrics are available at <https://github.com/ItisAarya/molecular-property-prediction-public> and archived on Zenodo (<https://doi.org/10.5281/zenodo.22734878>). Per-split predictions for the GPU-trained models are available from the author on request.
+**Code availability.** Code, configuration and archived metrics are available at <https://github.com/ItisAarya/molecular-property-prediction-public> and archived on Zenodo (<https://doi.org/10.5281/zenodo.22734878>). Per-split predictions are not stored in the repository; the CPU-trained models regenerate them by re-training, and predictions for the GPU-trained models are available from the author on request.
 
-**Competing interests.** [AUTHOR TO COMPLETE]
+**Competing interests.** The author declares no competing interests.
 
-**Funding.** [AUTHOR TO COMPLETE]
+**Funding.** This work received no external funding.
 
 **Author contributions.** A.S. designed the study, wrote the code, ran the experiments, analysed the results and wrote the manuscript.
-
-**Use of generative AI.** [AUTHOR TO COMPLETE: state whether and how AI tools were used in code, analysis or writing, as required by the target journal.]
 
 ## References
 
@@ -596,6 +594,7 @@ python -m scripts.run_comparisons     # every paired comparison
 python -m scripts.leakage_effect      # Table 3
 python -m scripts.equivalence         # equivalence tests
 python -m scripts.device_effect       # Table 20
+python -m scripts.validate_conformal  # synthetic coverage and temperature invariance (Section 6)
 python -m scripts.make_figures        # Figures 1-4
 python -m scripts.fill_draft_tables   # every table in the draft
 python -m scripts.check_paper         # prose numbers match archives

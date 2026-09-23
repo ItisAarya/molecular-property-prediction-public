@@ -362,7 +362,8 @@ def recalibrate(y_cal, p_cal, p_test, kind):
     So both classes' scores pass through the *same* strictly increasing map, the quantile
     moves with them, and every `score <= q` comparison is preserved. Split conformal is
     invariant to monotone transformations of its score, so the sets come back bit for bit
-    identical even though the probabilities themselves changed by up to 0.02.
+    identical even though individual probabilities move by as much as 0.26
+    (`scripts/validate_conformal.py` checks both).
 
     It is kept as an option precisely to make that visible: "calibrate, then conformalise"
     is a natural thing to try and, for binary tasks with this score, it is wasted effort.

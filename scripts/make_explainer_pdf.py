@@ -384,7 +384,7 @@ qa = [
   "It is when the answer sneaks into the input, making scores fake. We found two kinds. The inherited "
   "system picked its best model by looking at the test scores; we fixed that so all choices are made "
   "on the validation part only. And in ClinTox and BBBP the way a molecule is written gives away the "
-  "answer to a text-reading model; we now rewrite every molecule in one standard form first."),
+  "answer to a text-reading model; we now rewrite the molecules of those two datasets in one standard form first."),
  ("Q7. Why did you use a language model on chemistry?",
   "Chemists already write molecules as text strings. A language model trained on millions of those "
   "strings learns chemical patterns the same way a text model learns grammar."),
@@ -404,8 +404,8 @@ qa = [
   "is usable immediately \u2014 any team can run it to check whether their own model is really working."),
  ("Q12. How big is the project?",
   "8 datasets, 6 splits, more than 20 model variants compared, training on a laptop CPU and cloud "
-  "GPUs, and an automatic checker that re-verifies every number in the write-up against the "
-  "saved results."),
+  "GPUs, and an automatic checker that re-verifies every table and the key numbers in the write-up "
+  "against the saved results."),
 ]
 for q, a in qa:
     s.append(KeepTogether([Paragraph(q, QSTYLE), Paragraph(a, ASTYLE)]))

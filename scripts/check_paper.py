@@ -208,7 +208,8 @@ def claims():
     claim("5.4: graph gate weight", "assigned the graph view {}–{}% of its weight", pct(ga.graph.min()),
           pct(ga.graph.max()))
     w, n, ps, pdz, praw = across("fuse_gated_nograph", "fuse_gated")
-    claim("5.4: nograph vs gated", "(favoured on {} of {} datasets; p = {} / {} / {}; {})", w, n, f3(ps), f3(pdz),
+    claim("5.4: nograph vs gated", "(the model without the graph view was favoured on {} of {} datasets; "
+          "p = {} / {} / {}; {})", w, n, f3(ps), f3(pdz),
           f3(praw), "no dataset differed after correction" if holm_counts("fuse_gated_nograph", "fuse_gated") == (0, 0)
           else "[HOLM CHANGES]")
     eq = pd.read_csv(os.path.join(MET, "equivalence.csv"))
@@ -244,6 +245,10 @@ def claims():
           "the {} datasets that the T4 settings cover", cpu[0], cpu[1], f3(cpu[3]),
           "all" if bc.loc["clintox"].a_wins == 0 else "[NOT ALL]", f3(bc.loc["clintox"].mean_a),
           f3(bc.loc["clintox"].mean_b), int((bc.loc[shared].mean_diff > 0).sum()), len(shared))
+
+    pb = across("fuse_proposed", "fuse_bilinear")
+    claim("5.6: proposed vs bilinear CPU", "(on the CPU ladder only the raw-difference Wilcoxon reached p = {}; "
+          "sign p = {}, *dz* p = {})", f3(pb[4]), f3(pb[2]), f3(pb[3]))
 
     # ---- section 6.1: calibration maps ------------------------------------------------------------
     ece = pd.read_csv(os.path.join(MET, "ece_multiseed_leakfree.csv"))
@@ -337,6 +342,17 @@ def claims():
           pct(ctrl_c.loc["desc_nopw"].coverage_pos), f"{c.mean_set_size.min():.2f}", f"{c.mean_set_size.max():.2f}")
     claim("abstract: failing range", "three of fifteen models covered only {}–{}% of active compounds",
           f"{100 * fail.coverage_pos.min():.0f}", f"{100 * fail.coverage_pos.max():.0f}")
+
+    # ---- sections 6.2 and 6.3: scripts/validate_conformal.py ---------------------------------------
+    val = pd.read_csv(os.path.join(MET, "conformal_validation.csv"))
+    syn = val[val.check == "synthetic"].set_index("item").value
+    claim("6.2: synthetic validation", "at a 90% target, coverage was {}% for regression intervals, {}% for "
+          "marginal binary sets and {}% for actives under class-conditional sets", pct(syn["regression"]),
+          pct(syn["binary_marginal"]), pct(syn["binary_conditional_actives"]))
+    tmp = val[val.check == "temperature"]
+    claim("6.3: temperature invariance", "the sets were {} for every task and split, while individual "
+          "probabilities moved by up to {}", "identical" if len(tmp) == 9 and tmp.identical.astype(bool).all()
+          else "[NOT IDENTICAL OR MISSING]", f"{tmp.value.max():.2f}")
 
     # ---- section 6.3: Platt ---------------------------------------------------------------------
     lg = conformal("conformal_alpha0.1_logistic_absolute.csv")
